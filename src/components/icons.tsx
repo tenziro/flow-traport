@@ -26,6 +26,7 @@ export {
   Add as IconAdd,
   ChevronDown as IconChevronDown,
   Check as IconCheck,
+  Logout as IconSignOut,
 } from "reicon-react";
 
 export type { IconProps } from "reicon-react";

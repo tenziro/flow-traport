@@ -3,7 +3,7 @@
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconRisk, IconTeam, IconToday } from "@/components/icons";
+import { IconRisk, IconSignOut, IconTeam, IconToday } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 /**
@@ -50,19 +50,32 @@ export function AppShell({
         <div className="flex h-14 w-full items-center gap-4 px-4 sm:px-6 lg:px-8">
           <span className="shrink-0 text-base font-semibold">flow 콕핏</span>
 
-          <span className="ml-auto min-w-0 text-right text-xs">
-            <span className="block truncate font-medium">{user.fullname}</span>
-            <span className="block truncate text-muted-foreground">{user.divisionName}</span>
-          </span>
-          <SignOut label="로그아웃" />
+          {/* 사용자 · 로그아웃
+              전에는 이름·부서 두 줄이 `text-right`로 떠 있고 그 옆에 muted 텍스트
+              "로그아웃"이 붙어 있었다. 부서명과 버튼이 같은 색·같은 크기라 어디까지가
+              정보고 어디부터 누르는 곳인지 구분이 안 됐다. 셋을 이렇게 갈랐다.
+              - 이니셜 원판: 두 줄 텍스트의 높이 기준점. 앵커가 없으면 옆 버튼과 중심이 어긋난다.
+              - 세로선: 정보와 액션 사이의 경계.
+              - 로그아웃: 아이콘 + 호버 면. 누르는 곳이라는 게 색이 아니라 모양으로 읽힌다. */}
+          <div className="ml-auto flex min-w-0 items-center gap-2">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+              {user.fullname.slice(0, 1)}
+            </span>
+            <span className="hidden min-w-0 leading-tight sm:block">
+              <span className="block truncate text-xs font-medium">{user.fullname}</span>
+              <span className="block truncate text-[11px] text-muted-foreground">
+                {user.divisionName}
+              </span>
+            </span>
+            <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
+            <SignOut />
+          </div>
         </div>
 
         <TopNav activeHref={activeHref} />
       </header>
 
-      <main className="w-full flex-1 px-4 py-6 pb-20 sm:px-6 lg:px-8 lg:pb-6">
-        {children}
-      </main>
+      <main className="w-full flex-1 px-4 py-6 pb-20 sm:px-6 lg:px-8 lg:pb-6">{children}</main>
 
       {/* 모바일 하단 탭 */}
       <nav
@@ -81,7 +94,9 @@ export function AppShell({
                 active ? "font-semibold text-primary" : "text-muted-foreground",
               )}
             >
-              {active && <span className="absolute inset-x-6 top-0 h-0.5 rounded-full bg-primary" />}
+              {active && (
+                <span className="absolute inset-x-6 top-0 h-0.5 rounded-full bg-primary" />
+              )}
               <Icon size={20} />
               {label}
             </Link>
@@ -137,15 +152,22 @@ function TopNav({ activeHref }: { activeHref: string }) {
   );
 }
 
-/** 로그아웃은 POST로만. GET이면 링크 프리페치가 세션을 날릴 수 있다. */
-function SignOut({ label }: { label: string }) {
+/**
+ * 로그아웃은 POST로만. GET이면 링크 프리페치가 세션을 날릴 수 있다.
+ *
+ * 좁은 화면에서는 아이콘만 남긴다 — 헤더 오른쪽 끝의 이 아이콘은 관용어라 글자 없이도
+ * 읽히고, 대신 `title`과 `sr-only`로 이름을 남겨둔다.
+ */
+function SignOut() {
   return (
-    <form action="/api/auth/logout" method="post">
+    <form action="/api/auth/logout" method="post" className="shrink-0">
       <button
         type="submit"
-        className="min-h-9 cursor-pointer rounded-md px-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        title="로그아웃"
+        className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
-        {label}
+        <IconSignOut size={16} />
+        <span className="sr-only lg:not-sr-only">로그아웃</span>
       </button>
     </form>
   );
