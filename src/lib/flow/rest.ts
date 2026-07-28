@@ -12,11 +12,17 @@
  * 401이고(실측), 애초에 그 토큰은 `resource=https://flow.team/ai/mcp`로 발급되어 REST와
  * audience가 다르다 (bug-report BUG-004).
  *
- * **API Key는 발급자 한 명의 알림만 돌려준다** (응답의 `receiverId`가 발급자로 고정된다).
+ * **API Key는 소유자 한 명 기준이다** (알림 응답의 `receiverId`가 소유자로 고정된다).
  * 그래서 `mergeMentionComments`에서 `receiverId`가 **지금 로그인한 사람**과 같은 것만
- * 받아들인다. 다른 사람이 로그인하면 붙는 알림이 0건이 되어 본문 없는 지금 화면이 뜬다 —
- * 남의 멘션이 새는 경로를 남기지 않는다.
+ * 받아들인다 — 남의 멘션이 새는 경로를 남기지 않는다.
+ *
+ * 키는 두 출처다 (`get`). 로그인할 때 **자기 키를 등록한 사람**은 소유자가 자기 자신이라
+ * 이 파일 전체가 자기 기준으로 돌고, 등록하지 않은 사람은 환경변수의 공용 키로 돈다 —
+ * 그때는 알림이 0건이 되어 본문 없는 화면이 뜨고, `resolvePostId`는 공용 키 소유자가
+ * 멤버인 프로젝트에서만 답을 준다. 키 등록을 권하는 이유가 이것이다.
  */
+
+import { getApiKey } from "@/lib/auth";
 
 const BASE = process.env.FLOW_API_BASE ?? "https://api.flow.team";
 
@@ -64,9 +70,20 @@ interface Envelope<T> {
   };
 }
 
-/** REST는 모든 응답을 `response.data`로 한 겹 싼다. 그 겹을 벗기고 실패는 던진다. */
-async function get<T>(path: string, what: string): Promise<T> {
-  const key = process.env.FLOW_API_KEY;
+/**
+ * REST는 모든 응답을 `response.data`로 한 겹 싼다. 그 겹을 벗기고 실패는 던진다.
+ *
+ * 키는 **개인 키 → 환경변수** 순이다. 이 한 줄이 이 파일의 세 호출을 모두 덮는다 —
+ * 로그인한 사람이 자기 키를 등록해 뒀으면 셋 다 그 사람 기준으로 돌고, 없으면 예전처럼
+ * 발급자 키로 돈다(파일 상단 주석의 열화 그대로).
+ *
+ * `apiKey`를 직접 넘기는 건 **등록 직전 검증**용이다 (`app/login/actions.ts`). 그때는
+ * 아직 쿠키에 넣기 전이라 쿠키에서 읽을 수 없다.
+ */
+async function get<T>(path: string, what: string, apiKey?: string): Promise<T> {
+  // `cookies()`는 요청 스코프 밖에서 던진다. 이 파일을 요청 없이 직접 부르는 곳이
+  // 단위 테스트라, 그때는 쿠키를 건너뛰고 환경변수로 간다.
+  const key = apiKey ?? (await getApiKey().catch(() => null)) ?? process.env.FLOW_API_KEY;
   if (!key) throw new Error("FLOW_API_KEY 없음");
 
   const res = await fetch(`${BASE}${path}`, {
@@ -98,16 +115,20 @@ export async function listMentionAlarms(): Promise<MentionAlarm[]> {
  * 검색은 **화면에 이미 뜬 이름**만 풀 수 있어서 멘션 줄의 프로젝트명이 비었다 — 멘션 알림은
  * 이름 없이 `projectId`만 준다.
  *
- * **API Key 발급자 기준 목록이다.** 다른 사람이 로그인하면 그 사람 프로젝트가 아니므로,
+ * **API Key 소유자 기준 목록이다.** 공용 키로 도는 사람에게는 자기 프로젝트가 아니므로,
  * 호출부는 이 맵 위에 per-user 검색 결과를 덮는다 (`queries.ts`).
+ *
+ * `apiKey`를 넘기면 그 키로 조회한다 — 키 등록 전 **유효성 검증**에 이 호출을 쓴다
+ * (`app/login/actions.ts`). 응답이 오면 유효한 키다.
  *
  * ponytail: 첫 페이지만 본다. 페이지 크기가 500 고정이라 실측 59개가 한 번에 다 온다.
  * 500개를 넘기면 `hasNext`가 켜지고, 그때 `lastCursor`로 이어 받으면 된다.
  */
-export async function listProjects(): Promise<Map<string, string>> {
+export async function listProjects(apiKey?: string): Promise<Map<string, string>> {
   const data = await get<{ projects?: { projectId: string; title: string }[] }>(
     "/user/projects",
     "프로젝트 목록 조회",
+    apiKey,
   );
   const map = new Map<string, string>();
   // 이름이 겹치면 먼저 나온 쪽이 이긴다 — 실측 59개에 중복이 없다.

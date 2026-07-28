@@ -1,6 +1,6 @@
 # 개발 진행 상황
 
-버전 0.12.3 · 2026-07-28 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
+버전 0.13.0 · 2026-07-28 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
 
 ## 요약
 
@@ -30,12 +30,14 @@ REST → **MCP**로 뒤집혔다 (PRD §5.1, §5.2). REST 스펙은 [api-spec.md
 
 | 파일 | 역할 |
 |------|------|
-| [src/lib/auth.ts](../src/lib/auth.ts) | OAuth 2.1 + PKCE, AES-256-GCM 세션 봉인 (Web Crypto만) |
+| [src/lib/auth.ts](../src/lib/auth.ts) | OAuth 2.1 + PKCE, AES-256-GCM 세션 봉인 (Web Crypto만), 개인 API 키 쿠키 |
 | [src/proxy.ts](../src/proxy.ts) | 로그인 게이트 + 액세스 토큰 자동 갱신 |
 | [src/app/api/auth/](../src/app/api/auth/) | login / callback / logout |
+| [src/app/login/](../src/app/login/) | 로그인 화면 + 개인 API 키 등록 (최초 1회 모달) |
 
 토큰은 브라우저에 절대 나가지 않는다. `httpOnly` 봉인 쿠키에만 둔다 (PRD §8.1).
 로그인 직후 이메일 도메인이 `@traport.com`인지 확인하고, 아니면 세션을 만들지 않는다.
+로그인을 시작하기 전에 개인 flow API 키를 한 번 받는다 — 이유는 [다중 사용자](#다중-사용자--개인-api-키를-받는다-v0130)에 있다.
 
 ### 데이터
 
@@ -634,17 +636,19 @@ REST 목록은 **API Key 발급자 기준**이라 다른 사람이 로그인하�
 
 ```
 npx tsc --noEmit   # clean
-npm run lint       # 0 error / 2 warning (아래 참고)
-npm test           # 62/62
-npm run build      # 8 라우트 + proxy
+npm run lint       # 0 error / 1 warning (아래 참고)
+npm test           # 66/66
+npm run build      # 10 라우트 + proxy
 ```
 
-남아 있는 warning 2건은 손대지 않았다.
+남아 있는 warning은 [motion/select.tsx:409](../src/components/motion/select.tsx)의
+`react-hooks/exhaustive-deps` 하나다 — beUI에서 가져온 코드라 손대지 않았다.
 
-- [layout.tsx:23](../src/app/layout.tsx) `no-css-tags` — SUIT 9단 굵기 `@font-face`를
-  일부러 `<link>`로 넣었다
-- [motion/select.tsx:401](../src/components/motion/select.tsx) `react-hooks/exhaustive-deps` —
-  beUI에서 가져온 코드다
+beUI 컴포넌트를 가져올 때 걸리는 린트 규칙이 하나 더 있다. React 19의
+`react-hooks/set-state-in-effect`가 `useEffect(() => setMounted(true), [])` 패턴을 막는다.
+[center-morph-modal.tsx](../src/components/motion/center-morph-modal.tsx)에서는
+`useSyncExternalStore`(서버 스냅샷 false / 클라이언트 true)로 바꿨다 — 하는 일은 같고
+렌더가 한 번 덜 돈다. 포털 대상이 `document.body`라 서버 렌더에서는 null이어야 한다.
 
 **멘션 댓글 본문은 실데이터로 확인했다** (07-28). 한동안 "audience 불일치로 거부될 수
 있다"고 적어 뒀는데 **틀린 추측이었다** — 원인은 인증 헤더 하나였고(`Authorization: Bearer`
@@ -667,3 +671,86 @@ npm run build      # 8 라우트 + proxy
 > v0.9.x 때 섞여 들어간 채 남아 있다.
 >
 > `pretendard` 의존성은 지웠다 (v0.12.5).
+
+---
+
+## 배포 (Vercel)
+
+프로덕션: **https://flow.tenziro.net** (프로젝트 `ai-tenziro/flow-traport`, 도메인 연결됨).
+
+Production 환경변수 7개가 Vercel에 있다 — `FLOW_OAUTH_ISSUER` `FLOW_API_BASE`
+`FLOW_API_KEY` `FLOW_CLIENT_ID` `FLOW_CLIENT_SECRET` `FLOW_REDIRECT_URI` `SESSION_SECRET`.
+`.env.local`(로컬 개발)과 **자격증명이 분리돼 있다**:
+
+| | 로컬 | 프로덕션 |
+|---|---|---|
+| OAuth 클라이언트 | localhost redirect_uri로 DCR 등록 | 별도 DCR 등록 (`flow.tenziro.net`), secret 만료 2026-10-26 |
+| `FLOW_REDIRECT_URI` | `http://localhost:3000/api/auth/callback/flow` | `https://flow.tenziro.net/api/auth/callback/flow` |
+| `SESSION_SECRET` | 개발용 | 별도 랜덤 32바이트 |
+
+주의할 것 셋 ([bug-report.md](bug-report.md) BUG-017):
+
+1. **환경변수는 새 배포에만 적용된다.** 값을 넣은 뒤 `vercel redeploy`가 필요하다.
+2. **도메인을 바꾸면 DCR을 다시 해야 한다.** redirect_uri는 OAuth 클라이언트에 박힌다.
+3. **Preview 배포에서는 로그인이 안 된다.** Preview URL이 배포마다 바뀌어 redirect_uri로
+   등록할 수 없다. 환경변수도 Production에만 넣었다.
+
+**Preview 배포는 로그인 라우트에서 본문 없는 500이 난다** — 환경변수가 없어서다. 프로덕션의
+그 500과 같은 증상이니 진단할 때 착각하지 말 것.
+
+### 다중 사용자 — 개인 API 키를 받는다 (v0.13.0)
+
+`@traport.com` 계정이면 누구나 로그인된다 (`isTraport`). 화면 데이터는 각자의 MCP 토큰으로
+가져오므로 자기 업무가 맞게 나온다. 문제는 REST 경로 셋이었다 — **API Key 소유자 한 명**
+기준이라 다른 사람이 로그인하면 이렇게 됐다 ([rest.ts](../src/lib/flow/rest.ts) 주석):
+
+| 경로 | 공용 키로 돌 때 |
+|------|----------------|
+| `listMentionAlarms` | `receiverId` 필터로 0건 → 멘션 행은 뜨지만 **본문이 빈다** |
+| `resolvePostId` | 소유자가 멤버가 아닌 프로젝트면 `postId`를 못 얻어 **댓글이 막힌다** |
+| `listProjects` | 소유자 프로젝트 이름→ID 맵(실측 59개)이 `projectIds`에 깔려 **응답 페이로드에 실린다** |
+
+**로그인할 때 각자 자기 키를 등록하게 해서 셋을 한 번에 덮었다.** 키가 자기 것이면 소유자가
+자기 자신이라 세 경로가 모두 자기 기준으로 돈다. DB는 여전히 없다 (PRD §5.3) — 키는 봉인
+쿠키에 들어간다.
+
+| 조각 | 파일 |
+|------|------|
+| 봉인 쿠키 `fc_key` (1년, httpOnly, AES-256-GCM) | [auth.ts](../src/lib/auth.ts) `API_KEY_COOKIE` |
+| 키 해소 한 줄 — 인자 → 쿠키 → 환경변수 | [rest.ts](../src/lib/flow/rest.ts) `get()` |
+| 검증·저장 서버 액션 (`/user/projects` 1회) | [login/actions.ts](../src/app/login/actions.ts) |
+| 최초 1회 모달 (beUI Center Morph Modal) | [login/api-key-gate.tsx](../src/app/login/api-key-gate.tsx) |
+| 키 없으면 인증을 시작하지 않는다 | [api/auth/login/route.ts](../src/app/api/auth/login/route.ts) |
+
+정한 것 넷:
+
+1. **세션이 아니라 별도 쿠키다.** 키를 받는 시점이 로그인 버튼을 누른 직후라 세션이 아직
+   없고, 세션은 7일이라 거기 담으면 만료마다 다시 물어야 한다. flow는 키를 만료시키지
+   않으니 쿠키만 1년으로 두면 한 번 넣고 끝난다.
+2. **키는 필수다.** 건너뛰게 두면 멘션 본문이 빈 화면으로 로그인되는데, 사용자는 로그인이
+   된 줄 알아서 원인을 못 찾는다. 화면(모달)과 서버(`/api/auth/login`) 양쪽에서 막는다 —
+   주소를 직접 열어도 `/login?error=…`로 되돌아온다.
+3. **저장 전에 검증한다.** `/user/projects`를 한 번 불러 응답이 오면 유효한 키다. 무효한
+   키를 봉인해 두면 다음 로그인부터 조용히 열화된 화면이 뜬다.
+4. **키 값은 메시지에도 로그에도 남기지 않는다** (PRD §8.1). 무효한 키와 네트워크 오류를
+   구분하지도 않는다 — 어느 쪽이든 사용자가 할 일은 같다.
+
+실측(로컬, 2026-07-28):
+
+| 확인 | 결과 |
+|------|------|
+| 키 쿠키 없이 `/api/auth/login` | 307 → `/login?error=flow API 키를 먼저 등록해주세요.` |
+| 키 쿠키 있고 `/api/auth/login` | 307 → OAuth `/authorize` (PKCE·resource 그대로) |
+| 키 쿠키 있고 `/login` | 모달 없이 form GET 하나 (`aria-haspopup` 없음) |
+| 무효한 키 제출 | 필드가 흔들리고 "flow에서 발급한 키가 맞는지 다시 확인해주세요." |
+
+#### 남은 구멍
+
+- `listProjects`의 **이름 누수**는 그대로다. 키를 등록하지 않은 사람은 이제 로그인 자체를
+  못 하므로 실사용 경로에서는 안 밟히지만, `get()`의 환경변수 폴백이 살아 있는 한(쿠키가
+  1년 뒤 만료되고 세션은 남은 경우) `projectIdMap`이 공용 키 목록을 깔 수 있다. 검색 결과에
+  있는 이름만 남기면 닫힌다.
+- **등록한 키를 갈아 끼우는 화면이 없다.** flow가 키를 만료시키지 않아서 지금은 필요 없다.
+  키를 폐기·재발급하면 쿠키를 지워야 한다.
+- **본인 외 계정으로는 아직 로그인해 보지 않았다.** 위 표는 코드 근거와 로컬 실측이고,
+  다른 사람의 키로 세 경로가 자기 기준으로 도는지는 실측이 아니다.

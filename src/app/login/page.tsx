@@ -1,8 +1,9 @@
 import Image from 'next/image';
-import { IconInfo } from '@/components/icons';
-import { Button } from '@/components/motion/button/base';
+import { IconInfo, IconOpen } from '@/components/icons';
 import { ChromaticTextReveal } from '@/components/motion/chromatic-text-reveal';
 import { TextReveal } from '@/components/motion/text-reveal';
+import { getApiKey } from '@/lib/auth';
+import { ApiKeyGate } from './api-key-gate';
 
 export const metadata = { title: '로그인 · flow Cockpit' };
 
@@ -18,7 +19,8 @@ const SWEEP = [
 ];
 
 /**
- * 로그인 화면. 입력 필드가 없다 — flow OAuth로 넘길 뿐이다 (PRD §5.2).
+ * 로그인 화면. 아이디·비밀번호를 받지 않는다 — flow OAuth로 넘길 뿐이다 (PRD §5.2).
+ * 받는 것이 하나 있는데 개인 flow API 키이고, 최초 1회만 모달로 묻는다 (`ApiKeyGate`).
  * 링크가 아니라 form GET인 이유: 프리페치로 인증 플로가 먼저 시작되지 않게.
  *
  * 화면을 반으로 갈라 왼쪽에 사진, 오른쪽에 폼을 둔다. 누를 것이 버튼 하나뿐인 화면이라
@@ -35,6 +37,8 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
+  // 키를 이미 등록했으면 모달을 띄우지 않는다. 쿠키 하나 읽는 것이라 렌더를 안 붙잡는다.
+  const hasKey = (await getApiKey()) !== null;
 
   return (
     <main className="grid min-h-dvh grid-rows-[1fr_2fr] lg:grid-cols-2 lg:grid-rows-1">
@@ -127,16 +131,26 @@ export default async function LoginPage({
 
           {/* 마지막 박자. 설명의 마지막 낱말이 자리를 잡을 때 버튼이 올라온다 — 낱말이
               다 앉기를 기다리면 누를 것이 2초 넘게 안 보인다 */}
-          <form
-            action="/api/auth/login"
-            method="get"
-            className="rise mt-7"
-            style={{ animationDelay: '1.5s' }}
-          >
-            <Button type="submit" size="lg" className="w-full">
-              flow로 로그인
-            </Button>
-          </form>
+          <div className="rise mt-7" style={{ animationDelay: '1.5s' }}>
+            <ApiKeyGate hasKey={hasKey} />
+
+            {/* 발급 링크는 모달 안에도 있지만 버튼 아래에도 둔다 — 모달을 열기 전에
+                "키가 뭔지" 보러 갈 수 있어야 한다. 키를 이미 등록한 사람에게도 그대로
+                남긴다: 지우면 두 상태에서 버튼 아래 높이가 달라진다.
+                ponytail: 등록한 키를 갈아 끼우는 화면은 없다. flow가 키를 만료시키지
+                않아서 지금은 필요 없고, 필요해지면 이 링크 옆에 하나 붙이면 된다. */}
+            <p className="mt-4 text-center text-xs text-muted-foreground">
+              <a
+                href="https://api.flow.team/account/api-keys"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 underline-offset-4 hover:underline"
+              >
+                API 키 발급받기
+                <IconOpen size={12} aria-hidden="true" />
+              </a>
+            </p>
+          </div>
         </div>
       </div>
     </main>

@@ -20,6 +20,8 @@
 | [BUG-014](#bug-014) | Select 드롭다운이 조상 `overflow-hidden`에 잘렸다 | 해결 |
 | [BUG-016](#bug-016) | 로그인 게이트가 아이콘·매니페스트를 튕겼다 | 해결 |
 | [BUG-015](#bug-015) | NumberTicker 숫자가 옆 단위 텍스트보다 위로 떴다 | 해결 |
+| [BUG-017](#bug-017) | 배포 후 로그인 버튼이 500 (환경변수 0개 + localhost redirect_uri) | 해결 |
+| [BUG-018](#bug-018) | `cookies()`를 REST 헬퍼에 넣자 단위 테스트가 죽었다 | 해결 |
 
 ---
 
@@ -536,6 +538,103 @@ PWA 아이콘과 매니페스트를 넣은 직후 `next start`로 실측했더�
 
 **교훈**: 인증 게이트의 예외를 파일 이름으로 적으면, 다음에 에셋을 넣는 사람이 조용히
 밟는다. 게이트는 **무엇을 지키는지**로 적어야 한다 — 정적 에셋은 지킬 대상이 아니다.
+
+---
+
+## BUG-017
+
+**Vercel 배포 후 로그인 버튼이 500** — 2026-07-28, 해결
+
+첫 배포 직후 `flow.tenziro.net`의 "flow로 로그인"을 누르면 본문 없는 500이었다.
+
+```
+GET https://flow.tenziro.net/api/auth/login  → 500, content-length: 0
+```
+
+벽이 **두 개** 겹쳐 있었다.
+
+**1) Vercel 프로젝트에 환경변수가 0개** — `vercel env ls`가 빈 목록이었다.
+[login/route.ts](../src/app/api/auth/login/route.ts)는 `authorizeUrl()`을 부르고, 그게
+[auth.ts](../src/lib/auth.ts)의 `env("FLOW_CLIENT_ID")`에서 던진다. 이 라우트에는
+`try`/`catch`가 없어서 그대로 500이 된다. `.env.local`은 커밋 대상이 아니니 배포에는
+안 따라간다 — 배포는 **환경변수 설정이 별도 단계**다.
+
+콜백 라우트는 같은 실수를 해도 500이 안 난다. 거기는 `deny()`로 감싸여 있어서 로그인
+화면에 사유가 뜬다. 두 라우트의 차이가 "빈 500 vs 읽을 수 있는 메시지"를 갈랐다.
+
+**2) OAuth 클라이언트에 localhost redirect_uri만 등록돼 있었다.** 1번만 고치면 다음
+벽에서 막힌다 — 확인하려고 프로덕션 주소로 authorize를 직접 쳐 봤다.
+
+```
+GET /authorize?...&redirect_uri=https://flow.tenziro.net/api/auth/callback/flow
+→ 400  invalid_request  "Invalid redirect URI. The redirect URI provided does not
+                         match any registered URI for this client."
+```
+
+기존 `client_id`는 개발 중 `http://localhost:3000/api/auth/callback/flow`로 DCR 등록한
+것이다. redirect_uri는 **클라이언트에 박혀서** 환경변수만 바꿔 되는 값이 아니다.
+
+**처리**
+
+- flow OAuth `/register`(DCR, 승인 불필요)로 **프로덕션 전용 클라이언트**를 새로 발급 →
+  `redirect_uris: ["https://flow.tenziro.net/api/auth/callback/flow"]`, 201.
+  로컬 개발용 자격증명(`.env.local`)은 손대지 않았다 — dev/prod 자격증명 분리.
+- Vercel Production 환경변수 6개 설정: `FLOW_OAUTH_ISSUER` `FLOW_API_BASE`
+  `FLOW_API_KEY` `FLOW_CLIENT_ID` `FLOW_CLIENT_SECRET` `FLOW_REDIRECT_URI`.
+  `SESSION_SECRET`은 프로덕션용으로 **새로 생성**했다 (32바이트 랜덤) — 로컬 키와 같은
+  값을 쓰면 로컬에서 만든 세션 쿠키가 프로덕션에서 그대로 풀린다.
+- 재배포. **환경변수는 새 배포에만 적용된다** — 값만 넣고 기다려도 안 고쳐진다.
+
+**검증**
+
+```
+GET /api/auth/login                → 307  location: .../authorize?...redirect_uri=https%3A%2F%2Fflow.tenziro.net%2F...
+GET (그 authorize URL)             → 302  location: https://flow.team/oauth/flow_login.act?...
+```
+
+400이 아니라 flow.team 로그인 화면까지 간다. 그 뒤(계정 입력 → 콜백 → 토큰 교환)는 실제
+flow 자격증명이 필요해서 curl로는 못 넘어간다.
+
+**교훈**: `client_secret` 만료(2026-10-26)에 프로덕션 클라이언트가 하나 더 늘었다.
+그리고 OAuth 앱의 배포는 "환경변수 옮기기"가 아니다 — **도메인이 자격증명에 박힌다.**
+도메인을 바꾸면 DCR을 다시 해야 한다.
+
+---
+
+## BUG-018
+
+**`cookies()`를 REST 헬퍼에 넣자 단위 테스트 4건이 죽었다** — 2026-07-28, 해결
+
+개인 API 키를 지원하려고 [rest.ts](../src/lib/flow/rest.ts) `get()`에 쿠키 조회를 한 줄
+넣었다. 키 해소 순서는 인자 → 쿠키 → 환경변수다.
+
+```
+const key = apiKey ?? (await getApiKey()) ?? process.env.FLOW_API_KEY;
+```
+
+`resolvePostId` 테스트 4건이 이렇게 터졌다.
+
+```
+`cookies` was called outside a request scope.
+  throwForMissingRequestStore (next/src/server/app-render/work-unit-async-storage.external.ts:415)
+  getApiKey (src/lib/auth.ts:153)
+  get (src/lib/flow/rest.ts:84)
+```
+
+**원인**: `next/headers`의 `cookies()`는 요청 AsyncLocalStorage에 의존한다. 테스트는
+`resolvePostId`를 요청 없이 직접 부르고 `fetch`만 목으로 바꾸므로 저장소가 비어 있다.
+쿠키가 환경변수보다 **먼저** 오기 때문에 환경변수를 세팅해 둬도 그 앞에서 던졌다.
+
+**처리**: 쿠키 조회에만 `.catch(() => null)`을 붙여 요청 밖에서는 다음 후보(환경변수)로
+넘어가게 했다. `unseal`은 이미 실패를 null로 돌려주므로, 이 catch가 삼키는 것은 "요청
+스코프가 없다" 한 가지다.
+
+```
+const key = apiKey ?? (await getApiKey().catch(() => null)) ?? process.env.FLOW_API_KEY;
+```
+
+**교훈**: 요청 스코프에 의존하는 API(`cookies()` `headers()`)를 순수 헬퍼에 심으면 그
+헬퍼를 부르는 모든 경로가 요청 안이라고 가정하는 셈이다. 단위 테스트는 그 가정 밖에 있다.
 
 ---
 

@@ -132,6 +132,28 @@ export async function getSession(): Promise<Session | null> {
   return raw ? unseal<Session>(raw) : null;
 }
 
+/* ── 개인 flow API 키 ──────────────────────────────────────────────────── */
+
+/**
+ * REST(`lib/flow/rest.ts`)가 쓰는 개인 API 키. **세션과 따로 둔다.**
+ *
+ * 세션에 넣지 않는 이유가 둘이다. 키를 받는 시점이 로그인 버튼을 누른 **직후**라
+ * 아직 세션이 없고, 세션은 7일이라 거기 담으면 만료마다 다시 물어야 한다. 키 자체는
+ * flow가 만료시키지 않으니 쿠키만 길게 두면 한 번 넣고 끝난다.
+ *
+ * 봉인은 세션과 같은 AES-256-GCM이다. 키는 그 사람 권한 전체를 여는 장기 자격증명이라
+ * 액세스 토큰보다 오히려 더 조심해야 한다 — `httpOnly`는 타협 불가.
+ */
+export const API_KEY_COOKIE = "fc_key";
+
+/** 1년. flow가 키를 만료시키지 않아서 세션(7일)에 묶을 이유가 없다. */
+export const API_KEY_MAX_AGE = 60 * 60 * 24 * 365;
+
+export async function getApiKey(): Promise<string | null> {
+  const raw = (await cookies()).get(API_KEY_COOKIE)?.value;
+  return raw ? unseal<string>(raw) : null;
+}
+
 /** 쿠키 옵션. 토큰이 들어 있으므로 httpOnly는 타협 불가. */
 export function cookieOptions(maxAge: number) {
   return {
