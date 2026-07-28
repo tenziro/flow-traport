@@ -16,6 +16,7 @@ const ME = 'jongseok.lee@traport.com';
 
 const ALARM: MentionAlarm = {
   receiverId: ME,
+  projectId: '2605313',
   postId: '81938471',
   remarkId: '193042898',
   replyId: '-1',
@@ -31,6 +32,8 @@ describe('멘션에 댓글 본문 붙이기', () => {
     assert.equal(row.from, '장혜진');
     assert.equal(row.content, ALARM.content);
     assert.equal(row.isReply, false);
+    // 프로젝트는 알림만 준다 — 화면의 프로젝트명이 이 값에서 나온다
+    assert.equal(row.projectId, ALARM.projectId);
     // 제목·링크는 그대로 살아 있어야 한다 (워크리스트만 주는 값이다)
     assert.equal(row.title, MENTION.title);
     assert.equal(row.link, MENTION.link);

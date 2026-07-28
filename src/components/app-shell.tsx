@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { motion } from "motion/react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { IconRisk, IconSignOut, IconTeam, IconToday } from "@/components/icons";
-import { cn } from "@/lib/utils";
+import { motion } from 'motion/react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { IconRisk, IconSignOut, IconTeam, IconToday } from '@/components/icons';
+import { cn } from '@/lib/utils';
 
 /**
  * 레이아웃 셸 (PRD §7.3).
@@ -24,9 +24,9 @@ import { cn } from "@/lib/utils";
  * 현재 위치는 색·굵기·인디케이터 3중으로 표시하고, 아이콘과 텍스트 라벨을 항상 함께 낸다.
  */
 const NAV = [
-  { href: "/", label: "오늘", Icon: IconToday },
-  { href: "/risk", label: "리스크", Icon: IconRisk },
-  { href: "/team", label: "팀", Icon: IconTeam },
+  { href: '/', label: '오늘', Icon: IconToday },
+  { href: '/risk', label: '리스크', Icon: IconRisk },
+  { href: '/team', label: '팀', Icon: IconTeam },
 ] as const;
 
 export function AppShell({
@@ -37,8 +37,9 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
-  const activeHref = NAV.find(({ href }) => isActive(href))?.href ?? "/";
+  const isActive = (href: string) =>
+    href === '/' ? pathname === '/' : pathname.startsWith(href);
+  const activeHref = NAV.find(({ href }) => isActive(href))?.href ?? '/';
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -48,7 +49,11 @@ export function AppShell({
           열고 saturate로 색을 끌어올려야 유리판처럼 읽힌다 (70%/blur만으로는 안 보였다). */}
       <header className="sticky top-0 z-20 border-b border-border bg-card/55 backdrop-blur-2xl backdrop-saturate-200">
         <div className="flex h-14 w-full items-center gap-4 px-4 sm:px-6 lg:px-8">
-          <span className="shrink-0 text-base font-semibold">flow 콕핏</span>
+          {/* 이름의 무게 중심은 `Cockpit`이다 — 앞의 `flow`는 올라탄 플랫폼 이름이라
+              한 급 얇게 둔다. 로그인 화면 제목도 같은 대비를 쓴다 */}
+          <span className="shrink-0 text-base font-medium">
+            flow <span className="font-extrabold">Cockpit</span>
+          </span>
 
           {/* 사용자 · 로그아웃
               전에는 이름·부서 두 줄이 `text-right`로 떠 있고 그 옆에 muted 텍스트
@@ -62,7 +67,9 @@ export function AppShell({
               {user.fullname.slice(0, 1)}
             </span>
             <span className="hidden min-w-0 leading-tight sm:block">
-              <span className="block truncate text-xs font-medium">{user.fullname}</span>
+              <span className="block truncate text-xs font-medium">
+                {user.fullname}
+              </span>
               <span className="block truncate text-[11px] text-muted-foreground">
                 {user.divisionName}
               </span>
@@ -75,7 +82,9 @@ export function AppShell({
         <TopNav activeHref={activeHref} />
       </header>
 
-      <main className="w-full flex-1 px-4 py-6 pb-20 sm:px-6 lg:px-8 lg:pb-6">{children}</main>
+      <main className="w-full flex-1 px-4 py-6 pb-20 sm:px-6 lg:px-8 lg:pb-6">
+        {children}
+      </main>
 
       {/* 모바일 하단 탭 */}
       <nav
@@ -88,10 +97,10 @@ export function AppShell({
             <Link
               key={href}
               href={href}
-              aria-current={active ? "page" : undefined}
+              aria-current={active ? 'page' : undefined}
               className={cn(
-                "relative flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors duration-200 ease-out",
-                active ? "font-semibold text-primary" : "text-muted-foreground",
+                'relative flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors duration-200 ease-out',
+                active ? 'font-semibold text-primary' : 'text-muted-foreground',
               )}
             >
               {active && (
@@ -127,13 +136,13 @@ function TopNav({ activeHref }: { activeHref: string }) {
           <Link
             key={href}
             href={href}
-            aria-current={active ? "page" : undefined}
+            aria-current={active ? 'page' : undefined}
             className={cn(
               // -mb-px: 밑줄을 헤더의 border-b 위에 겹쳐 앉힌다 (선이 두 겹으로 안 보인다)
-              "relative -mb-px inline-flex min-h-11 items-center gap-1.5 px-3 pt-1 pb-2.5 text-sm transition-colors",
+              'relative -mb-px inline-flex min-h-11 items-center gap-1.5 px-3 pt-1 pb-2.5 text-sm transition-colors',
               active
-                ? "font-semibold text-foreground"
-                : "text-muted-foreground hover:text-foreground",
+                ? 'font-semibold text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
             )}
           >
             <Icon size={16} />
@@ -141,7 +150,12 @@ function TopNav({ activeHref }: { activeHref: string }) {
             {active && (
               <motion.span
                 layoutId="top-nav-active"
-                transition={{ type: "spring", stiffness: 170, damping: 24, mass: 1.2 }}
+                transition={{
+                  type: 'spring',
+                  stiffness: 170,
+                  damping: 24,
+                  mass: 1.2,
+                }}
                 className="absolute inset-x-0 bottom-0 h-0.5 bg-primary"
               />
             )}

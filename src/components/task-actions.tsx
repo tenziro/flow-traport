@@ -132,7 +132,13 @@ function StatusForm({
         onValueChange={(next) => setPicked(next as TaskStatus)}
         className="w-32"
       >
-        <SelectTrigger aria-labelledby={`status-label-${taskId}`} className="h-8 px-2.5 py-0">
+        {/* 옆 댓글 입력·버튼과 같은 pill이다. 반경은 클래스로 못 준다 — 모서리 애니메이션이
+            인라인 스타일을 쓴다 (select.tsx `radius`). 좌우 여백은 곡선을 피해 한 칸 넓힌다 */}
+        <SelectTrigger
+          aria-labelledby={`status-label-${taskId}`}
+          radius={16}
+          className="h-8 px-3 py-0"
+        >
           <SelectValue placeholder={`지금 ${current}`} />
         </SelectTrigger>
         <SelectContent>
@@ -155,10 +161,18 @@ function StatusForm({
           <span className="text-xs text-warning-foreground">
             {TASK_STATUS[picked]}(으)로 바꿀까요?
           </span>
-          <Button type="submit" size="sm" disabled={pending}>
+          {/* 옆의 셀렉트(32px)보다 한 급 낮춘다. 같은 높이에 라임을 채우면 이 줄에서
+              제일 큰 덩어리가 되어, 답해야 할 질문보다 답하는 버튼이 먼저 읽힌다 */}
+          <Button type="submit" size="sm" disabled={pending} className="h-7 px-2.5">
             {pending ? "바꾸는 중…" : "네, 바꿀게요"}
           </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => setPicked("")}>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => setPicked("")}
+            className="h-7 px-2.5"
+          >
             취소
           </Button>
         </>
@@ -196,14 +210,15 @@ function CommentForm({
       <label className="sr-only" htmlFor={`comment-${taskId}`}>
         댓글
       </label>
-      {/* beUI Input 기본 치수(h-11 rounded-full text-base)를 촘촘한 행에 맞춘다. */}
+      {/* beUI Input 기본 치수(h-11 rounded-full text-base)를 촘촘한 행에 맞춘다.
+          모서리는 기본값 그대로 pill이다 — 바로 옆 `남기기` 버튼이 pill이라 둘이 한 벌로 붙는다. */}
       <Input
         id={`comment-${taskId}`}
         name="content"
         placeholder="댓글 남기기"
         maxLength={2000}
         className="min-w-0 flex-1"
-        classNames={{ field: "h-8 rounded-lg bg-background", input: "text-sm" }}
+        classNames={{ field: "h-8 bg-background", input: "text-sm" }}
       />
       <Button type="submit" size="sm" variant="secondary" disabled={pending}>
         <IconComment size={13} />

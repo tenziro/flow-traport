@@ -47,7 +47,9 @@ export function TaskItem({
         </span>
       )}
       <div className="min-w-0 flex-1">
-        <p className="flex items-start gap-2 text-sm font-medium">
+        {/* 제목 굵기는 `나를 부른 사람들`과 같은 semibold. medium이던 때는 바로 아래
+            메타 줄과 굵기 차이가 얇아서 제목이 덜 걸렸다 */}
+        <p className="flex items-start gap-2 text-sm font-semibold">
           <span className="min-w-0 flex-1">{task.title}</span>
           <DDay days={task.daysLeft} />
         </p>
@@ -100,7 +102,11 @@ export function TaskItem({
         {task.lastComment && (
           // 말풍선 아이콘으로 "남이 남긴 말"임을 표시한다. 위 메타 줄과 안 섞인다.
           <p className="mt-1.5 flex gap-1.5 text-xs leading-relaxed text-muted-foreground">
-            <IconLastComment size={13} className="mt-0.5 shrink-0" />
+            {/* 아이콘 칸 높이를 글줄 한 줄(`1lh`)로 잡고 그 안에서 중앙에 둔다. `mt-*`로
+                눈대중하면 글자 크기나 leading이 바뀔 때마다 다시 어긋난다 */}
+            <span className="flex h-[1lh] shrink-0 items-center">
+              <IconLastComment size={13} />
+            </span>
             {/* 폭은 열 끝까지 쓰고 2줄에서 자른다 — 좁혀 두면 같은 2줄에 담기는 말이 줄어든다 */}
             <span className="line-clamp-2">{task.lastComment}</span>
           </p>

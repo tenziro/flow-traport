@@ -178,18 +178,26 @@ export interface SelectTriggerProps {
   /** 트리거 id는 내부 생성이라 <label htmlFor>로 못 묶는다. 라벨 id를 여기로 넘긴다. */
   "aria-labelledby"?: string;
   children: ReactNode;
+  /**
+   * 모서리 반경(px). 기본 12는 `rounded-xl`과 같은 값이다.
+   *
+   * 클래스로는 못 바꾼다 — 아래 모서리 애니메이션이 반경을 인라인 스타일로 쓰고,
+   * 인라인이 클래스를 이긴다. 높이의 절반을 넘기면 pill이 된다(h-8이면 16).
+   */
+  radius?: number;
 }
 
 export function SelectTrigger({
   className,
   "aria-labelledby": ariaLabelledBy,
   children,
+  radius = 12,
 }: SelectTriggerProps) {
   const ctx = useSelectContext("SelectTrigger");
   const isTop = ctx.placement === "top";
   // edge facing the panel flattens then rounds; the far edge stays rounded.
   // All four corners are specified so none gets stranded when placement flips.
-  const kf = ctx.open ? [0, 0, 12] : [12, 0, 12];
+  const kf = ctx.open ? [0, 0, radius] : [radius, 0, radius];
   const kfT: Transition = ctx.reduce
     ? { duration: 0 }
     : ctx.open
@@ -209,10 +217,10 @@ export function SelectTrigger({
       // back once the panel pulls away — the two pinch apart.
       initial={false}
       animate={{
-        borderTopLeftRadius: isTop ? kf : 12,
-        borderTopRightRadius: isTop ? kf : 12,
-        borderBottomLeftRadius: isTop ? 12 : kf,
-        borderBottomRightRadius: isTop ? 12 : kf,
+        borderTopLeftRadius: isTop ? kf : radius,
+        borderTopRightRadius: isTop ? kf : radius,
+        borderBottomLeftRadius: isTop ? radius : kf,
+        borderBottomRightRadius: isTop ? radius : kf,
       }}
       transition={{
         borderTopLeftRadius: isTop ? kfT : INSTANT_TRANSITION,

@@ -27,6 +27,8 @@ const SIZE = 100;
 export interface MentionAlarm {
   /** 수신자 — API Key 발급자로 고정된다. 로그인한 사람과 같은지 반드시 확인한다. */
   receiverId: string;
+  /** 이 업무가 속한 프로젝트. 워크리스트 멘션에는 없어서 화면의 프로젝트명이 여기서 나온다. */
+  projectId: string;
   postId: string;
   /** 댓글 ID. `-1`이면 게시글 본문 멘션. */
   remarkId: string;
@@ -50,6 +52,8 @@ export interface MentionRow {
   content?: string;
   /** 다른 댓글에 달린 답글이면 true. 화면에서 한 단 들여쓴다. */
   isReply?: boolean;
+  /** 프로젝트 id. 알림 조회가 실패하면 undefined 그대로다. */
+  projectId?: string;
 }
 
 interface Envelope<T> {
@@ -84,6 +88,31 @@ export async function listMentionAlarms(): Promise<MentionAlarm[]> {
   );
   // `alarms`가 두 번 중첩된다 — 오타가 아니다 (api-spec §7.1).
   return data.alarms?.alarms ?? [];
+}
+
+/**
+ * 프로젝트 이름 → projectId 전량 (api-spec §5.2).
+ *
+ * MCP `flow_list_projects`가 죽어 있어서(BUG-007) 같은 목록을 REST로 받는다. 개수도 같다
+ * (실측 59개). 이게 없으면 이름을 검색으로 하나씩 해소하는 수밖에 없는데(`search.ts`),
+ * 검색은 **화면에 이미 뜬 이름**만 풀 수 있어서 멘션 줄의 프로젝트명이 비었다 — 멘션 알림은
+ * 이름 없이 `projectId`만 준다.
+ *
+ * **API Key 발급자 기준 목록이다.** 다른 사람이 로그인하면 그 사람 프로젝트가 아니므로,
+ * 호출부는 이 맵 위에 per-user 검색 결과를 덮는다 (`queries.ts`).
+ *
+ * ponytail: 첫 페이지만 본다. 페이지 크기가 500 고정이라 실측 59개가 한 번에 다 온다.
+ * 500개를 넘기면 `hasNext`가 켜지고, 그때 `lastCursor`로 이어 받으면 된다.
+ */
+export async function listProjects(): Promise<Map<string, string>> {
+  const data = await get<{ projects?: { projectId: string; title: string }[] }>(
+    "/user/projects",
+    "프로젝트 목록 조회",
+  );
+  const map = new Map<string, string>();
+  // 이름이 겹치면 먼저 나온 쪽이 이긴다 — 실측 59개에 중복이 없다.
+  for (const p of data.projects ?? []) if (!map.has(p.title)) map.set(p.title, p.projectId);
+  return map;
 }
 
 /** api-spec §6.1 `tasks[]`. 두 ID를 잇는 데 필요한 두 필드만 적었다. */
@@ -151,6 +180,7 @@ export function mergeMentionComments<T extends MentionRow>(
       from: alarm.registerName || mention.from,
       content: alarm.content?.trim() || undefined,
       isReply: alarm.replyId !== "-1",
+      projectId: alarm.projectId || undefined,
     };
   });
 }

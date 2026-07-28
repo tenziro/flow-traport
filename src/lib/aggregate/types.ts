@@ -47,6 +47,8 @@ export interface Alarm {
   content?: string;
   /** 다른 댓글에 달린 답글이면 true. 화면에서 한 단 들여쓴다. */
   isReply?: boolean;
+  /** 프로젝트 id. 알림 API만 준다 — 이름은 화면에서 프로젝트 목록으로 해소한다. */
+  projectId?: string;
 }
 
 export interface Project {

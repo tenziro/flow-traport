@@ -9,7 +9,7 @@
 import { rollupProjects, type ProjectRollup, type StandupMember } from "@/lib/aggregate";
 import { getSession } from "@/lib/auth";
 import { createFlowMcp, type FlowMcp } from "./mcp";
-import { listMentionAlarms, mergeMentionComments, type MentionRow } from "./rest";
+import { listMentionAlarms, listProjects, mergeMentionComments, type MentionRow } from "./rest";
 import { searchProjectIds } from "./search";
 
 export interface WorklistTask {
@@ -80,7 +80,7 @@ export async function loadToday(): Promise<TodayData> {
 
   // ponytail: 보조 데이터는 실패해도 null로 흘린다. flow_list_alarms가 서버측 스키마
   // 오류로 죽는 걸 이미 봤다(docs/bug-report.md) — 한 도구 때문에 화면 전체를 날리지 않는다.
-  const [worklist, picks, wide, listed, alarms] = await Promise.all([
+  const [worklist, picks, wide, alarms] = await Promise.all([
     mcp.call<Worklist>("flow_get_my_worklist", { format: "structured" }),
     // 화면에 뿌리는 포커스는 5개인데 20개를 받는다. 나머지 15개는 **마지막 댓글**용이다 —
     // 워크리스트가 댓글 본문을 안 줘서, 밀리는 업무가 포커스 후보에 있으면 거기서 빌려 온다.
@@ -93,7 +93,6 @@ export async function loadToday(): Promise<TodayData> {
     mcp
       .call<Worklist>("flow_get_my_worklist", { format: "structured", overdueActiveDays: 180 })
       .catch(() => null),
-    listProjects(mcp).catch(() => null),
     // 멘션 댓글 본문은 워크리스트에 없다. 실패하면 본문만 빠지고 행은 그대로 뜬다.
     listMentionAlarms().catch(() => null),
   ]);
@@ -101,13 +100,11 @@ export async function loadToday(): Promise<TodayData> {
   const focus = picks?.slice(0, 5) ?? null;
   const stale = staleTasks(worklist, wide, picks);
 
-  // 목록 도구가 죽어 있으면 화면에 실제로 뜨는 이름만 검색으로 해소한다 (search.ts).
-  const projectIds =
-    listed ??
-    (await searchProjectIds(
-      mcp,
-      projectNames([...worklist.overdueActive, ...(focus ?? []), ...(stale ?? [])]),
-    ));
+  // 포커스·방치 목록이 정해진 다음이라 이름을 다 모은 뒤에 부른다.
+  const projectIds = await projectIdMap(
+    mcp,
+    projectNames([...worklist.overdueActive, ...(focus ?? []), ...(stale ?? [])]),
+  );
 
   // 알림 수신자가 지금 로그인한 사람과 같은 것만 붙는다 (rest.ts). 워크리스트가 주는
   // `user.id`가 알림의 `receiverId`와 같은 공간이다 — 둘 다 flow user_id다.
@@ -222,23 +219,18 @@ export async function loadTeam(dept?: string): Promise<TeamData> {
   const divisionsP = mcp
     .call<{ divisions: Division[] }>("flow_list_divisions")
     .then((r) => r.divisions);
-  // 목록 도구가 죽어도 화면은 서야 한다. ID를 못 구하면 쓰기 UI만 사라진다.
-  const listedP = listProjects(mcp).catch(() => null);
   const target = dept ?? (await mcp.call<Profile>("flow_get_my_profile")).divisionName;
 
-  const [divisions, standup, listed] = await Promise.all([
+  const [divisions, standup] = await Promise.all([
     divisionsP,
     mcp.call<Standup>("flow_get_team_standup", { dept: target, format: "structured" }),
-    listedP,
   ]);
 
-  // 목록 도구가 죽어 있으면 화면에 실제로 뜨는 이름만 검색으로 해소한다 (search.ts).
-  const projectIds =
-    listed ??
-    (await searchProjectIds(
-      mcp,
-      standup.members.flatMap((m) => projectNames([...m.imminent, ...m.blocked])),
-    ));
+  // 스탠드업이 나온 다음에 부른다 — 이름 목록이 여기서 나온다.
+  const projectIds = await projectIdMap(
+    mcp,
+    standup.members.flatMap((m) => projectNames([...m.imminent, ...m.blocked])),
+  );
 
   return { now, dept: target, divisions, standup, projectIds };
 }
@@ -253,14 +245,17 @@ export async function loadRisk(dept?: string): Promise<RiskData> {
 /**
  * 프로젝트 이름 → projectId. 스탠드업이 projectId를 주지 않아서 필요하다.
  *
- * ponytail: 이름이 겹치면 먼저 나온 쪽이 이긴다. 실측 59개에 중복이 없어서 그냥 둔다 —
- * 겹치기 시작하면 여기가 아니라 flow 쪽 프로젝트 이름을 고치는 게 맞다.
+ * 두 출처를 겹친다. REST 전량 목록은 **API Key 발급자 기준**이라 화면에 안 뜬 프로젝트까지
+ * 알지만 다른 사람이 로그인하면 그 사람 것이 아니고, 검색은 로그인한 사람 권한으로 돌지만
+ * **화면에 뜬 이름**만 풀 수 있다. 그래서 검색 결과를 위에 덮는다 — 겹치는 이름은 항상
+ * 로그인한 사람 쪽이 이긴다.
+ *
+ * 검색은 예전에도 매번 돌았다 (MCP 목록 도구가 죽어 있어서 — BUG-007). 늘어난 건 REST 한 번이다.
  */
-async function listProjects(mcp: FlowMcp): Promise<Map<string, string>> {
-  const { projects } = await mcp.call<{ projects: { projectId: string; title: string }[] }>(
-    "flow_list_projects",
-  );
-  const map = new Map<string, string>();
-  for (const p of projects) if (!map.has(p.title)) map.set(p.title, p.projectId);
-  return map;
+async function projectIdMap(mcp: FlowMcp, names: Iterable<string>): Promise<Map<string, string>> {
+  const [listed, searched] = await Promise.all([
+    listProjects().catch(() => null),
+    searchProjectIds(mcp, names),
+  ]);
+  return new Map([...(listed ?? []), ...searched]);
 }

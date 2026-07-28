@@ -42,7 +42,10 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-title"
       className={cn(
-        "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
+        // 카드 제목은 bold(700)다. medium이던 때는 바로 아래 상태 필터·본문 줄과 굵기
+        // 차이가 얇아서 카드 경계가 제목으로 안 읽혔다. 안에 붙는 건수는 `font-normal`을
+        // 따로 갖고 있어서 같이 굵어지지 않는다.
+        "font-heading text-base leading-snug font-bold group-data-[size=sm]/card:text-sm",
         className
       )}
       {...props}

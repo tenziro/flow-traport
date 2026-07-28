@@ -23,6 +23,8 @@ export interface MentionGroup {
   lastAtMs: number | null;
   /** 태스크 딥링크. */
   link: string;
+  /** 프로젝트 id. 알림 조회가 실패했으면 undefined — 화면에서 프로젝트명이 빠진다. */
+  projectId?: string;
   /** 행 펼침용 원본 알림 — 최신순. 읽음 처리도 이 배열 전체를 한 번에. */
   alarms: Alarm[];
 }
@@ -61,6 +63,9 @@ export function groupMentions(alarms: readonly Alarm[]): MentionGroup[] {
         lastAt: latest.at,
         lastAtMs: latestMs >= 0 ? latestMs : null,
         link: latest.link,
+        // 같은 태스크의 알림이라 프로젝트도 같다. 붙은 것 중 아무거나 — 알림 조인이
+        // 어긋난 건은 projectId가 비어 있어서 최신 것만 보면 놓친다.
+        projectId: sorted.find((a) => a.projectId)?.projectId,
         alarms: sorted,
       };
     })

@@ -66,7 +66,8 @@
  */
 :root {
   color-scheme: dark;
-  --font-suit: "SUIT";
+  /* `--font-suit`은 `layout.tsx`의 `next/font`가 `<html>`에 얹는다. 여기서 또 선언하면
+     같은 요소에 같은 명시도로 두 값이 붙어 어느 쪽이 이길지 주입 순서에 달린다 */
   --background: #0a0b09;
   --foreground: #f2f4ef;
   --card: #141613;
@@ -191,6 +192,46 @@
     animation: bar-grow 0.65s cubic-bezier(0.16, 1, 0.3, 1) backwards;
     animation-delay: calc(120ms + var(--i, 0) * 60ms);
   }
+  /*
+   * `<details>` 여닫는 움직임. 원래는 두 방향 다 즉시다 — 열림은 키프레임으로 흉내낼 수
+   * 있지만 닫힘은 안 된다. `open`이 빠지는 그 프레임에 내용이 렌더 트리에서 사라져서
+   * 애니메이션이 걸릴 대상 자체가 없다.
+   *
+   * `content-visibility`를 `allow-discrete`로 같이 전환하면 닫히는 동안 내용이 남아
+   * 있어서 높이가 줄어드는 게 보인다. `interpolate-size`는 `0 → auto` 보간을 열어 준다 —
+   * 내용 높이가 줄마다 달라서 고정 높이로는 못 잡는다.
+   *
+   * 둘 중 하나라도 모르는 브라우저에서는 예전처럼 즉시 열리고 닫힌다. 내용은 언제나 보인다.
+   */
+  @supports (interpolate-size: allow-keywords) {
+    :root {
+      interpolate-size: allow-keywords;
+    }
+  }
+  .disclose::details-content {
+    height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+      height 0.34s cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 0.22s ease-out,
+      content-visibility 0.34s allow-discrete;
+  }
+  .disclose[open]::details-content {
+    height: auto;
+    opacity: 1;
+    /*
+     * 다 열린 다음에야 넘침을 푼다. 여는 동안 `hidden`이어야 높이가 자라는 게 보이고,
+     * 열린 뒤에는 `visible`이어야 안쪽 셀렉트 목록이 카드 밖으로 나올 수 있다 (BUG-009).
+     * 지연 0.34s가 그 전환점이다 — 빼면 시작하자마자 풀려서 내용이 한 번 튀어나온다.
+     * 닫힐 때는 위 규칙의 목록을 쓰는데 거기에 `overflow`가 없어서 즉시 `hidden`이 된다.
+     */
+    overflow: visible;
+    transition:
+      height 0.34s cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 0.22s ease-out,
+      overflow 0.01s 0.34s allow-discrete;
+  }
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -201,6 +242,10 @@
       animation-delay: 0ms !important;
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
+    }
+    /* `*`는 이 의사 요소를 안 잡는다 — 따로 적어야 여닫힘이 즉시로 돌아온다. */
+    .disclose::details-content {
+      transition-duration: 0.01ms !important;
     }
   }
 }
