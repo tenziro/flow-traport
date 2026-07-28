@@ -39,10 +39,56 @@ const suit = localFont({
   variable: '--font-suit',
 });
 
+const TITLE = 'flow Cockpit';
+const DESCRIPTION = 'flow 업무를 위험도순으로 모아 보는 사내 대시보드';
+
+/**
+ * 공유 카드가 가리킬 절대 주소.
+ *
+ * og:image·og:url은 상대 경로가 안 된다 — 크롤러가 우리 문서를 떠난 뒤에 이미지를 받으러
+ * 오기 때문이다. `metadataBase`를 주면 Next가 상대 경로를 이걸로 채워준다.
+ *
+ * 도메인을 새 환경변수로 또 받지 않고 `FLOW_REDIRECT_URI`에서 origin만 떼어 쓴다. 그 값은
+ * flow OAuth 클라이언트에 등록한 주소와 한 글자도 다를 수 없어서(§4.1) 이 앱이 실제로
+ * 서 있는 주소의 유일한 진실이다. 없으면(로컬·테스트) 개발 서버로 떨어진다.
+ */
+const ORIGIN = new URL(
+  process.env.FLOW_REDIRECT_URI ?? 'http://localhost:3000',
+).origin;
+
 export const metadata: Metadata = {
-  title: 'flow Cockpit',
-  description: 'flow 업무를 위험도순으로 모아 보는 사내 대시보드',
+  metadataBase: new URL(ORIGIN),
+  title: TITLE,
+  description: DESCRIPTION,
   robots: { index: false, follow: false }, // PRD §8.1 — 사내 전용
+
+  // 검색에는 안 걸리게 두면서 공유 카드는 만든다. 서로 다른 일이다 — robots는 색인을
+  // 막고, og는 슬랙·카카오톡에 붙여넣은 링크가 어떻게 펼쳐질지를 정한다.
+  openGraph: {
+    type: 'website',
+    siteName: TITLE,
+    title: TITLE,
+    description: DESCRIPTION,
+    url: '/',
+    locale: 'ko_KR',
+    images: [
+      {
+        url: '/og.png',
+        width: 1200,
+        height: 630,
+        alt: 'flow Cockpit — flow 업무를 위험도순으로 모아 봐요.',
+      },
+    ],
+  },
+
+  // 트위터는 og를 대부분 물려받지만 카드 크기는 자기 태그로만 정한다. 안 적으면
+  // 1200×630 이미지가 작은 정사각형으로 잘린다.
+  twitter: {
+    card: 'summary_large_image',
+    title: TITLE,
+    description: DESCRIPTION,
+    images: ['/og.png'],
+  },
 };
 
 export const viewport: Viewport = {
