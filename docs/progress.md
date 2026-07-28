@@ -109,8 +109,8 @@ MCP 경로를 전부 짚어봤고 전부 막혔다:
 `--font-sans`에 물렸다. Fira Code는 완전히 뺐다 — 코드 폰트를 쓸 자리가 화면에 없다.
 불러오는 방식은 나중에 `next/font/local`로 바꿨다 (아래 `새로고침할 때 글자가 출렁이던 것`).
 
-> 정리할 것: `pretendard` npm 의존성과 `public/fonts/pretendard/`(92개 파일)가 아직 남아
-> 있다. `src/`에서 참조하는 곳은 없다. 지우기 전에 확인이 필요해서 손대지 않았다.
+`pretendard` 의존성과 `public/fonts/pretendard/`는 지웠다 (07-28). `src/`에서 참조하는
+곳이 한 곳도 없었다.
 
 **beUI 컴포넌트로 갈아탄 것** ([src/components/motion/](../src/components/motion/)):
 
@@ -663,5 +663,7 @@ npm run build      # 8 라우트 + proxy
 
 > 정리할 것: [src/components/ui/](../src/components/ui/)의 `badge.tsx`·`separator.tsx`·
 > `tooltip.tsx`와 [status-badge.tsx](../src/components/status-badge.tsx)는 아무 데서도
-> import 하지 않는다. `pretendard` npm 의존성과 `public/fonts/pretendard/`(92개 파일)도
-> SUIT으로 갈아탄 뒤로 안 쓴다.
+> import 하지 않는다. `src/lib/flow/`의 `.mcp.ts.swp`·`.queries.ts.swp`(Vim 임시 파일)도
+> v0.9.x 때 섞여 들어간 채 남아 있다.
+>
+> `pretendard` 의존성은 지웠다 (v0.12.5).

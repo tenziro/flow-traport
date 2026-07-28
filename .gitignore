@@ -23,6 +23,8 @@
 # misc
 .DS_Store
 *.pem
+# 편집기 임시 파일. v0.9.x 때 Vim 스왑 파일 2개가 커밋에 섞여 들어갔다.
+*.swp
 
 # debug
 npm-debug.log*
