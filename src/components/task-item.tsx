@@ -1,0 +1,148 @@
+import { FlowLink } from "@/components/flow-link";
+import { IconComment, IconLastComment, IconMention } from "@/components/icons";
+import { Meter } from "@/components/meter";
+import { StatusPill } from "@/components/status-pill";
+import { TaskActions } from "@/components/task-actions";
+import type { FocusPick, WorklistTask } from "@/lib/flow/queries";
+import { cn } from "@/lib/utils";
+
+/**
+ * 업무 한 줄. 오늘 화면(포커스 · 밀리는 업무 · 방치된 업무)과 팀 화면이 같은 모양을 쓴다 —
+ * 같은 업무를 화면마다 다른 생김새로 보면 같은 것인지 알아보는 데 시간이 든다.
+ *
+ * 점수 막대·추천 이유·댓글 수는 **포커스 응답에만** 있다 (`FocusPick`). 워크리스트와
+ * 스탠드업은 제목·상태·프로젝트·기한만 준다 — 없는 자리는 그냥 안 그린다.
+ */
+export function TaskItem({
+  task,
+  rank,
+  top,
+  projectId,
+  path,
+}: {
+  task: FocusPick | WorklistTask;
+  /** 포커스 목록에서만 준다. 밀리는 업무·팀 화면은 순위가 없다. */
+  rank?: number;
+  /** 1위 점수. 점수는 절대값에 의미가 없어서 1위 대비 몇 %인지로 보여준다. */
+  top?: number;
+  projectId: string | null;
+  /** 쓰기 액션 후 다시 그릴 경로. 화면마다 다르다. */
+  path: string;
+}) {
+  const pick = "score" in task ? task : null;
+
+  return (
+    <div className="flex gap-3 rounded-lg px-2 py-2 transition-colors duration-300 ease-out hover:bg-muted">
+      {/* 라임은 1위 한 곳에만 쓴다. 다섯 칸을 다 채우면 "지금 이거"가 안 읽힌다 */}
+      {rank !== undefined && (
+        <span
+          className={cn(
+            "tabular mt-0.5 size-6 shrink-0 rounded-md text-center text-sm leading-6 font-semibold",
+            rank === 1
+              ? "bg-primary text-primary-foreground"
+              : "bg-secondary text-muted-foreground",
+          )}
+        >
+          {rank}
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="flex items-start gap-2 text-sm font-medium">
+          <span className="min-w-0 flex-1">{task.title}</span>
+          <DDay days={task.daysLeft} />
+        </p>
+        <p className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <StatusPill status={task.status} />
+          <span className="truncate">{task.project}</span>
+          {/* 댓글·멘션 건수는 응답에 있는데 안 쓰고 있었다. 얼마나 시끄러운 업무인지가 여기서 읽힌다 */}
+          {pick && pick.comments > 0 && (
+            <span className="flex items-center gap-1">
+              <IconComment size={11} />
+              <span className="sr-only">댓글 </span>
+              {pick.comments}개
+            </span>
+          )}
+          {pick && pick.mentions > 0 && (
+            <span className="flex items-center gap-1">
+              <IconMention size={11} />
+              <span className="sr-only">피드백 </span>
+              {pick.mentions}개
+            </span>
+          )}
+        </p>
+        {/* 점수 막대 — 1위와 2위가 붙어 있는지, 1위만 튀는지가 순위 숫자로는 안 보인다 */}
+        {pick && top !== undefined && (
+          <Meter
+            total={top}
+            className="mt-1.5"
+            segments={[
+              {
+                value: pick.score,
+                label: `위험 점수 ${Math.round(pick.score)}`,
+                className: rank === 1 ? "bg-primary" : "bg-neutral",
+              },
+            ]}
+          />
+        )}
+        {pick && pick.reasons.length > 0 && (
+          <ul className="mt-1.5 flex flex-wrap gap-1">
+            {pick.reasons.map((reason) => (
+              <li
+                key={reason}
+                className="rounded-full bg-secondary px-1.5 py-0.5 text-[11px] text-secondary-foreground"
+              >
+                {withUnit(reason)}
+              </li>
+            ))}
+          </ul>
+        )}
+        {/* 밀리는·방치된 업무에도 뜬다 — 워크리스트에 없는 값이라 포커스 픽에서 빌려 붙인다 (queries.ts) */}
+        {task.lastComment && (
+          // 말풍선 아이콘으로 "남이 남긴 말"임을 표시한다. 위 메타 줄과 안 섞인다.
+          <p className="mt-1.5 flex gap-1.5 text-xs leading-relaxed text-muted-foreground">
+            <IconLastComment size={13} className="mt-0.5 shrink-0" />
+            {/* 폭은 열 끝까지 쓰고 2줄에서 자른다 — 좁혀 두면 같은 2줄에 담기는 말이 줄어든다 */}
+            <span className="line-clamp-2">{task.lastComment}</span>
+          </p>
+        )}
+        <FlowLink href={task.link} className="mt-1.5" />
+        <TaskActions
+          projectId={projectId}
+          taskId={task.taskSrno}
+          title={task.title}
+          status={task.status}
+          path={path}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** 마감까지 남은 일수. 색만으로 의미를 전달하지 않으려고 D+/D- 부호를 항상 붙인다. */
+function DDay({ days }: { days: number }) {
+  const label = days < 0 ? `D+${-days}` : days === 0 ? "D-DAY" : `D-${days}`;
+  return (
+    <span
+      className={cn(
+        "tabular shrink-0 rounded-md px-1.5 py-0.5 text-xs font-semibold",
+        days < 0
+          ? "bg-danger-bg text-danger-foreground"
+          : days <= 2
+            ? "bg-warning-bg text-warning-foreground"
+            : "bg-neutral-bg text-neutral-foreground",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+/**
+ * 추천 이유에 단위를 붙인다 (`댓글 3` → `댓글 3개`). 문구는 flow 서버가 만들어 준다.
+ *
+ * ponytail: 댓글·멘션 두 낱말 뒤만 잡는다. 모든 숫자에 붙이면 `마감 12일 지남`처럼
+ * 이미 단위가 있는 문구까지 망가진다.
+ */
+function withUnit(reason: string): string {
+  return reason.replace(/(댓글|멘션)\s*(\d+)/g, "$1 $2개");
+}

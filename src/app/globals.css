@@ -1,0 +1,206 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-suit), system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+
+  /* 상태 색 (PRD §7.1). -fg/-bg는 WCAG AA(4.5:1) 확보용 파생값. */
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-danger-bg: var(--danger-bg);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-bg: var(--warning-bg);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-bg: var(--success-bg);
+  --color-neutral: var(--neutral);
+  --color-neutral-foreground: var(--neutral-foreground);
+  --color-neutral-bg: var(--neutral-bg);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-bg: var(--info-bg);
+  --color-done: var(--done);
+  --color-done-foreground: var(--done-foreground);
+  --color-done-bg: var(--done-bg);
+
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+ * PRD §7.1 디자인 토큰을 shadcn 변수에 매핑. 컴포넌트에 raw hex 금지.
+ * 다크 단일 테마 — 근검정 배경 + 라임 액센트. 라이트 모드는 만들지 않는다.
+ */
+:root {
+  color-scheme: dark;
+  --font-suit: "SUIT";
+  --background: #0a0b09;
+  --foreground: #f2f4ef;
+  --card: #141613;
+  --card-foreground: #f2f4ef;
+  --popover: #1c1f1b;
+  --popover-foreground: #f2f4ef;
+  --primary: #c7f751;
+  --primary-foreground: #0a0b09;
+  --secondary: #1c1f1b;
+  --secondary-foreground: #f2f4ef;
+  --muted: #1c1f1b;
+  --muted-foreground: #949a8e;
+  --accent: #1c1f1b;
+  --accent-foreground: #f2f4ef;
+  --destructive: #ff7a5c;
+  --border: #26291f;
+  --input: #26291f;
+  --ring: #c7f751;
+
+  /* 상태. 원본 토큰은 아이콘·인디케이터용, -foreground는 어두운 배경 위 텍스트용(AA). */
+  --danger: #ff7a5c;
+  --danger-foreground: #ff9b84;
+  --danger-bg: #2a1512;
+  --warning: #f5b544;
+  --warning-foreground: #f7c56b;
+  --warning-bg: #2a2110;
+  --success: #4ade80; /* 라임(primary)과 헷갈리지 않게 청록 쪽으로 민 초록 */
+  --success-foreground: #6ee7a0;
+  --success-bg: #102519;
+  --neutral: #6b706a;
+  --neutral-foreground: #9ca298;
+  --neutral-bg: #1c1f1b;
+
+  /*
+   * 업무 상태 배지용 두 색. flow 화면이 요청=파랑, 완료=보라를 쓰는데 우리 팔레트에 그
+   * 두 자리가 비어 있었다 — 같은 상태를 두 번 배우게 하지 않으려고 색을 맞춘다.
+   * 진행=success, 피드백=danger, 보류=neutral은 있는 토큰을 그대로 쓴다.
+   */
+  --info: #58a6ff;
+  --info-foreground: #8cc2ff;
+  --info-bg: #101d2b;
+  --done: #a78bfa;
+  --done-foreground: #c4b5fd;
+  --done-bg: #1b1630;
+
+  --chart-1: #c7f751;
+  --chart-2: #ff7a5c;
+  --chart-3: #f5b544;
+  --chart-4: #22d3ee;
+  --chart-5: #6b706a;
+  --radius: 0.75rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+  /*
+   * 한글은 `keep-all`이 없으면 단어 중간에서 끊긴다 ("프로젝/트"). 대신 긴 영문·URL은
+   * 끊을 데가 없어져 넘치므로 `overflow-wrap`을 같이 준다 — flow 업무 제목에 영문 코드가
+   * 섞여 들어온다.
+   */
+  body {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+  /* 제목 마지막 줄에 한 단어만 떨어지는 걸 막는다. */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  /*
+   * 숫자 컬럼 자릿수 흔들림 방지 (PRD §7.2). 본문과 같은 SUIT를 쓴다 —
+   * 예전에는 여기만 별도 mono(Fira Code)였는데, 화면에 두 서체가 섞여 보였다.
+   *
+   * `font-kerning: none`이 핵심이다. SUIT의 모든 숫자 자폭은 tabular-nums에서
+   * 동일한데(실측 61.8/100px), `1`+`1` 커닝 페어가 붙으면서 "11"만 넓어졌다.
+   * 커닝을 끄면 `11.11 11:11`과 `07.27 15:16`이 정확히 같은 폭이 된다.
+   */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-kerning: none;
+  }
+  /*
+   * 진입 캐스케이드. 관리자 화면은 패널이 한 화면에 다 들어와서 스크롤 트리거가 필요
+   * 없다 — 로드할 때 순서대로 올라오면 어디를 먼저 볼지가 순서로 읽힌다.
+   * IntersectionObserver도, 클라이언트 컴포넌트도 쓰지 않는다. 순서는 `--i`로 준다.
+   *
+   * `backwards`가 핵심이다. 지연 중에도 `from`을 유지해야 늦게 시작하는 패널이 먼저
+   * 보이다가 사라지지 않는다.
+   */
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+  .rise {
+    animation: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 45ms);
+  }
+  /* 데이터 막대가 왼쪽에서 차오른다. 패널이 자리를 잡은 다음이라 120ms 늦게 시작한다. */
+  @keyframes bar-grow {
+    from {
+      transform: scaleX(0);
+    }
+  }
+  .bar-grow {
+    transform-origin: left;
+    animation: bar-grow 0.65s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    animation-delay: calc(120ms + var(--i, 0) * 60ms);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      /* 지연도 같이 지운다. `backwards`로 대기하는 요소가 그동안 안 보인다. */
+      animation-delay: 0ms !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
