@@ -13,6 +13,13 @@
 2. 인증 없이 실제 엔드포인트를 호출해 에러 봉투를 직접 관측했다 (읽기만, 쓰기 호출 없음).
 3. 문서에 스키마가 비어 있는 배열(`columns[]`, `tasks[]` 원본 등)은 읽기 전용 교차 확인으로 실제 레코드 형태를 관측했고 `(관측)` 으로 표기했다.
 
+> **누락 정정 `(2026-07-28 오후)`**: 위 1번으로 복원한 44개는 **7개 도메인**(employees ·
+> divisions · projects · posts · alarms · calendars · search)뿐이었다. 포털에는 **3개 도메인
+> 12개 엔드포인트가 더 있다** — comments(2) · drive(3) · wiki(7). 번들 노드 번호를
+> `{18,19,21,23,24,25,26}` 로 짚어 그 밖의 노드를 안 봤기 때문이다. 세 도메인은 §13~15 에
+> 적었고, 전부 인증된 실제 호출로 200을 확인했다. 이 누락 하나가 BUG-012 의 결론을 틀리게
+> 만들었다 (§6.3).
+
 `/user/*` 스펙은 포털이 v1 스펙을 변환해 만든다. 변환기는 `https://api.flow.team/v1/` → `https://api.flow.team/user/` 로 경로를 바꾸고 `userId` / `registerId` 파라미터를 제거한다. 즉 **`/user/*` 계열에는 `userId` 를 넘기지 않으며, 서버가 인증 주체를 사용자로 사용한다** (예외: `GET /user/calendars/events` 의 선택적 `userId`, `GET /user/employees/{userId}`).
 
 ---
@@ -514,8 +521,11 @@ https://api.flow.team
 > `remarkCount: "14"` 인데 `remarks` 에 **2건**만 왔다. 더 받을 방법이 없다:
 > `nextYn: "N"`, `totalCount: "0"`, `remarkSrno: ""` 로 페이징 단서가 전부 비어 있고,
 > `?remarkSrno=` · `?cursor=` 를 붙이면 `VALIDATION_ERROR / unrecognized_keys` 가 온다.
-> → **"전체 댓글 스레드"는 이 API로 만들 수 없다.** 우리가 표시하는 건 §7.1 알림이 주는
-> "나를 멘션한 댓글" 전부 + 답글 깊이 표시까지다.
+>
+> **정정 `(관측 2026-07-28 오후)`: "전체 댓글 스레드는 못 만든다"는 틀렸다.** 이 엔드포인트로
+> 못 받는 것은 맞지만, **전용 엔드포인트가 따로 있다** — `GET /user/comments/{postId}` (§13).
+> 같은 게시글 81211887에서 **14건 전부** 왔다. 이 문서가 §13~15 세 도메인을 놓쳤던 탓이다
+> (§0 참고).
 
 ### 6.4 쓰기 계열 (실제 호출하지 않음)
 
@@ -807,3 +817,108 @@ Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSi
 ```
 
 2단계가 59개 프로젝트를 한 번에 주고, 4단계가 프로젝트 수만큼 병렬 호출이 된다. 레이트 리밋 임계값이 비공개이므로 동시성 제한과 백오프가 필요하다.
+
+---
+
+## 13. Comments API `(관측 2026-07-28)` ⭐⭐
+
+§0 의 번들 복원이 놓친 도메인이다. 파라미터 스키마는 번들에서 복원하지 않았고, 아래는 **실제 호출 응답을 직접 관측한 값**이다.
+
+### 13.1 `GET /user/comments/{postId}` — 게시글 댓글 조회
+
+**§6.3 `remarks` 의 한계(14건 중 2건)를 이 엔드포인트가 없앤다.** 같은 게시글에서 14건 전부 왔다.
+
+**Path**: `postId` (숫자)
+**Query**: 미확인. 응답이 `hasNext` / `lastCursor` 를 주므로 §1.4 커서 규약을 따를 것으로 보인다 `(추정)`. 실측에서는 파라미터 없이 14건이 한 번에 왔다.
+
+**응답 `data`**: `{ hasNext: boolean, lastCursor: number, comments: Comment[] }`
+
+`Comment` — 실측 관측 키 전량:
+
+| 필드 | 예시 | 설명 |
+|---|---|---|
+| `commentId` | `"191620030"` | 댓글 ID. §7.1 알림의 `remarkId` 와 같은 공간 `(추정)` |
+| `projectId` / `postId` | | |
+| `contents` | | 본문. **`@[이름](id)` 멘션 마크업이 그대로 온다** — 알림(§7.1 `content`)은 걷어서 주는데 여기는 안 걷는다. 표시 전에 벗겨야 한다 |
+| `systemCode` | `"S41^^'서동조','김승호'@$%S48^^2026-07-16@$%S49^^1@$%"` | **비어 있지 않으면 시스템 자동 댓글이다.** 아래 별도 설명 |
+| `registerId` / `registerName` | `"hong67"` / `"홍성우"` | 작성자 |
+| `registerInttId` | `"UTLZ_226"` | 작성자 이용기관 — **타사 사용자 판별에 쓸 수 있다** (§3.1 내 `inttId` 와 비교) |
+| `registerCorpName` / `registerDivisionName` | `"비즈플레이B2E부문"` / `"BZP사업본부"` | 작성자 회사·부서. 다른 API는 안 준다 |
+| `registeredDateTime` / `editedDateTime` | `"20260715193510"` | |
+| `registerProfilePhoto` | `""` | |
+| `encrypted` | `"Y"` | |
+| `editorId` / `editorName` | `null` | **`null` 이 온다** — §10 의 "미설정은 `""`" 규칙에 예외가 있다 |
+| `objectContentsName` / `repeatDateTime` / `repeatId` / `language` | `null` | |
+
+> **`systemCode` 를 안 거르면 "마지막 댓글"이 사람 말이 아니다.** 실측 14건 중 **10건이 시스템
+> 댓글**(담당자·마감일·우선순위 변경 로그)이고 사람 댓글은 4건뿐이었다. `systemCode` 가 truthy면
+> 버리고 최신 사람 댓글을 골라야 한다.
+>
+> 반대로 **시스템 댓글 자체가 업무 변경 이력**이다. 관측한 코드: `S41`(담당자 변경) ·
+> `S48`(마감일 변경) · `S49`(우선순위 변경). 구분자는 필드 `^^` · 항목 `@$%`. 전체 코드표는
+> 미확인이고, `registeredDateTime` 만 봐도 "최근 활동 시각"으로는 충분하다.
+
+### 13.2 `POST /user/comments/{postId}` — 게시글 댓글 작성
+
+Body 스키마 미확인 (**쓰기라서 호출하지 않았다**). MCP `flow_create_comment` 는 `projectId` + `postId` 를 요구하는데 이쪽은 경로에 `postId` 하나다.
+
+---
+
+## 14. Drive API `(관측 2026-07-28)`
+
+| 메서드 | 경로 | 용도 |
+|---|---|---|
+| GET | `/user/drive/files/search` | 파일 통합검색 |
+| POST | `/user/drive/files/presigned-put` | 업로드 Presigned URL 발급 |
+| POST | `/user/drive/files/finalize` | 업로드 완료 |
+
+### 14.1 `GET /user/drive/files/search`
+
+**Query**: `searchWord` (실측에서 이 이름으로 200). 나머지 미확인.
+**응답 `data`**: `{ files: [], total: 0 }` — 봉투는 확인, **아이템 스키마는 미확인**.
+
+> **실측 결과가 0건이다.** `searchWord=요건` · `searchWord=개발` 둘 다 `total: 0`. 엔드포인트는
+> 열려 있는데(200, 플랜 오류 아님) 이 계정에서 검색되는 파일이 없다. 검색 범위가 개인 드라이브
+> 한정인지, 사내가 flow 드라이브를 안 쓰는지는 구분하지 못했다.
+
+업로드 2종은 프로젝트 비목표(파일 첨부는 flow에서 한다 — PRD §3)라 확인하지 않았다.
+
+---
+
+## 15. Wiki API `(관측 2026-07-28)`
+
+| 메서드 | 경로 | 용도 |
+|---|---|---|
+| POST | `/user/wiki/document` | 위키 문서 생성 |
+| GET | `/user/wiki/document/{docId}` | 위키 문서 콘텐츠 조회 |
+| PATCH | `/user/wiki/document/{docId}` | 위키 문서 콘텐츠 수정 |
+| PATCH | `/user/wiki/document/{docId}/title` | 위키 문서 제목 수정 |
+| GET | `/user/wiki/search` | 위키 문서 검색 |
+| GET | `/user/wiki/children` | 최상위 위키 폴더/문서 목록 |
+| GET | `/user/wiki/children/{targetId}` | 직속 자식 폴더/문서 목록 |
+
+**위키만 규약이 다르다 — 이게 이 도메인의 가장 중요한 관측이다.**
+
+| 항목 | 다른 도메인 (§1) | 위키 |
+|---|---|---|
+| 페이지네이션 | `cursor` + `hasNext` / `lastCursor` | **`pagination: { page, limit, total, totalPages, hasMore }`** — `page`/`limit` 방식 |
+| 성공 메시지 | `"success"` | `"요청이 성공했습니다."` |
+| `children` 응답 | 객체 | **배열 그대로** (`data: []`) |
+
+§1.4 가 "`page`/`limit` 이 아니라 커서"라고 못 박았는데, 위키는 그 예외다. 나중에 붙인 도메인으로 보인다 `(추정)`.
+
+**실측 응답**
+
+```jsonc
+// GET /user/wiki/children
+{"response":{"success":true,"code":200,"message":"요청이 성공했습니다.","data":[]}}
+
+// GET /user/wiki/search?searchWord=회의
+{"response":{"success":true,"code":200,"message":"요청이 성공했습니다.",
+  "data":{"documents":[],"tags":[],
+          "pagination":{"page":1,"limit":20,"total":0,"totalPages":0,"hasMore":false}}}}
+```
+
+> **여기도 0건이다.** 최상위 목록도 검색도 비었다. 문서 아이템 스키마는 그래서 못 봤다.
+> 엔드포인트는 200으로 열려 있으니 **플랜 문제는 아니고 콘텐츠가 없는 것**이다 — 사내가 flow
+> 위키를 안 쓴다는 신호로 읽는다 (PRD §13 Tier C 근거).

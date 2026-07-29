@@ -7,8 +7,9 @@ import type { MetadataRoute } from 'next';
  * 홈 화면에 얹어두고 바로 여는 용도까지다. 서비스 워커·오프라인 캐시는 넣지 않았다.
  * 이 앱은 열 때마다 flow에서 새로 읽어야 의미가 있어서, 캐시된 화면은 틀린 화면이다.
  *
- * 색은 `globals.css`의 `--background`(#0a0b09)와 같은 값이다. 매니페스트는 CSS 변수를
- * 읽을 수 없어서 두 곳에 적힌다.
+ * 색은 `globals.css`의 `--background` 어두운 쪽(#0a0b09)과 같은 값이다. 매니페스트는
+ * CSS 변수를 못 읽어서 두 곳에 적히고, 밝기 두 벌을 담을 자리도 없다 (`theme_color`는
+ * 하나뿐이다). 홈 화면에 얹고 여는 순간의 스플래시만 늘 어둡다 — 이 앱의 원래 얼굴이다.
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {

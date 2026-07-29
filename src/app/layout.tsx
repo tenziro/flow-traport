@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next';
+import { cookies } from 'next/headers';
 import localFont from 'next/font/local';
+import { THEME_COOKIE, toTheme } from '@/lib/theme';
 import './globals.css';
 
 /**
@@ -94,16 +96,29 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  // 모바일 주소창 색. `globals.css`의 `--background`와 같은 값이다 — 여기서는 CSS 변수를
-  // 읽을 수 없어서 직접 적는다. 안 적으면 다크 화면 위에 흰 주소창이 남는다.
-  themeColor: '#0a0b09',
+  // 모바일 주소창 색. `globals.css`의 `--background` 두 값과 같다 — 여기서는 CSS 변수를
+  // 읽을 수 없어서 직접 적는다. 안 적으면 화면 위에 반대 색 주소창이 남는다.
+  //
+  // ponytail: 이건 앱에서 고른 밝기가 아니라 **기기 설정**을 따른다. 메타 태그에 미디어
+  // 쿼리 말고는 조건을 걸 수단이 없다. 기기는 어두운데 앱만 밝게 쓰는 경우 주소창만
+  // 어둡게 남는다 — 거슬리면 `<meta name="theme-color">`를 클라이언트에서 갈아끼워야 한다.
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#fafbf7' },
+    { media: '(prefers-color-scheme: dark)', color: '#0a0b09' },
+  ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // 첫 HTML에 밝기를 박는다. 브라우저에서 고치면 화면이 한 번 번쩍인다 (lib/theme.ts).
+  const theme = toTheme((await cookies()).get(THEME_COOKIE)?.value);
+
   return (
-    <html lang="ko" className={`${suit.variable} h-full antialiased`}>
+    <html
+      lang="ko"
+      className={`${suit.variable} h-full antialiased ${theme === 'system' ? '' : theme}`}
+    >
       <body className="min-h-full bg-background text-foreground">
         {children}
       </body>

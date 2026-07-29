@@ -1,13 +1,20 @@
 import { CopyButton } from '@/components/copy-button';
 import { DeptTabs } from '@/components/dept-tabs';
 import { EmptyState } from '@/components/empty-state';
-import { IconImminent, IconRisk, IconStale } from '@/components/icons';
+import {
+  IconCalendar,
+  IconImminent,
+  IconRisk,
+  IconStale,
+} from '@/components/icons';
 import { Kpi } from '@/components/kpi';
 import { Meter } from '@/components/meter';
 import { TaskItem } from '@/components/task-item';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { StandupMember, StandupTask } from '@/lib/aggregate';
+import type { FlowEvent } from '@/lib/flow/rest';
 import { loadTeam } from '@/lib/flow/queries';
+import { fmtTime } from '@/lib/utils';
 
 export const metadata = { title: '팀 · flow Cockpit' };
 
@@ -20,7 +27,7 @@ export default async function TeamPage({
   searchParams: Promise<{ dept?: string }>;
 }) {
   const { dept: picked } = await searchParams;
-  const { dept, divisions, standup, projectIds } = await loadTeam(picked);
+  const { dept, divisions, standup, projectIds, events } = await loadTeam(picked);
   const { counts, members } = standup;
   /** 스탠드업은 projectId를 안 준다 — 프로젝트 이름으로 해소한다 (queries.ts). */
   const idOf = (project: string) => projectIds.get(project) ?? null;
@@ -105,6 +112,7 @@ export default async function TeamPage({
             i={5 + i}
             idOf={idOf}
             path={path}
+            events={events.get(member.name) ?? []}
           />
         ))}
       </div>
@@ -123,6 +131,7 @@ function MemberCard({
   i,
   idOf,
   path,
+  events,
 }: {
   member: StandupMember;
   /** 팀 최대 부하. 막대를 이 값 기준으로 그려야 사람끼리 비교가 된다. */
@@ -130,6 +139,11 @@ function MemberCard({
   i: number;
   idOf: (project: string) => string | null;
   path: string;
+  /**
+   * 오늘 일정 (PRD §13 B3). 비어 있을 수 있는 이유가 둘이다 — 일정이 없거나, 이름으로
+   * 사번을 못 찾았거나. 그래서 "일정 없어요"라고 적지 않고 그냥 아무것도 안 그린다.
+   */
+  events: readonly FlowEvent[];
 }) {
   /** 밀림 먼저, 그다음 임박. 마감 배지(D+/D-)가 이미 둘을 갈라 놓는다. */
   const tasks = [...member.blocked, ...member.imminent];
@@ -181,6 +195,34 @@ function MemberCard({
             },
           ]}
         />
+        {/*
+         * 오늘 일정은 업무가 아니라 "이 사람이 지금 자리에 있나"다. 그래서 업무 줄 위,
+         * 부하 막대 바로 밑에 둔다 — 밀림 3건인 사람이 종일 외부 미팅이면 그게 먼저 읽혀야 한다.
+         * 카드가 3분의 1 칸이라 일정 이름은 한 줄로 자른다.
+         */}
+        {events.length > 0 && (
+          <ul className="space-y-0.5 border-t border-border/60 pt-1.5">
+            {events.map((event) => (
+              <li
+                key={event.eventSrno}
+                className="tabular flex items-start gap-1.5 text-xs"
+              >
+                <IconCalendar
+                  size={12}
+                  className="mt-0.5 shrink-0 text-primary"
+                />
+                <span className="shrink-0 text-muted-foreground">
+                  {event.allDayYn === 'Y'
+                    ? '종일'
+                    : fmtTime(event.eventStartDateTime)}
+                </span>
+                <span className="min-w-0 flex-1 truncate">
+                  {event.eventName}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </CardHeader>
       <CardContent className="space-y-0.5">
         {quiet ? (

@@ -25,8 +25,17 @@ export {
   X as IconClose,
   Add as IconAdd,
   ChevronDown as IconChevronDown,
+  ChevronLeft as IconChevronLeft,
+  ChevronRight as IconChevronRight,
   Check as IconCheck,
   Logout as IconSignOut,
+  Calendar as IconCalendar,
+  BellRing as IconNews,
+  Flag as IconPriority,
+  User as IconWorker,
+  Sun as IconLight,
+  Moon as IconDark,
+  Monitor as IconSystem,
 } from "reicon-react";
 
 export type { IconProps } from "reicon-react";

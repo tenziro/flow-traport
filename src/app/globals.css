@@ -2,7 +2,25 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/*
+ * `dark:` 유틸리티. 세 모드를 다 태운다 (theme-toggle.tsx).
+ * - 어둡게: `<html class="dark">`
+ * - 기기 설정: 클래스가 없고 기기가 어두울 때
+ * 밝게(`class="light"`)는 기기가 어두워도 두 갈래 다 안 맞는다 — 그게 고른 값이다.
+ *
+ * 색 자체는 `light-dark()`가 처리한다. 이 변인은 shadcn 컴포넌트가 갖고 들어온
+ * `dark:` 몇 개(테두리·호버 농도)를 위한 것이라 지울 수가 없다.
+ */
+@custom-variant dark {
+  &:is(.dark *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:is(:root:not(.light):not(.dark) *) {
+      @slot;
+    }
+  }
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -62,63 +80,85 @@
 
 /*
  * PRD §7.1 디자인 토큰을 shadcn 변수에 매핑. 컴포넌트에 raw hex 금지.
- * 다크 단일 테마 — 근검정 배경 + 라임 액센트. 라이트 모드는 만들지 않는다.
+ *
+ * 값은 전부 `light-dark(밝게, 어둡게)` 한 줄이다. 팔레트를 두 벌 적고 셀렉터로 갈아끼우면
+ * 토큰 하나 고칠 때 두 군데를 고쳐야 하고, 한쪽만 고친 게 눈에 안 띈다. 어느 쪽을 쓸지는
+ * `color-scheme` 한 줄이 정한다 — 기본은 `light dark`라 **기기 설정**을 따른다.
+ *
+ * 어둡게가 원본이다. 근검정 배경 + 라임 액센트가 이 앱의 얼굴이고, 밝게는 그걸 뒤집은
+ * 짝이다. 라임(`#c7f751`)만은 뒤집을 수 없었다 — 흰 바탕에 올리면 1.5:1이라 글자로 못
+ * 읽는다. 밝게에서는 같은 계열의 짙은 라임(`#4d7c0f`, 흰 바탕 4.6:1)이 그 자리에 선다.
  */
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;
   /* `--font-suit`은 `layout.tsx`의 `next/font`가 `<html>`에 얹는다. 여기서 또 선언하면
      같은 요소에 같은 명시도로 두 값이 붙어 어느 쪽이 이길지 주입 순서에 달린다 */
-  --background: #0a0b09;
-  --foreground: #f2f4ef;
-  --card: #141613;
-  --card-foreground: #f2f4ef;
-  --popover: #1c1f1b;
-  --popover-foreground: #f2f4ef;
-  --primary: #c7f751;
-  --primary-foreground: #0a0b09;
-  --secondary: #1c1f1b;
-  --secondary-foreground: #f2f4ef;
-  --muted: #1c1f1b;
-  --muted-foreground: #949a8e;
-  --accent: #1c1f1b;
-  --accent-foreground: #f2f4ef;
-  --destructive: #ff7a5c;
-  --border: #26291f;
-  --input: #26291f;
-  --ring: #c7f751;
+  --background: light-dark(#fafbf7, #0a0b09);
+  --foreground: light-dark(#14170f, #f2f4ef);
+  --card: light-dark(#ffffff, #141613);
+  --card-foreground: light-dark(#14170f, #f2f4ef);
+  --popover: light-dark(#ffffff, #1c1f1b);
+  --popover-foreground: light-dark(#14170f, #f2f4ef);
+  --primary: light-dark(#4d7c0f, #c7f751);
+  --primary-foreground: light-dark(#fbfdf5, #0a0b09);
+  --secondary: light-dark(#f1f3ec, #1c1f1b);
+  --secondary-foreground: light-dark(#14170f, #f2f4ef);
+  --muted: light-dark(#f1f3ec, #1c1f1b);
+  --muted-foreground: light-dark(#5c6157, #949a8e);
+  --accent: light-dark(#eef1e6, #1c1f1b);
+  --accent-foreground: light-dark(#14170f, #f2f4ef);
+  --destructive: light-dark(#b93815, #ff7a5c);
+  --border: light-dark(#e2e5da, #26291f);
+  --input: light-dark(#e2e5da, #26291f);
+  --ring: light-dark(#4d7c0f, #c7f751);
 
-  /* 상태. 원본 토큰은 아이콘·인디케이터용, -foreground는 어두운 배경 위 텍스트용(AA). */
-  --danger: #ff7a5c;
-  --danger-foreground: #ff9b84;
-  --danger-bg: #2a1512;
-  --warning: #f5b544;
-  --warning-foreground: #f7c56b;
-  --warning-bg: #2a2110;
-  --success: #4ade80; /* 라임(primary)과 헷갈리지 않게 청록 쪽으로 민 초록 */
-  --success-foreground: #6ee7a0;
-  --success-bg: #102519;
-  --neutral: #6b706a;
-  --neutral-foreground: #9ca298;
-  --neutral-bg: #1c1f1b;
+  /* 상태. 원본 토큰은 아이콘·인디케이터용, -foreground는 배경 위 텍스트용(AA). */
+  --danger: light-dark(#dc2626, #ff7a5c);
+  --danger-foreground: light-dark(#b3261e, #ff9b84);
+  --danger-bg: light-dark(#fdecea, #2a1512);
+  --warning: light-dark(#f59e0b, #f5b544);
+  --warning-foreground: light-dark(#8f5a06, #f7c56b);
+  --warning-bg: light-dark(#fdf3e0, #2a2110);
+  /* 라임(primary)과 헷갈리지 않게 청록 쪽으로 민 초록 */
+  --success: light-dark(#16a34a, #4ade80);
+  --success-foreground: light-dark(#12703a, #6ee7a0);
+  --success-bg: light-dark(#e7f7ec, #102519);
+  --neutral: light-dark(#8a8f85, #6b706a);
+  --neutral-foreground: light-dark(#5c6157, #9ca298);
+  --neutral-bg: light-dark(#f1f3ec, #1c1f1b);
 
   /*
    * 업무 상태 배지용 두 색. flow 화면이 요청=파랑, 완료=보라를 쓰는데 우리 팔레트에 그
    * 두 자리가 비어 있었다 — 같은 상태를 두 번 배우게 하지 않으려고 색을 맞춘다.
    * 진행=success, 피드백=danger, 보류=neutral은 있는 토큰을 그대로 쓴다.
    */
-  --info: #58a6ff;
-  --info-foreground: #8cc2ff;
-  --info-bg: #101d2b;
-  --done: #a78bfa;
-  --done-foreground: #c4b5fd;
-  --done-bg: #1b1630;
+  --info: light-dark(#2563eb, #58a6ff);
+  --info-foreground: light-dark(#1b4fc4, #8cc2ff);
+  --info-bg: light-dark(#e8f0fe, #101d2b);
+  --done: light-dark(#7c3aed, #a78bfa);
+  --done-foreground: light-dark(#6425d0, #c4b5fd);
+  --done-bg: light-dark(#f1ebfe, #1b1630);
 
-  --chart-1: #c7f751;
-  --chart-2: #ff7a5c;
-  --chart-3: #f5b544;
-  --chart-4: #22d3ee;
-  --chart-5: #6b706a;
+  --chart-1: light-dark(#4d7c0f, #c7f751);
+  --chart-2: light-dark(#ea580c, #ff7a5c);
+  --chart-3: light-dark(#d97706, #f5b544);
+  --chart-4: light-dark(#0891b2, #22d3ee);
+  --chart-5: light-dark(#8a8f85, #6b706a);
   --radius: 0.75rem;
+}
+
+/*
+ * 고른 모드는 `<html>` 클래스로 온다. 서버가 쿠키를 읽어 첫 HTML에 박고
+ * (`app/layout.tsx`), 바꾸는 순간에는 스크립트가 같은 클래스를 갈아끼운다
+ * (`theme-toggle.tsx`) — 그래서 새로고침해도 화면이 한 번 번쩍이지 않는다.
+ * 클래스가 없으면 위의 `light dark`가 그대로라 기기 설정을 따른다.
+ */
+.light {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
 }
 
 @layer base {

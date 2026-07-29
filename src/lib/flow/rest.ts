@@ -1,12 +1,22 @@
 /**
- * flow REST — MCP로 못 가져오는 것만 (api-spec §7.1 알림, §6.1 업무 필터).
+ * flow REST — MCP로 못 가져오는 것만 (PRD §5.1.1 하이브리드, §13 확장 후보).
  *
- * flow 접근은 원칙적으로 MCP다(`mcp.ts`). REST를 쓰는 두 곳:
- * - **멘션 댓글 본문**: `flow_get_my_worklist`가 주는 멘션에는 본문이 없다(발신자·시각·제목뿐)
- *   이고, MCP `flow_list_alarms`는 서버측 스키마 검증이 `alarmType: null`에서 터진다
- *   (docs/bug-report.md). REST 알림은 `content`와 `postId`·`replyId`를 함께 준다.
+ * flow 접근의 기본은 MCP다(`mcp.ts`). 집계 한 번에 화면 하나가 서는 도구들이 거기 있고,
+ * REST로 같은 화면을 만들면 호출이 178~470회로 늘어난다(PRD §5.1.1). REST는 **MCP에 길이
+ * 없는 것**만 맡는다:
+ *
+ * - **멘션 댓글 본문**: `flow_get_my_worklist`가 주는 멘션에는 본문이 없고(발신자·시각·제목뿐),
+ *   MCP `flow_list_alarms`는 서버측 스키마 검증이 `alarmType: null`에서 터진다
+ *   (docs/bug-report.md BUG-001). REST 알림은 `content`와 `postId`·`replyId`를 함께 준다.
  * - **`taskSrno` → `postId`**: `resolvePostId` 주석 참고. `flow_list_project_items`는
  *   `postId`만 주고 `taskId`가 응답에 아예 없어서 두 ID를 이어 붙일 수 없다 (실측).
+ * - **전체 댓글 스레드**: 게시글 상세(`flow_get_post`)는 14건 중 2건만 준다.
+ *   `GET /user/comments/{postId}`는 14건 전부 준다 (api-spec §13, PRD §13 A1).
+ * - **알림 읽음 처리**: MCP `flow_mark_alarm_read`가 알림 ID를 요구하는데 워크리스트 멘션에
+ *   ID가 없다. REST 알림은 `alarmId`를 준다 (PRD §13 A2).
+ * - **업무 단일 필드 수정**: `flow_update_task`는 상태만 바꾼다. 마감일·우선순위·담당자는
+ *   REST에만 길이 있다 (api-spec §6.4, PRD §13 A4).
+ * - **부서원 일정**: `userId`가 `/user/*`에 남은 유일한 타인 조회 파라미터다 (PRD §13 B3).
  *
  * 인증은 `x-flow-api-key`다. 세션 OAuth 토큰은 못 쓴다 — `Authorization: Bearer`로 보내면
  * 401이고(실측), 애초에 그 토큰은 `resource=https://flow.team/ai/mcp`로 발급되어 REST와
@@ -22,15 +32,19 @@
  * 멤버인 프로젝트에서만 답을 준다. 키 등록을 권하는 이유가 이것이다.
  */
 
+import { DAY_MS, kstYmd } from "@/lib/aggregate/date";
 import { getApiKey } from "@/lib/auth";
+import type { TaskPriority } from "@/lib/task-priority";
 
 const BASE = process.env.FLOW_API_BASE ?? "https://api.flow.team";
 
-/** 알림 API는 날짜 필터가 없다. 최대치로 받아서 워크리스트 멘션에 붙인다. */
+/** 알림·업무 목록의 한 페이지 크기. 알림은 `size`, 업무는 `pageSize`로 이름이 다르다. */
 const SIZE = 100;
 
 /** api-spec §7.1 `Alarm`. 화면에 쓰는 것만 적었다. */
 export interface MentionAlarm {
+  /** 알림 고유 번호. 읽음 처리(`markAlarmRead`)가 이걸 요구한다. */
+  alarmId: string;
   /** 수신자 — API Key 발급자로 고정된다. 로그인한 사람과 같은지 반드시 확인한다. */
   receiverId: string;
   /** 이 업무가 속한 프로젝트. 워크리스트 멘션에는 없어서 화면의 프로젝트명이 여기서 나온다. */
@@ -46,6 +60,10 @@ export interface MentionAlarm {
   registeredDateTime: string;
   /** 댓글 본문. 서버가 ~120자로 잘라 준다 (전문은 flow에서). */
   content?: string | null;
+  /** 알림 문구 (`"김플로님이 회원님을 언급했습니다."`). `null`로 오는 경우가 있다. */
+  message?: string | null;
+  /** `"N"`이면 아직 안 읽은 알림이다. */
+  readYn?: string;
 }
 
 /** 조인 대상 — 멘션 한 줄. `queries.ts`의 `WorklistMention`이 이걸 만족한다. */
@@ -60,51 +78,290 @@ export interface MentionRow {
   isReply?: boolean;
   /** 프로젝트 id. 알림 조회가 실패하면 undefined 그대로다. */
   projectId?: string;
+  /** 알림 id. 읽음 처리에 쓴다 — 알림 조회가 실패하면 undefined다. */
+  id?: string;
+  /** 아직 안 읽은 멘션. 알림의 `readYn`에서 온다. */
+  unread?: boolean;
+  /** 게시글 id. 전체 댓글 스레드(`listComments`)를 부를 때 쓴다. */
+  postId?: string;
 }
 
 interface Envelope<T> {
   response?: {
     success?: boolean;
     data?: T;
+    /** flow가 실패 사유를 여기 넣는다 (`error`가 아닌 경우도 있다 — 둘 다 본다). */
+    message?: string;
     error?: { code: string; message: string };
   };
 }
 
 /**
+ * REST 실패. `reason`은 **flow가 준 문장 그대로**다 — 쓰기 실패는 사유가 곧 다음 행동이라
+ * ("동일한 업무 마감일로 변경할 수 없습니다.") 호출부가 이걸 사용자에게 그대로 보여 준다.
+ */
+export class FlowRestError extends Error {
+  constructor(
+    what: string,
+    readonly status: number,
+    readonly reason: string,
+  ) {
+    super(`${what} 실패 (${status}): ${reason}`);
+    this.name = "FlowRestError";
+  }
+}
+
+/**
  * REST는 모든 응답을 `response.data`로 한 겹 싼다. 그 겹을 벗기고 실패는 던진다.
  *
- * 키는 **개인 키 → 환경변수** 순이다. 이 한 줄이 이 파일의 세 호출을 모두 덮는다 —
- * 로그인한 사람이 자기 키를 등록해 뒀으면 셋 다 그 사람 기준으로 돌고, 없으면 예전처럼
+ * 키는 **개인 키 → 환경변수** 순이다. 이 한 줄이 이 파일의 모든 호출을 덮는다 —
+ * 로그인한 사람이 자기 키를 등록해 뒀으면 전부 그 사람 기준으로 돌고, 없으면 예전처럼
  * 발급자 키로 돈다(파일 상단 주석의 열화 그대로).
  *
  * `apiKey`를 직접 넘기는 건 **등록 직전 검증**용이다 (`app/login/actions.ts`). 그때는
  * 아직 쿠키에 넣기 전이라 쿠키에서 읽을 수 없다.
+ *
+ * 쓰기(PATCH) 응답은 `data`가 아예 없다 (api-spec §6.4) — 그래서 `data` 유무는 여기서
+ * 따지지 않고, 필요한 쪽(`get`)에서만 본다.
  */
-async function get<T>(path: string, what: string, apiKey?: string): Promise<T> {
+async function call<T>(
+  path: string,
+  what: string,
+  init?: { method?: string; body?: unknown; apiKey?: string },
+): Promise<T | null> {
   // `cookies()`는 요청 스코프 밖에서 던진다. 이 파일을 요청 없이 직접 부르는 곳이
   // 단위 테스트라, 그때는 쿠키를 건너뛰고 환경변수로 간다.
-  const key = apiKey ?? (await getApiKey().catch(() => null)) ?? process.env.FLOW_API_KEY;
+  const key = init?.apiKey ?? (await getApiKey().catch(() => null)) ?? process.env.FLOW_API_KEY;
   if (!key) throw new Error("FLOW_API_KEY 없음");
 
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "x-flow-api-key": key },
+    method: init?.method ?? "GET",
+    headers: {
+      "x-flow-api-key": key,
+      ...(init?.body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    body: init?.body === undefined ? undefined : JSON.stringify(init.body),
     cache: "no-store",
   });
   const body = ((await res.json()) as Envelope<T>).response;
-  if (!res.ok || !body?.success || !body.data) {
-    throw new Error(`${what} 실패 (${res.status}): ${body?.error?.message ?? ""}`);
+  if (!res.ok || !body?.success) {
+    throw new FlowRestError(what, res.status, body?.error?.message ?? body?.message ?? "");
   }
-  return body.data;
+  return body.data ?? null;
 }
 
-/** 멘션 알림. 실패하면 던진다 — 호출부가 본문 없이 화면을 세우면 된다. */
-export async function listMentionAlarms(): Promise<MentionAlarm[]> {
-  const data = await get<{ alarms?: { alarms?: MentionAlarm[] } }>(
-    `/user/alarms?filters=MENTION&size=${SIZE}`,
-    "알림 조회",
-  );
-  // `alarms`가 두 번 중첩된다 — 오타가 아니다 (api-spec §7.1).
-  return data.alarms?.alarms ?? [];
+/** 읽기 전용 래퍼. `data`가 비어 있으면 조회가 실패한 것으로 본다. */
+async function get<T>(path: string, what: string, apiKey?: string): Promise<T> {
+  const data = await call<T>(path, what, { apiKey });
+  if (!data) throw new Error(`${what} 실패 — 응답이 비어 있어요`);
+  return data;
+}
+
+/* ── 알림 (api-spec §7.1~7.3, PRD §13 A2·A3·A5·B1·B2) ─────────────────── */
+
+interface AlarmPage {
+  alarms?: MentionAlarm[];
+  hasNext?: boolean;
+  lastCursor?: number;
+}
+
+/**
+ * 커서 루프 상한. 100건 × 10 = 1,000건에서 멈춘다. 알림에는 날짜 필터가 없어서
+ * (api-spec §7.1) 이 상한이 없으면 활동량 많은 계정에서 수천 건을 긁는다.
+ */
+const MAX_PAGES = 10;
+
+/**
+ * 알림 목록. `days`를 주면 **그 창을 덮을 때까지 커서로 이어 받는다** (BUG-019).
+ *
+ * 예전에는 첫 100건만 보고 끝냈는데 실측에서 이미 `hasNext: true`가 떠 있었다 —
+ * 넘치는 멘션은 본문이 조용히 비었다. 페이지의 마지막 알림이 창 밖으로 나가면 멈춘다.
+ * 알림이 최신순으로 오는 걸 전제로 하고, 혹시 순서가 반대여도 `MAX_PAGES`에서 멈춘다.
+ *
+ * `days`를 안 주면 첫 페이지 한 장이다 — 인박스처럼 "최근 것만" 보는 화면은 그걸로 족하다.
+ */
+export async function listAlarms(
+  filters: string,
+  opts: { days?: number; readYn?: "Y" | "N"; now?: number } = {},
+): Promise<MentionAlarm[]> {
+  const floor =
+    opts.days === undefined
+      ? null
+      : `${kstYmd((opts.now ?? Date.now()) - opts.days * DAY_MS)}000000`;
+
+  const out: MentionAlarm[] = [];
+  let cursor: number | undefined;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const query = new URLSearchParams({ filters, size: String(SIZE) });
+    if (opts.readYn) query.set("readYn", opts.readYn);
+    if (cursor !== undefined) query.set("cursor", String(cursor));
+
+    // `alarms`가 두 번 중첩된다 — 오타가 아니다 (api-spec §7.1).
+    const { alarms } = await get<{ alarms?: AlarmPage }>(`/user/alarms?${query}`, "알림 조회");
+    const rows = alarms?.alarms ?? [];
+    out.push(...rows);
+
+    if (floor === null || !alarms?.hasNext || alarms.lastCursor === undefined) break;
+    // 14자리 문자열이라 사전순 비교가 곧 시각 비교다.
+    if ((rows.at(-1)?.registeredDateTime ?? "") < floor) break;
+    cursor = alarms.lastCursor;
+  }
+
+  return out;
+}
+
+/**
+ * 멘션 알림. 실패하면 던진다 — 호출부가 본문 없이 화면을 세우면 된다.
+ *
+ * 창을 90일로 잡는다. 워크리스트 멘션이 어느 시점까지 거슬러 오는지는 flow가 밝히지
+ * 않아서, 실측 창(최근 14일 28건)보다 넉넉하게 두고 커서로 덮는다.
+ */
+export const listMentionAlarms = () => listAlarms("MENTION", { days: 90 });
+
+/**
+ * 담당 업무·내가 올린 글 알림 (PRD §13 B1·B2). 첫 페이지 한 장만 본다 —
+ * "최근에 무슨 일이 있었나"를 보는 카드라 최신 100건이면 충분하다.
+ *
+ * ponytail: 알림은 업무명도 딥링크도 주지 않는다 (`postId`·`projectId`뿐). 제목을 붙이려면
+ * `postId`마다 게시글 상세를 한 번씩 더 불러야 해서, 프로젝트명과 알림 문구까지만 낸다.
+ */
+export const listTaskAlarms = () => listAlarms("WORKER,REGISTRANT");
+
+/** 알림 한 건 읽음 처리. 전용 벌크 API가 없어서 그룹은 호출부가 병렬로 쏜다. */
+export async function markAlarmRead(alarmId: string): Promise<void> {
+  await call("/user/alarms/read", "알림 읽음 처리", { method: "PATCH", body: { alarmId } });
+}
+
+/** 알림 전체 읽음 처리. `projectId`를 주면 그 프로젝트만. */
+export async function markAllAlarmsRead(projectId?: string): Promise<void> {
+  await call("/user/alarms/read/all", "알림 전체 읽음 처리", {
+    method: "PATCH",
+    body: projectId ? { projectId } : {},
+  });
+}
+
+/* ── 내 정보 (api-spec §3.1, PRD §13 B6) ───────────────────────────────── */
+
+/** api-spec §3.1. 키 소유자 확인에 쓰는 것만 적었다. */
+export interface FlowMe {
+  userId: string;
+  fullname: string;
+  email: string;
+  divisionName: string;
+}
+
+/**
+ * API Key 소유자. **키가 누구 것인지 알아내는 유일한 길이다.**
+ *
+ * 키를 등록할 때(`app/login/actions.ts`)와 로그인할 때(OAuth 콜백) 이걸 불러
+ * `userId`가 로그인한 사람과 같은지 본다. 다르면 남의 알림·업무가 보이는 화면이 된다.
+ */
+export const getMe = (apiKey?: string) => get<FlowMe>("/user/employees/me", "내 정보 조회", apiKey);
+
+/** 구성원 목록 스캔 상한. 100명 × 3 = 300명. */
+const EMPLOYEE_MAX_PAGES = 3;
+
+/**
+ * 한 부서의 **이름 → userId** (api-spec §3.2). 팀원 일정 조회가 `userId`를 요구하는데
+ * 스탠드업은 이름만 준다 (PRD §13 B3).
+ *
+ * ponytail: 부서 필터가 없어서 전사 목록을 받아 `divisionName`으로 고른다. 300명에서 끊는다 —
+ * 더 큰 회사에서는 뒷쪽 부서원의 일정이 빠지고, 그때 `GET /user/divisions` 기준 조회를
+ * 찾아보면 된다.
+ */
+export async function listEmployeeIds(divisionName: string): Promise<Map<string, string>> {
+  const ids = new Map<string, string>();
+  let cursor = 0;
+
+  for (let page = 0; page < EMPLOYEE_MAX_PAGES; page++) {
+    const data = await get<{
+      employees?: { userId: string; fullname: string; divisionName: string }[];
+      hasNext?: boolean;
+      lastCursor?: number;
+    }>(`/user/employees?cursor=${cursor}`, "구성원 조회");
+
+    for (const e of data.employees ?? []) {
+      // 동명이인은 먼저 나온 쪽이 이긴다 — 스탠드업도 이름으로만 주니 구분할 재료가 없다.
+      if (e.divisionName === divisionName && !ids.has(e.fullname)) ids.set(e.fullname, e.userId);
+    }
+
+    if (!data.hasNext || data.lastCursor === undefined) break;
+    cursor = data.lastCursor;
+  }
+
+  return ids;
+}
+
+/* ── 댓글 (api-spec §13, PRD §13 A1·B4) ───────────────────────────────── */
+
+/** api-spec §13.1 `Comment`. 화면에 쓰는 것만 적었다. */
+export interface FlowComment {
+  commentId: string;
+  /** 본문. `@[이름](id)` 마크업이 그대로 온다 — `stripMentions`로 벗긴다. */
+  contents: string;
+  /** truthy면 사람이 쓴 게 아니라 업무 변경 로그다. `describeSystemComment`로 읽는다. */
+  systemCode?: string | null;
+  registerId: string;
+  registerName: string;
+  /** `YYYYMMDDHHmmss` */
+  registeredDateTime: string;
+}
+
+/**
+ * 게시글 댓글 전량 (PRD §13 A1).
+ *
+ * `flow_get_post`의 `remarks`는 같은 게시글에서 14건 중 2건만 줬다 (api-spec §13.1).
+ * 여기는 14건이 다 온다.
+ *
+ * ponytail: 첫 페이지만 본다. `hasNext`·`lastCursor`는 오는데 커서 파라미터 이름이
+ * 문서화되지 않았다 — 한 게시글의 댓글이 한 페이지를 넘기면 그때 확인하면 된다.
+ */
+export async function listComments(postId: string): Promise<FlowComment[]> {
+  const data = await get<{ comments?: FlowComment[] }>(`/user/comments/${postId}`, "댓글 조회");
+  return data.comments ?? [];
+}
+
+/** `@[서동조](djseo7)` → `@서동조`. 알림은 걷어서 주는데 댓글 API는 안 걷는다. */
+export const stripMentions = (contents: string) =>
+  contents.replace(/@\[([^\]]*)\]\([^)]*\)/g, "@$1");
+
+/** 관측한 시스템 코드 (api-spec §13.1). 전체 코드표는 flow가 공개하지 않았다. */
+const SYSTEM_FIELD: Record<string, string> = {
+  S41: "담당자를",
+  S48: "마감일을",
+  S49: "우선순위를",
+};
+
+/** 받침에 따라 `으로`/`로`를 고른다. 숫자는 읽는 소리(영·일·이…)의 받침을 본다. */
+function ro(value: string): string {
+  const last = value.at(-1) ?? "";
+  // 영(ㅇ)·삼(ㅁ)·육(ㄱ)만 받침이 있고, 일·칠·팔은 ㄹ이라 `로`다.
+  if (last >= "0" && last <= "9") return "036".includes(last) ? "으로" : "로";
+  const code = last.charCodeAt(0) - 0xac00;
+  if (code < 0 || code > 11171) return "로";
+  const jong = code % 28;
+  return jong === 0 || jong === 8 ? "로" : "으로";
+}
+
+/**
+ * 시스템 댓글을 사람 말로 (PRD §13 B4).
+ *
+ * `"S41^^'서동조','김승호'@$%S48^^2026-07-16@$%"` → `"담당자를 서동조, 김승호로 바꿨어요 ·
+ * 마감일을 2026-07-16으로 바꿨어요"`. 항목 구분자는 `@$%`, 필드 구분자는 `^^`다.
+ * 모르는 코드는 버린다 — 남는 게 없으면 뭉뚱그려 한 줄로 낸다.
+ */
+export function describeSystemComment(systemCode: string): string {
+  const lines = systemCode
+    .split("@$%")
+    .filter(Boolean)
+    .flatMap((item) => {
+      const [code, raw = ""] = item.split("^^");
+      const field = SYSTEM_FIELD[code];
+      const value = raw.replace(/'/g, "").replace(/,/g, ", ").trim();
+      return field && value ? [`${field} ${value}${ro(value)} 바꿨어요`] : [];
+    });
+  return lines.length ? lines.join(" · ") : "업무 내용을 바꿨어요";
 }
 
 /**
@@ -136,41 +393,251 @@ export async function listProjects(apiKey?: string): Promise<Map<string, string>
   return map;
 }
 
-/** api-spec §6.1 `tasks[]`. 두 ID를 잇는 데 필요한 두 필드만 적었다. */
+/** api-spec §6.1 `tasks[]`. 화면에 쓰는 것만 적었다. */
 interface FilterTask {
   /** raw `TASK_SRNO` — 워크리스트·스탠드업의 `taskSrno`와 같은 값이다. */
   taskId: string;
   /** `colabo_commt_srno` — 댓글 도구가 요구하는 ID다. */
   postId: string;
+  /**
+   * 업무명·마감일·상태·담당자가 **여기 배열로** 들어온다. 평평한 필드가 아니다 —
+   * 의미는 `defaultColumnType`이 정한다 (api-spec §2.1).
+   */
+  columns?: {
+    defaultColumnType?: string;
+    columnData?: { customColumnData?: string; userName?: string }[];
+  }[];
+}
+
+/** 업무의 한 컬럼 값들. 없는 컬럼이면 빈 배열이다. */
+const columnData = (task: FilterTask, type: string) =>
+  task.columns?.find((c) => c.defaultColumnType === type)?.columnData ?? [];
+
+/** 업무 한 건의 현재 값. 워크리스트·스탠드업이 주지 않는 것들이다 (PRD §13 A4). */
+export interface TaskFields {
+  /** `colabo_commt_srno` — 댓글 도구가 요구하는 ID다 (BUG-005). */
+  postId: string;
+  /** `YYYYMMDD`. 미설정이면 빈 문자열이다 (`null`이 아니다 — api-spec §2.2). */
+  endDate: string;
+  /** `low`\|`normal`\|`high`\|`urgent`. 미설정이면 빈 문자열이다. */
+  priority: string;
+  /** 담당자 실명. 없으면 빈 배열이다. */
+  workers: string[];
 }
 
 /**
- * `taskSrno` → `postId`. 이 둘은 다른 ID 공간인데 `flow_create_comment`는 `postId`를
- * 요구한다 — `taskSrno`를 그대로 넘기면 flow가 404 "삭제되었거나 존재하지 않는
- * 콘텐츠입니다"를 준다 (docs/bug-report.md BUG-005).
+ * 업무 한 건을 찾아 화면에 필요한 값만 꺼낸다.
  *
  * 업무명을 `searchWord`로 서버에 넘겨 먼저 줄인다. 프로젝트를 전량 훑으면 페이지가
  * 수십 장이고(실측 한 프로젝트 600건+), 검색을 걸면 같은 실측이 2건으로 준다.
  * 최종 판정은 항상 `taskId` 일치다 — 같은 이름의 업무가 여럿 있어서 이름으로는 못 고른다.
  *
  * 이 조회로 남의 업무가 새지는 않는다. 호출부가 넘기는 `taskSrno`·업무명은 그 사람의
- * 워크리스트에서 나온 것이고, 댓글 자체는 로그인한 사람의 MCP 토큰으로 나가서 flow가
- * 권한을 다시 본다. 여기서 얻는 건 그 업무의 `postId` 하나다.
+ * 워크리스트에서 나온 것이고, 쓰기 자체는 flow가 권한을 다시 본다.
  *
  * ponytail: 첫 페이지(100건)만 본다. 같은 이름의 업무가 100개를 넘으면 못 찾고,
  * 그때는 화면이 flow 링크로 안내한다.
  */
-export async function resolvePostId(
+export async function getTaskFields(
   projectId: string,
   taskSrno: string,
   title: string,
-): Promise<string | null> {
+): Promise<TaskFields | null> {
   const query = `pageSize=100&searchWord=${encodeURIComponent(title)}`;
   const data = await get<{ tasks?: FilterTask[] }>(
     `/user/posts/projects/${projectId}/tasks/filter?${query}`,
     "업무 조회",
   );
-  return data.tasks?.find((t) => t.taskId === taskSrno)?.postId ?? null;
+  const task = data.tasks?.find((t) => t.taskId === taskSrno);
+  if (!task) return null;
+
+  return {
+    postId: task.postId,
+    endDate: columnData(task, "END_DT")[0]?.customColumnData ?? "",
+    priority: columnData(task, "PRIORITY")[0]?.customColumnData ?? "",
+    workers: columnData(task, "WORKER_ID")
+      .map((d) => d.userName || d.customColumnData || "")
+      .filter(Boolean),
+  };
+}
+
+/**
+ * `taskSrno` → `postId`. 이 둘은 다른 ID 공간인데 `flow_create_comment`는 `postId`를
+ * 요구한다 — `taskSrno`를 그대로 넘기면 flow가 404 "삭제되었거나 존재하지 않는
+ * 콘텐츠입니다"를 준다 (docs/bug-report.md BUG-005).
+ */
+export const resolvePostId = async (projectId: string, taskSrno: string, title: string) =>
+  (await getTaskFields(projectId, taskSrno, title))?.postId ?? null;
+
+/* ── 업무 단일 필드 수정 (api-spec §6.4, PRD §13 A4) ───────────────────── */
+
+const taskField = (projectId: string, taskId: string, field: string) =>
+  `/user/posts/projects/${projectId}/tasks/${taskId}/${field}`;
+
+/** 마감일. `YYYYMMDD`. 시작일보다 빠르면 flow가 거절하고, 그 사유가 그대로 올라온다. */
+export async function setTaskEndDate(projectId: string, taskId: string, endDate: string) {
+  await call(taskField(projectId, taskId, "end-date"), "마감일 수정", {
+    method: "PATCH",
+    body: { endDate },
+  });
+}
+
+export async function setTaskPriority(
+  projectId: string,
+  taskId: string,
+  priority: TaskPriority,
+) {
+  await call(taskField(projectId, taskId, "priority"), "우선순위 수정", {
+    method: "PATCH",
+    body: { priority },
+  });
+}
+
+/**
+ * 담당자 교체. 넘긴 목록으로 **덮는다** — 추가가 아니다.
+ * 프로젝트 참여자가 아닌 사람을 넣으면 flow가 거절한다.
+ */
+export async function setTaskWorkers(projectId: string, taskId: string, workerIds: string[]) {
+  await call(taskField(projectId, taskId, "worker"), "담당자 수정", {
+    method: "PATCH",
+    body: { workers: workerIds.map((workerId) => ({ workerId })) },
+  });
+}
+
+/** api-spec §5.4. 담당자 후보 목록이다. */
+export interface Participant {
+  userId: string;
+  name: string;
+}
+
+export async function listParticipants(projectId: string): Promise<Participant[]> {
+  const data = await get<{ participants?: Participant[] }>(
+    `/user/projects/${projectId}/participants`,
+    "참여자 조회",
+  );
+  return data.participants ?? [];
+}
+
+/* ── 방치된 업무 (api-spec §5.6·§6.1, PRD §13 B5) ─────────────────────── */
+
+/** 프로젝트의 상태 옵션. `optionSrno` → 사람이 읽는 이름 (api-spec §5.6). */
+export async function listStatusOptions(projectId: string): Promise<Map<string, string>> {
+  const data = await get<{ options?: { optionSrno: string; optionName: string }[] }>(
+    `/user/projects/${projectId}/columns/status`,
+    "상태 옵션 조회",
+  );
+  return new Map((data.options ?? []).map((o) => [o.optionSrno, o.optionName]));
+}
+
+/** 마감일이 한참 지났는데 아직 안 끝난 업무 한 줄. */
+export interface StaleTask {
+  taskId: string;
+  postId: string;
+  title: string;
+  /** `YYYYMMDD` */
+  endDate: string;
+  /** 상태 이름. 옵션 조회가 실패하면 코드가 그대로 남는다 — 그래도 화면에 보여 준다. */
+  status: string;
+  /** 담당자 실명. 없으면 빈 배열이다. */
+  workers: string[];
+}
+
+/** 방치 업무 스캔 상한. 100건 × 3 = 300건. 넘치면 `hasMore`로 알린다. */
+const STALE_MAX_PAGES = 3;
+
+/**
+ * `before`(`YYYYMMDD`)보다 마감일이 이른, 아직 안 끝난 업무 (PRD §13 B5).
+ *
+ * flow는 마감일 범위 필터를 공개하지 않았다 (`IN` 연산자만 문서화 — api-spec §6.1).
+ * 그래서 전량 받아 클라이언트에서 날짜를 비교한다.
+ *
+ * 완료 판정은 **상태 이름에 "완료"가 들어가는지**로 한다. `optionCategory`로 완료/미완료를
+ * 가른다는 건 문서의 추정이라 믿지 않고, 대신 상태 이름을 화면에 같이 띄워 사람이 확인하게 한다.
+ */
+export async function listStaleTasks(
+  projectId: string,
+  before: string,
+): Promise<{ tasks: StaleTask[]; hasMore: boolean }> {
+  // 상태 옵션은 없어도 화면이 선다 — 코드가 그대로 보일 뿐이다.
+  const statuses = await listStatusOptions(projectId).catch(() => new Map<string, string>());
+
+  const tasks: StaleTask[] = [];
+  let hasMore = false;
+
+  for (let page = 0; page < STALE_MAX_PAGES; page++) {
+    const data = await get<{ tasks?: FilterTask[]; hasNext?: boolean; lastCursor?: number }>(
+      `/user/posts/projects/${projectId}/tasks/filter?pageSize=${SIZE}&cursor=${page * SIZE}`,
+      "업무 조회",
+    );
+
+    for (const task of data.tasks ?? []) {
+      const endDate = columnData(task, "END_DT")[0]?.customColumnData ?? "";
+      if (!endDate || endDate >= before) continue;
+
+      const code = columnData(task, "STTS")[0]?.customColumnData ?? "";
+      const status = statuses.get(code) || code;
+      if (status.includes("완료")) continue;
+
+      tasks.push({
+        taskId: task.taskId,
+        postId: task.postId,
+        title: columnData(task, "TASK_NM")[0]?.customColumnData ?? "제목 없는 업무",
+        endDate,
+        status,
+        workers: columnData(task, "WORKER_ID")
+          .map((d) => d.userName || d.customColumnData || "")
+          .filter(Boolean),
+      });
+    }
+
+    if (!data.hasNext) break;
+    if (page === STALE_MAX_PAGES - 1) hasMore = true;
+  }
+
+  return { tasks: tasks.sort((a, b) => a.endDate.localeCompare(b.endDate)), hasMore };
+}
+
+/* ── 일정 (api-spec §8.2, PRD §13 B3) ─────────────────────────────────── */
+
+/** api-spec §8.2 `Event`. 화면에 쓰는 것만 적었다. */
+export interface FlowEvent {
+  eventSrno: string;
+  eventName: string;
+  /** `YYYYMMDDHHmmss` */
+  eventStartDateTime: string;
+  eventFinishDateTime: string;
+  /** `"Y"`면 종일 일정이라 시각을 안 보여 준다. */
+  allDayYn: string;
+  /** 프로젝트에서 만든 일정이면 projectId가 들어 있다. */
+  colaboSrno?: string;
+}
+
+/**
+ * 일정 조회 (PRD §13 B3). `userId`를 주면 **그 사람 일정**이다 — `/user/*`에서
+ * 타인 조회가 남아 있는 유일한 파라미터다 (api-spec §8.2).
+ *
+ * 남의 일정이 새는 것처럼 보이지만, flow가 공개 범위를 서버에서 판정한다
+ * (`privateYn`·`publicYn`). 비공개 일정은 응답에 오지 않는다.
+ *
+ * ponytail: 첫 페이지(100건)만 본다. 하루~한 주 창을 보는 화면이라 넘칠 일이 없다.
+ */
+export async function listEvents(
+  startDateTime: string,
+  endDateTime: string,
+  userId?: string,
+): Promise<FlowEvent[]> {
+  const query = new URLSearchParams({ startDateTime, endDateTime, pageSize: String(SIZE) });
+  if (userId) query.set("userId", userId);
+
+  const data = await get<{ events?: FlowEvent[] }>(
+    `/user/calendars/events?${query}`,
+    "일정 조회",
+  );
+  // 시각순으로 세워서 넘긴다. 응답 순서는 보장이 없고, 하루 일정을 뒤죽박죽 늘어놓으면
+  // "다음이 뭔지"를 눈으로 다시 정렬해야 한다. 부르는 자리 두 곳이 같은 순서를 쓴다.
+  return (data.events ?? []).sort((a, b) =>
+    a.eventStartDateTime.localeCompare(b.eventStartDateTime),
+  );
 }
 
 /**
@@ -202,6 +669,11 @@ export function mergeMentionComments<T extends MentionRow>(
       content: alarm.content?.trim() || undefined,
       isReply: alarm.replyId !== "-1",
       projectId: alarm.projectId || undefined,
+      id: alarm.alarmId || undefined,
+      // flow가 `readYn`을 안 주면 "안 읽었다"고 단정하지 않는다 — 읽음 표시가 헛돌면
+      // 눌러도 화면이 그대로라 사용자가 고장으로 읽는다.
+      unread: alarm.readYn === "N",
+      postId: alarm.postId || undefined,
     };
   });
 }

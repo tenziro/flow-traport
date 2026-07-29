@@ -15,6 +15,7 @@ const MENTION: MentionRow & { title: string; link: string } = {
 const ME = 'jongseok.lee@traport.com';
 
 const ALARM: MentionAlarm = {
+  alarmId: '318742901',
   receiverId: ME,
   projectId: '2605313',
   postId: '81938471',

@@ -49,6 +49,10 @@ export interface Alarm {
   isReply?: boolean;
   /** 프로젝트 id. 알림 API만 준다 — 이름은 화면에서 프로젝트 목록으로 해소한다. */
   projectId?: string;
+  /** 아직 안 읽은 멘션. 알림 API의 `readYn`에서 온다 (PRD §13 A5). */
+  unread?: boolean;
+  /** 게시글 id. 전체 댓글 스레드를 열 때 쓴다 (PRD §13 A1). */
+  postId?: string;
 }
 
 export interface Project {

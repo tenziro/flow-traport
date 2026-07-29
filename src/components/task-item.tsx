@@ -1,10 +1,10 @@
 import { FlowLink } from "@/components/flow-link";
-import { IconComment, IconLastComment, IconMention } from "@/components/icons";
+import { IconCalendar, IconComment, IconLastComment, IconMention } from "@/components/icons";
 import { Meter } from "@/components/meter";
 import { StatusPill } from "@/components/status-pill";
 import { TaskActions } from "@/components/task-actions";
 import type { FocusPick, WorklistTask } from "@/lib/flow/queries";
-import { cn } from "@/lib/utils";
+import { cn, fmtDate } from "@/lib/utils";
 
 /**
  * 업무 한 줄. 오늘 화면(포커스 · 밀리는 업무 · 방치된 업무)과 팀 화면이 같은 모양을 쓴다 —
@@ -56,6 +56,17 @@ export function TaskItem({
         <p className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <StatusPill status={task.status} />
           <span className="truncate">{task.project}</span>
+          {/* 마감일 (PRD §13 A4). 오른쪽 D-DAY 배지는 남은 일수만 말한다 — 며칠인지는
+              날짜를 봐야 알고, 그 값은 워크리스트에 이미 들어 있다.
+              우선순위·담당자는 여기 없다: 업무 한 줄에 REST 한 번이라 행마다 미리 부르면
+              화면 한 번에 스무 번이다. 그 둘은 편집 패널을 열 때 온다 (task-actions.tsx) */}
+          {task.endDate && (
+            <span className="flex items-center gap-1">
+              <IconCalendar size={11} />
+              <span className="sr-only">마감일 </span>
+              {fmtDate(task.endDate)}
+            </span>
+          )}
           {/* 댓글·멘션 건수는 응답에 있는데 안 쓰고 있었다. 얼마나 시끄러운 업무인지가 여기서 읽힌다 */}
           {pick && pick.comments > 0 && (
             <span className="flex items-center gap-1">
@@ -117,6 +128,7 @@ export function TaskItem({
           taskId={task.taskSrno}
           title={task.title}
           status={task.status}
+          endDate={task.endDate}
           path={path}
         />
       </div>

@@ -4,6 +4,10 @@ import { motion } from 'motion/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { IconRisk, IconSignOut, IconTeam, IconToday } from '@/components/icons';
+import { NewsBell } from '@/components/news-bell';
+import { ThemeToggle } from '@/components/theme-toggle';
+import type { TaskNews } from '@/lib/flow/queries';
+import type { Theme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 
 /**
@@ -31,9 +35,15 @@ const NAV = [
 
 export function AppShell({
   user,
+  news,
+  theme,
   children,
 }: {
   user: { fullname: string; divisionName: string };
+  /** 담당 업무·내가 올린 글 소식. 못 가져오면 null — 종은 그대로 있고 안이 빈다. */
+  news: TaskNews[] | null;
+  /** 쿠키에 남아 있는 밝기. 토글의 처음 상태다 (lib/theme.ts). */
+  theme: Theme;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -63,6 +73,11 @@ export function AppShell({
               - 세로선: 정보와 액션 사이의 경계.
               - 로그아웃: 아이콘 + 호버 면. 누르는 곳이라는 게 색이 아니라 모양으로 읽힌다. */}
           <div className="ml-auto flex min-w-0 items-center gap-2">
+            {/* 밝기·소식은 세 화면 공통이라 셸에 있다. 사용자 정보 왼쪽 — 로그아웃과
+                붙여 두면 종을 누르려다 로그아웃을 누른다 */}
+            <ThemeToggle theme={theme} />
+            <NewsBell news={news} />
+            <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
               {user.fullname.slice(0, 1)}
             </span>

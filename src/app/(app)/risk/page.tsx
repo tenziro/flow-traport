@@ -5,6 +5,7 @@ import { IconChevronDown, IconImminent, IconRisk } from '@/components/icons';
 import { Kpi } from '@/components/kpi';
 import { Meter } from '@/components/meter';
 import { NewTaskForm } from '@/components/new-task-form';
+import { StaleScan } from '@/components/stale-scan';
 import { StatusPill } from '@/components/status-pill';
 import { TaskActions } from '@/components/task-actions';
 import { Card, CardContent } from '@/components/ui/card';
@@ -302,11 +303,21 @@ function RollupCard({
           </ul>
 
           {rollup.projectId && (
-            <NewTaskForm
-              projectId={rollup.projectId}
-              project={rollup.name}
-              path={`/risk?dept=${encodeURIComponent(dept)}`}
-            />
+            <>
+              {/*
+               * 위 목록은 임박·밀림만이다. 마감이 한참 지난 채로 아무도 안 건드리는
+               * 업무는 프로젝트를 직접 훑어야 나온다 (PRD §13 B5) — 눌러야 부른다.
+               */}
+              <StaleScan
+                projectId={rollup.projectId}
+                className="mt-3 border-t border-border pt-3"
+              />
+              <NewTaskForm
+                projectId={rollup.projectId}
+                project={rollup.name}
+                path={`/risk?dept=${encodeURIComponent(dept)}`}
+              />
+            </>
           )}
         </details>
       </CardContent>

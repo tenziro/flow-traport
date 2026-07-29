@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { createTask, type ActionResult } from "@/app/(app)/actions";
+import { DateField } from "@/components/date-field";
 import { IconAdd, IconNormal } from "@/components/icons";
 import { BouncyAccordion } from "@/components/motion/bouncy-accordion";
 import { Button } from "@/components/motion/button/base";
@@ -32,6 +33,7 @@ export function NewTaskForm({ projectId, project, path }: {
 }) {
   const [result, action, pending] = useActionState<ActionResult | null, FormData>(createTask, null);
   const [title, setTitle] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [confirming, setConfirming] = useState(false);
 
   return (
@@ -77,15 +79,18 @@ export function NewTaskForm({ projectId, project, path }: {
                   className="min-w-0 flex-1"
                   classNames={DENSE}
                 />
-                <label className="sr-only" htmlFor={`new-end-${projectId}`}>
+                <span id={`new-end-${projectId}`} className="sr-only">
                   마감일
-                </label>
-                {/* 네이티브 date input. 달력 컴포넌트를 따로 만들지 않는다. */}
-                <Input
-                  id={`new-end-${projectId}`}
+                </span>
+                {/* 옆 업무명 입력과 같은 높이(32px)다. 모서리만 pill인데, 달력이 뜨는
+                    자리라 네모난 입력보다 눌러야 할 것으로 읽힌다 */}
+                <DateField
                   name="endDate"
-                  type="date"
-                  classNames={DENSE}
+                  value={endDate}
+                  onChange={setEndDate}
+                  aria-labelledby={`new-end-${projectId}`}
+                  placeholder="마감일"
+                  className="w-36"
                 />
               </div>
 
