@@ -171,19 +171,31 @@ function MemberCard({
               {member.role}
             </span>
           )}
+          {/* 아이콘 세 개가 뭘 세는지는 요약 카드에만 적혀 있어서 카드를 스크롤해 내려오면
+              단서가 사라진다. `title`로 기준을 붙인다 — 화면 낭독은 `sr-only`가 맡는다.
+              news-bell.tsx의 종 아이콘과 같은 방식이다. */}
           <span className="tabular ml-auto flex shrink-0 items-center gap-2.5 text-xs font-normal text-muted-foreground">
-            <span className="flex items-center gap-1">
+            <span
+              className="flex items-center gap-1"
+              title="밀리는 업무 — 마감이 지났어요"
+            >
               <IconRisk size={12} className="text-danger" />
               <span className="sr-only">밀리는 업무 </span>
               {member.blocked.length}건
             </span>
-            <span className="flex items-center gap-1">
+            <span
+              className="flex items-center gap-1"
+              title="마감 임박 — 7일 안에 마감해요"
+            >
               <IconImminent size={12} className="text-warning" />
               <span className="sr-only">마감 임박 </span>
               {member.imminent.length}건
             </span>
             {member.staleCount > 0 && (
-              <span className="flex items-center gap-1">
+              <span
+                className="flex items-center gap-1"
+                title="방치된 업무 — 30일 넘게 손 안 댔어요"
+              >
                 <IconStale size={12} />
                 <span className="sr-only">방치된 업무 </span>
                 {member.staleCount}건
@@ -252,10 +264,15 @@ function MemberCard({
               )
             }
             title="급한 업무가 없어요"
+            /*
+             * 설명은 늘 붙인다. 방치가 있는 카드에만 두 줄이고 없으면 한 줄이라, 카드를
+             * 나란히 놓으면 빈 칸 높이가 서로 달라서 줄이 안 맞았다. 그리고 "급한"의
+             * 기준(마감 지남·임박)이 요약 카드에만 적혀 있어서 여기서 한 번 더 말해 준다.
+             */
             description={
               member.staleCount > 0
                 ? `오래 방치된 업무 ${member.staleCount}건은 flow에서 확인해주세요.`
-                : undefined
+                : '맡은 업무가 모두 일정 안에 있어요.'
             }
           />
         ) : (

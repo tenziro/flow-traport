@@ -33,6 +33,7 @@ export {
   Logout as IconSignOut,
   Calendar as IconCalendar,
   BellRing as IconNews,
+  Sparkles as IconChangelog,
   Magnifier as IconSearch,
   Flag as IconPriority,
   User as IconWorker,

@@ -4,6 +4,7 @@ import {
   BouncyAccordion,
   type BouncyAccordionItem,
 } from '@/components/motion/bouncy-accordion';
+import { IconChangelog } from '@/components/icons';
 import {
   CenterMorphModal,
   CenterMorphModalContent,
@@ -46,14 +47,21 @@ export function SiteFooter() {
           <CenterMorphModalTrigger>
             <button
               type="button"
-              className="shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
             >
+              <IconChangelog size={13} aria-hidden />
               업데이트 로그
             </button>
           </CenterMorphModalTrigger>
 
           <CenterMorphModalContent ariaLabel="업데이트 로그" className="max-w-lg">
-            <h2 className="pl-5 pr-12 pt-5 text-base font-semibold">업데이트 로그</h2>
+            {/* 제목 줄에 구분선을 둔다. 아래가 스크롤 박스라 목록을 내리면 행 카드가 제목
+                바로 밑까지 올라오는데, 선이 없으면 제목에 겹쳐 읽힌다 (스크롤 박스의
+                `p-3` 위쪽 여백은 내용과 같이 밀려 올라가서 못 막는다) — news-bell.tsx와
+                같은 처리다. */}
+            <h2 className="border-b border-border pt-5 pr-12 pb-4 pl-5 text-base font-semibold">
+              업데이트 로그
+            </h2>
             {/* 컴포넌트는 패널이 아니라 오버레이를 스크롤한다. 줄이 쌓이면 패널이 화면보다
                 길어져 펼침 애니메이션이 무너지므로 안쪽에서 스크롤한다 — news-bell.tsx와
                 같은 값이다. */}

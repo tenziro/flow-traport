@@ -264,13 +264,20 @@ function RollupCard({
                 <span className="min-w-0 flex-1 basis-full font-medium sm:basis-auto">
                   {rollup.name}
                 </span>
+                {/* 팀 화면 멤버 카드와 같은 줄이다 — `title` 문구도 같이 맞춘다 */}
                 <span className="tabular flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
+                  <span
+                    className="flex items-center gap-1"
+                    title="밀리는 업무 — 마감이 지났어요"
+                  >
                     <IconRisk size={12} className="text-danger" />
                     <span className="sr-only">밀리는 업무 </span>
                     {rollup.blocked}건
                   </span>
-                  <span className="flex items-center gap-1">
+                  <span
+                    className="flex items-center gap-1"
+                    title="마감 임박 — 7일 안에 마감해요"
+                  >
                     <IconImminent size={12} className="text-warning" />
                     <span className="sr-only">마감 임박 </span>
                     {rollup.imminent}건
