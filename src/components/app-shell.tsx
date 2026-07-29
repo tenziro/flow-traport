@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { IconRisk, IconSignOut, IconTeam, IconToday } from '@/components/icons';
 import { NewsBell } from '@/components/news-bell';
 import { SearchPalette } from '@/components/search-palette';
+import { SiteFooter } from '@/components/site-footer';
 import { ThemeToggle } from '@/components/theme-toggle';
 import type { TaskNews } from '@/lib/flow/queries';
 import type { Theme } from '@/lib/theme';
@@ -99,9 +100,11 @@ export function AppShell({
         <TopNav activeHref={activeHref} />
       </header>
 
-      <main className="w-full flex-1 px-4 py-6 pb-20 sm:px-6 lg:px-8 lg:pb-6">
+      <main className="w-full flex-1 px-4 py-6 pb-20 sm:px-6 md:pb-6 lg:px-8">
         {children}
       </main>
+
+      <SiteFooter />
 
       {/* 모바일 하단 탭 */}
       <nav
