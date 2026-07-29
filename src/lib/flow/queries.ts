@@ -156,9 +156,10 @@ export async function loadToday(): Promise<TodayData> {
 
   // 알림 수신자가 지금 로그인한 사람과 같은 것만 붙는다 (rest.ts). 워크리스트가 주는
   // `user.id`가 알림의 `receiverId`와 같은 공간이다 — 둘 다 flow user_id다.
-  const mentions = alarms
+  const merged = alarms
     ? mergeMentionComments(worklist.mentions, alarms, worklist.user.id)
     : worklist.mentions;
+  const mentions = await withMentionStatus(merged);
   return {
     now,
     worklist: {
@@ -288,6 +289,33 @@ function withLastComment(tasks: WorklistTask[], picks: FocusPick[] | null): Work
   );
   return tasks.map((t) =>
     byTask.has(t.taskSrno) ? { ...t, lastComment: byTask.get(t.taskSrno) } : t,
+  );
+}
+
+/**
+ * 멘션 줄에 업무 상태를 붙인다 (BUG-028).
+ *
+ * 워크리스트도 알림도 상태를 안 준다. 전에는 이미 받아 둔 담당 업무 목록에서 링크로 찾아
+ * 빌렸는데, 멘션은 **내가 담당이 아닌** 업무에도 온다 — 실측 17건 중 12건이 그 목록에
+ * 아예 없어서 배지가 빠졌다. 그래서 게시글 상세에서 직접 읽는다.
+ *
+ * ponytail: `postId`를 중복 제거하고 병렬로 부른다 (`loadNews`와 같은 방식) — 같은 업무의
+ * 멘션이 여러 건이라 실측 17건이 게시글 12개였다. 실패는 삼킨다: 그 줄만 배지가 빠진다.
+ * 무거워지면 응답을 캐시하는 게 다음 수다.
+ */
+async function withMentionStatus(mentions: WorklistMention[]): Promise<WorklistMention[]> {
+  const ids = [...new Set(mentions.map((m) => m.postId).filter(Boolean))] as string[];
+  if (!ids.length) return mentions;
+  const statusOf = new Map(
+    await Promise.all(
+      ids.map(
+        async (postId) =>
+          [postId, (await getPostBrief(postId).catch(() => null))?.status ?? undefined] as const,
+      ),
+    ),
+  );
+  return mentions.map((m) =>
+    m.postId ? { ...m, status: statusOf.get(m.postId) } : m,
   );
 }
 

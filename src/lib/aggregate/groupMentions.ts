@@ -29,6 +29,8 @@ export interface MentionGroup {
   unread: number;
   /** 게시글 id. 전체 댓글 스레드를 열 때 쓴다 (PRD §13 A1). */
   postId?: string;
+  /** 업무 상태 라벨. 게시글 조회가 실패했으면 undefined — 배지 자리가 빈다 (BUG-028). */
+  status?: string;
   /** 행 펼침용 원본 알림 — 최신순. 읽음 처리도 이 배열 전체를 한 번에. */
   alarms: Alarm[];
 }
@@ -72,6 +74,8 @@ export function groupMentions(alarms: readonly Alarm[]): MentionGroup[] {
         projectId: sorted.find((a) => a.projectId)?.projectId,
         unread: sorted.filter((a) => a.unread).length,
         postId: sorted.find((a) => a.postId)?.postId,
+        // 상태도 같은 규칙 — 게시글 조회가 알림마다 성공하진 않는다 (BUG-028).
+        status: sorted.find((a) => a.status)?.status,
         alarms: sorted,
       };
     })

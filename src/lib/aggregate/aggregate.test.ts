@@ -283,6 +283,22 @@ describe('groupMentions', () => {
     assert.deepEqual(groups.map((g) => g.title), ['ok', 'bad']);
     assert.equal(groups[1].lastAtMs, null);
   });
+
+  // 상태 배지가 여기서 나온다. projectId와 같은 규칙 — 붙은 알림이 하나라도 있으면 쓴다
+  // (게시글 조회가 알림마다 성공하지 않아서 최신 것만 보면 놓친다, BUG-028).
+  it('상태는 그룹 안 아무 알림에서든 가져온다', () => {
+    const [group] = groupMentions([
+      { from: 'a', title: 'T', at: '20260102000000', link: 'L1' },
+      { from: 'b', title: 'T', at: '20260101000000', link: 'L1', status: '피드백' },
+    ]);
+    assert.equal(group.count, 2);
+    assert.equal(group.status, '피드백');
+  });
+
+  it('상태가 아무 알림에도 없으면 undefined — 배지 자리를 비운다', () => {
+    const [group] = groupMentions([{ from: 'a', title: 'T', at: '20260101000000', link: 'L1' }]);
+    assert.equal(group.status, undefined);
+  });
 });
 
 // ---------------------------------------------------------------------------

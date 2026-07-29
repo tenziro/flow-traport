@@ -53,6 +53,8 @@ export interface Alarm {
   unread?: boolean;
   /** 게시글 id. 전체 댓글 스레드를 열 때 쓴다 (PRD §13 A1). */
   postId?: string;
+  /** 업무 상태 라벨. 알림에는 없어서 게시글 상세로 채운다 (BUG-028). */
+  status?: string;
 }
 
 export interface Project {

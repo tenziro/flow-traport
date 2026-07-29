@@ -53,23 +53,9 @@ export default async function TodayPage({
   const idOf = (project: string) => projectIds.get(project) ?? null;
   /** 반대 방향. 멘션 알림은 프로젝트 이름 없이 id만 준다 (rest.ts). */
   const nameOf = new Map([...projectIds].map(([name, id]) => [id, name]));
-  /**
-   * 멘션 응답에는 상태가 없다. 이미 받아 둔 네 목록에서 같은 업무를 찾아 빌린다 —
-   * 링크가 업무마다 유일해서 조인 키로 쓴다. 어디에도 없는 업무는 상태 없이 뜬다:
-   * 그 한 줄 때문에 업무를 다시 조회하면 페이지가 그만큼 늦게 열린다.
-   */
-  const statusOf = new Map(
-    [
-      ...worklist.imminent,
-      ...worklist.overdueActive,
-      ...(focus ?? []),
-      ...(stale ?? []),
-    ].map((task) => [task.link, task.status]),
-  );
-  /** 멘션 줄에 상태·프로젝트를 얹는다. 못 찾은 자리는 그리지 않는다. */
+  /** 멘션 줄에 프로젝트명을 얹는다. 상태는 `loadToday`가 이미 붙여 준다. */
   const mentions = groupMentions(worklist.mentions).map((group) => ({
     ...group,
-    status: statusOf.get(group.link),
     project: group.projectId ? nameOf.get(group.projectId) : undefined,
   }));
 
@@ -410,8 +396,8 @@ export default async function TodayPage({
                           {group.title}
                         </span>
                         {/* 다른 카드의 업무 줄과 같은 순서다 — 상태, 프로젝트, 그다음이
-                            시각. 상태·프로젝트는 멘션 응답에 없어서 위에서 붙여 온 값이고,
-                            못 찾으면 그 자리만 빠진다 */}
+                            시각. 상태는 게시글 상세, 프로젝트는 알림에서 각각 풀어 온 값이고
+                            (queries.ts), 조회가 실패하면 그 자리만 빠진다 */}
                         <span className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                           {group.status && <StatusPill status={group.status} />}
                           {group.project && (

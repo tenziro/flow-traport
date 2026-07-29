@@ -84,6 +84,8 @@ export interface MentionRow {
   unread?: boolean;
   /** 게시글 id. 전체 댓글 스레드(`listComments`)를 부를 때 쓴다. */
   postId?: string;
+  /** 업무 상태 라벨. 워크리스트도 알림도 안 줘서 게시글 상세로 채운다 (BUG-028). */
+  status?: string;
 }
 
 interface Envelope<T> {
@@ -470,23 +472,72 @@ export const resolvePostId = async (projectId: string, taskSrno: string, title: 
   (await getTaskFields(projectId, taskSrno, title))?.postId ?? null;
 
 /**
- * 게시글 제목(= 업무명)과 flow가 만든 짧은 링크. 알림은 `postId`만 줘서 둘 다 여기서만
+ * base 상태(`STTS`) 코드 → 배지 라벨. flow는 이 컬럼만 `optionName`을 빈 문자열로 줘서
+ * 대응표가 없으면 숫자가 그대로 화면에 나온다 (api-spec §6.1).
+ *
+ * 코드는 문서에 없다. 업무 상태를 바꿀 때 flow가 남기는 시스템 댓글
+ * (`SYS_CODE:"S45^^<이전>^^<이후>"` + 사람이 읽는 문구 `'피드백' → '요청'`)로 맞췄고,
+ * `0`은 워크리스트가 같은 업무를 `대기`로 부르는 것까지 확인했다 (2026-07-29 실측).
+ * 라벨은 워크리스트·포커스가 쓰는 말을 따른다 — 한 상태를 카드마다 다르게 부르지 않는다.
+ */
+const STTS_LABEL: Record<string, string> = {
+  "0": "대기",
+  "1": "진행",
+  "2": "완료",
+  "3": "보류",
+  "4": "피드백",
+};
+
+/** api-spec §6.3 `tasks[]`. 게시글 상세는 필터 API와 달리 UPPER_SNAKE로 온다. */
+interface PostTask {
+  TASK_COLUMN_REC?: {
+    DEFAULT_COLUMN_TYPE?: string;
+    COLUMN_DATA_REC?: { CUSTOM_COLUMN_DATA?: string; OPTION_NAME?: string }[];
+  }[];
+}
+
+/**
+ * 업무의 상태 라벨. 프로젝트가 커스텀 상태(`STATUS`, api-spec §2.1)를 쓰면 라벨이 그대로
+ * 오고, 안 쓰면 base 상태(`STTS`) 코드만 온다 — 그때만 대응표를 쓴다.
+ *
+ * 평평한 `tasks[0].STTS`는 **못 쓴다**: 커스텀 상태 프로젝트에서도 값이 오는데 안 쓰는
+ * 컬럼이라 항상 `"0"`이다. 그걸 읽으면 `진행`인 업무가 `대기`로 보인다 (2026-07-29 실측).
+ *
+ * 모르는 코드는 버린다 — 배지에 숫자가 뜨는 건 빈 자리보다 나쁘다.
+ */
+function taskStatus(task?: PostTask): string | null {
+  const col = task?.TASK_COLUMN_REC?.find(
+    (c) => c.DEFAULT_COLUMN_TYPE === "STATUS" || c.DEFAULT_COLUMN_TYPE === "STTS",
+  );
+  const cell = col?.COLUMN_DATA_REC?.[0];
+  if (!cell) return null;
+  const code = cell.CUSTOM_COLUMN_DATA?.trim() ?? "";
+  return cell.OPTION_NAME?.trim() || STTS_LABEL[code] || null;
+}
+
+/**
+ * 게시글 제목(= 업무명)·상태·flow가 만든 짧은 링크. 알림은 `postId`만 줘서 셋 다 여기서만
  * 나온다 (api-spec §6.3).
  *
  * `connectUrl`(`https://flow.team/l/Qmcn5`)은 **로그인 화면을 건너 살아남는 링크**다 —
  * 세션이 없으면 `signin.act?postlink=Qmcn5`로 대상을 들고 가서 로그인 뒤 그 글로 간다.
  * 우리가 만든 `main.act?projectId=…&postId=…`는 그 자리에서 대상을 잃는다 (BUG-024).
  *
- * ponytail: 두 줄 때문에 게시글 상세를 통째로 받는다 — 본문·HTML·댓글 원본까지 딸려 온다.
+ * ponytail: 세 줄 때문에 게시글 상세를 통째로 받는다 — 본문·HTML·댓글 원본까지 딸려 온다.
  * 제목만 주는 엔드포인트가 없다. 부르는 쪽에서 `postId`를 중복 제거하고 병렬로 부르는 게
  * 지금의 상한이고, 무거워지면 응답을 캐시하는 게 다음 수다.
  */
 export async function getPostBrief(postId: string) {
-  const d = await get<{ title?: string; connectUrl?: string }>(
+  const d = await get<{ title?: string; connectUrl?: string; tasks?: PostTask[] }>(
     `/user/posts/${postId}`,
     "게시글 조회",
   );
-  return { title: d.title?.trim() || null, url: d.connectUrl?.trim() || null };
+  return {
+    title: d.title?.trim() || null,
+    url: d.connectUrl?.trim() || null,
+    // 업무가 아닌 글(공지·회의록)은 `tasks`가 비어 있다 — 그때는 상태가 없다.
+    status: taskStatus(d.tasks?.[0]),
+  };
 }
 
 /* ── 업무 단일 필드 수정 (api-spec §6.4, PRD §13 A4) ───────────────────── */

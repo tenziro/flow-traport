@@ -470,7 +470,7 @@ https://api.flow.team
 >
 > | 코드 | 라벨 | `optionCategory` | 근거 |
 > |---|---|---|---|
-> | `0` | 요청 | `"0"` | `S45^^0^^2` = "'요청' → '완료'" |
+> | `0` | 요청 / **대기** | `"0"` | `S45^^0^^2` = "'요청' → '완료'". **flow가 두 이름을 쓴다** — 시스템 댓글은 `요청`, MCP 워크리스트는 `대기`다(`flow_get_my_worklist` 설명의 "base 상태(대기/진행)"). 화면 배지는 **`대기`** 로 쓴다: 다른 카드가 전부 MCP 라벨을 그대로 그려서, 같은 업무가 카드마다 다른 이름으로 보이면 안 된다 ([BUG-028](bug-report.md#bug-028)) |
 > | `1` | 진행 | `"1"` | 카테고리 |
 > | `2` | 완료 | `"2"` | 위 기록의 도착점. 같은 업무 `PROGRESS`가 100이 됐다 |
 > | `3` | 보류 | `"3"` | 카테고리 |
@@ -556,6 +556,19 @@ https://api.flow.team
 > 않아서 헤더 소식 카드의 업무명이 여기서 나온다 (`getPostBrief`, PRD §6.1.5). 게시글 82010144
 > → `title: "[예약 시 동행자 선택 필드] 동행자 필드 위치 개선"`. **제목만 주는 엔드포인트는
 > 없다** — 한 줄 때문에 `content`·`htmlContent`·`remarks` 원본까지 딸려 온다.
+
+> **`tasks[0]` 이 업무 상태의 유일한 출처다 `(실측 2026-07-29)`.** 워크리스트도 알림도 상태를
+> 안 줘서 멘션 줄의 상태 배지가 여기서 나온다 (`getPostBrief`, [BUG-028](bug-report.md#bug-028)).
+> 아이템은 §2.2처럼 **대문자 스네이크**다 — `tasks/filter`(§6.1)의 camelCase와 이름이 다르다:
+> `TASK_SRNO` · `STTS` · `TASK_COLUMN_REC[].DEFAULT_COLUMN_TYPE` ·
+> `TASK_COLUMN_REC[].COLUMN_DATA_REC[].CUSTOM_COLUMN_DATA` / `OPTION_NAME` / `OPTION_CATEGORY`.
+> 업무가 아닌 글(공지·회의록)은 `tasks` 가 빈 배열이다.
+>
+> **⚠️ 평면 `tasks[0].STTS` 를 읽으면 안 된다 `(실측 2026-07-29)`.** 커스텀 상태(`STATUS`, §2.1)를
+> 쓰는 프로젝트에서도 이 필드가 오는데 **안 쓰는 컬럼이라 항상 `"0"`** 이다. 게시글 80754103
+> (프로젝트 2916576 `Q020 Extranet 운영`)은 실제 상태가 `진행`인데 평면 값은 `'0'`(대기)이었고,
+> `TASK_COLUMN_REC` 의 `STATUS` → `("901661", "진행", "1")` 가 맞는 값이다. 읽는 순서는
+> **`TASK_COLUMN_REC` 의 `STATUS.OPTION_NAME` → 없으면 `STTS` 코드 맵**(§6.1 끝)이다.
 
 > **`connectUrl` 은 로그인 화면을 건너 살아남는 링크다 `(실측 2026-07-29)`.** 같은 응답에
 > `connectUrl: "https://flow.team/l/Qmcn5"` 가 온다 — flow가 만든 짧은 링크다. 세션이 없을 때

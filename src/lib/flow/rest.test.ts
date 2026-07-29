@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { mergeMentionComments, resolvePostId, type MentionAlarm, type MentionRow } from './rest';
+import { getPostBrief, mergeMentionComments, resolvePostId, type MentionAlarm, type MentionRow } from './rest';
 
 /** 2026-07-28 실측. 워크리스트 멘션 한 줄과 같은 알림의 REST 레코드가 이 한 쌍이다. */
 const MENTION: MentionRow & { title: string; link: string } = {
@@ -117,5 +117,97 @@ describe('taskSrno를 postId로 바꾸기', () => {
   it('응답이 실패면 던진다 — null과 구분해야 사유를 삼킨 걸 안다', async () => {
     stub({ response: { success: false, error: { code: '403', message: '권한 없음' } } }, false);
     await assert.rejects(() => resolvePostId('2236827', '41679745', '무엇이든'), /업무 조회 실패/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 게시글 상세에서 상태 읽기 — 나를 부른 사람들 줄의 상태 배지 (BUG-028)
+// ---------------------------------------------------------------------------
+
+/** `GET /user/posts/{postId}` 한 건. 상태에 관계있는 것만 남겼다 (2026-07-29 실측). */
+const post = (task: unknown) => ({
+  response: {
+    success: true,
+    data: { title: '업무 제목', connectUrl: 'https://flow.team/l/Qm2hT', tasks: task ? [task] : [] },
+  },
+});
+
+/** base 상태만 쓰는 프로젝트 (2639815). `OPTION_NAME`이 빈 문자열이라 코드만 온다. */
+const STTS_TASK = {
+  STTS: '3',
+  TASK_COLUMN_REC: [
+    {
+      DEFAULT_COLUMN_TYPE: 'STTS',
+      COLUMN_DATA_REC: [{ CUSTOM_COLUMN_DATA: '3', OPTION_NAME: '', OPTION_CATEGORY: '3' }],
+    },
+  ],
+};
+
+/**
+ * 커스텀 상태를 쓰는 프로젝트 (2916576, `Q020 Extranet 운영`). **여기가 함정이다** —
+ * 평평한 `STTS`가 `'0'`으로 오는데 실제 상태는 `진행`이다.
+ */
+const STATUS_TASK = {
+  STTS: '0',
+  TASK_COLUMN_REC: [
+    {
+      DEFAULT_COLUMN_TYPE: 'STATUS',
+      COLUMN_DATA_REC: [{ CUSTOM_COLUMN_DATA: '901661', OPTION_NAME: '진행', OPTION_CATEGORY: '1' }],
+    },
+  ],
+};
+
+describe('게시글 상세에서 업무 상태 읽기', () => {
+  const stub = (body: unknown, ok = true) => {
+    process.env.FLOW_API_KEY = 'test-key';
+    globalThis.fetch = (async () => ({ ok, json: async () => body })) as unknown as typeof fetch;
+  };
+
+  it('커스텀 상태 프로젝트는 라벨을 그대로 쓴다 — 평평한 STTS에 속지 않는다', async () => {
+    stub(post(STATUS_TASK));
+    const brief = await getPostBrief('80754103');
+    assert.equal(brief.status, '진행');
+    assert.notEqual(brief.status, '대기', '평평한 STTS "0"을 읽으면 진행이 대기로 보인다');
+  });
+
+  it('base 상태 프로젝트는 코드를 라벨로 바꾼다', async () => {
+    stub(post(STTS_TASK));
+    assert.equal((await getPostBrief('82013056')).status, '보류');
+  });
+
+  it('코드 다섯 개가 화면 배지 라벨과 같다 (status-pill.tsx)', async () => {
+    for (const [code, label] of [
+      ['0', '대기'],
+      ['1', '진행'],
+      ['2', '완료'],
+      ['3', '보류'],
+      ['4', '피드백'],
+    ]) {
+      stub(post({ ...STTS_TASK, TASK_COLUMN_REC: [
+        {
+          DEFAULT_COLUMN_TYPE: 'STTS',
+          COLUMN_DATA_REC: [{ CUSTOM_COLUMN_DATA: code, OPTION_NAME: '', OPTION_CATEGORY: code }],
+        },
+      ] }));
+      assert.equal((await getPostBrief('1')).status, label, `STTS ${code}`);
+    }
+  });
+
+  it('업무가 아닌 글이면 null — 상태 배지 자리를 비워 둔다', async () => {
+    stub(post(null));
+    const brief = await getPostBrief('82013056');
+    assert.equal(brief.status, null);
+    // 제목·링크는 그대로 나와야 한다 (소식 카드가 쓰는 값이다)
+    assert.equal(brief.url, 'https://flow.team/l/Qm2hT');
+  });
+
+  it('모르는 코드는 버린다 — 숫자가 배지로 보이는 게 빈 자리보다 나쁘다', async () => {
+    stub(post({ ...STTS_TASK, TASK_COLUMN_REC: [
+      {
+        DEFAULT_COLUMN_TYPE: 'STTS',
+        COLUMN_DATA_REC: [{ CUSTOM_COLUMN_DATA: '9', OPTION_NAME: '', OPTION_CATEGORY: '9' }],
+      },
+    ] }));
+    assert.equal((await getPostBrief('1')).status, null);
   });
 });
