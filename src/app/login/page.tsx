@@ -1,22 +1,14 @@
 import Image from 'next/image';
 import { IconInfo, IconOpen } from '@/components/icons';
-import { ChromaticTextReveal } from '@/components/motion/chromatic-text-reveal';
+import {
+  ChromaticTextReveal,
+  SWEEP_CHART,
+} from '@/components/motion/chromatic-text-reveal';
 import { TextReveal } from '@/components/motion/text-reveal';
 import { getApiKey } from '@/lib/auth';
 import { ApiKeyGate } from './api-key-gate';
 
 export const metadata = { title: '로그인 · flow Cockpit' };
-
-/**
- * 제목을 쓸고 지나가는 색. 새 색을 만들지 않고 `globals.css`의 차트 팔레트를 빌린다 —
- * beUI 기본값은 파랑~보라인데 이 앱에 없는 색이다. 라임(브랜드)이 띠 가운데 온다.
- */
-const SWEEP = [
-  'var(--chart-4)',
-  'var(--chart-1)',
-  'var(--chart-3)',
-  'var(--chart-2)',
-];
 
 /**
  * 로그인 화면. 아이디·비밀번호를 받지 않는다 — flow OAuth로 넘길 뿐이다 (PRD §5.2).
@@ -91,7 +83,7 @@ export default async function LoginPage({
             <ChromaticTextReveal
               prefix="flow"
               words={['Cockpit']}
-              colors={SWEEP}
+              colors={SWEEP_CHART}
               startOnView={false}
               delay={0.7}
               duration={0.9}

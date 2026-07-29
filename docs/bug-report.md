@@ -32,6 +32,7 @@
 | [BUG-026](#bug-026) | 바꾸기 모달 안에서 달력이 패널 뒤로 들어갔다 | 해결 |
 | [BUG-027](#bug-027) | 저장한 뒤 다시 `변경`을 누르면 옛 값이 보이고 `저장`이 켜져 있다 | 해결 |
 | [BUG-028](#bug-028) | 나를 부른 사람들 17줄 중 12줄에 상태 배지가 없었다 | 해결 |
+| [BUG-029](#bug-029) | `useReducedMotion()`으로 렌더를 갈랐더니 hydration이 어긋났다 (3곳) | 해결 |
 
 ---
 
@@ -970,6 +971,41 @@ Portal로 `body`에 나가는데(BUG-009에서 그렇게 바꿨다) 모달 래�
 **교훈**: 배지가 비었을 때 먼저 의심할 건 키가 아니라 **모집단**이다. "이미 받아 둔 데이터에서
 빌린다"는 그 데이터의 필터가 곧 커버리지 상한이라는 뜻이다 — 빌려 오는 코드를 쓸 때 그 목록이
 무엇을 **빼고** 있는지 한 줄 적어 두면 다음 사람이 이 계산을 다시 하지 않는다.
+
+---
+
+## BUG-029
+
+**`useReducedMotion()`으로 렌더를 갈랐더니 hydration이 어긋났다 (3곳)** — 2026-07-29, 해결
+
+콘솔에 두 종류가 떴다. 하나는 계정 레일 토글과 beUI `Button`의 `tabindex="0"`이 서버 HTML에만
+있다는 것, 하나는 헤더 브랜드의 `--chromatic-sweep`이 서버 `-14%` / 클라이언트 `114%`라는 것.
+서로 다른 증상인데 **뿌리가 하나**다.
+
+`useReducedMotion()`은 서버에서 `false`를 주고, 줄임 모드 클라이언트에서 `true`를 준다. 그래서
+이 값으로 **렌더 결과**가 갈리면 첫 HTML과 첫 클라이언트 렌더가 반드시 다르다. 훅은 mount 뒤에나
+맞는다.
+
+`tabindex` 쪽은 한 다리를 더 건넌다. `whileTap={reduce ? undefined : {…}}`는 스스로는 아무 속성도
+안 만드는데, motion이 `whileTap`·`onTap`·`onTapStart` 중 **하나라도 있고** `props.tabIndex`가
+`undefined`면 `tabIndex={0}`을 대신 심는다
+(`framer-motion/dist/es/render/html/use-props.mjs:48-51`). prop을 지우는 분기가 곧 속성을 지우는
+분기였다.
+
+**처리**: 세 곳 다 분기를 없애고 **값으로 껐다**.
+
+- `whileTap={{ scale: reduce ? 1 : 0.96 }}` — prop은 늘 있고 배율만 1이다
+  ([overflow-actions.tsx](../src/components/motion/overflow-actions.tsx),
+  [button/base.tsx](../src/components/motion/button/base.tsx)).
+- `ChromaticTextReveal`의 `initial`·`style`은 분기를 지우고 시작 값으로 고정했다. 같은 파일
+  `transition`이 이미 줄임 모드에서 네 값 모두 `duration: 0`으로 떨어뜨리므로 결과는 같다 —
+  분기가 애초에 겹치는 일을 하고 있었다 ([chromatic-text-reveal.tsx](../src/components/motion/chromatic-text-reveal.tsx)).
+
+Playwright로 줄임·보통 두 모드에서 다시 읽어 콘솔 오류 0건, 두 모드 모두 최종 `114%`를 확인했다.
+
+**교훈**: **환경을 읽는 훅으로 렌더를 가르지 말 것.** `useReducedMotion`·`useMediaQuery`·
+`useHoverCapable` 같은 것들은 서버에 답이 없어서 기본값을 준다. 끌 때는 prop을 지우는 게 아니라
+효과가 없는 값(배율 1, `duration: 0`)을 넣는다 — 렌더 트리는 양쪽에서 같고, 결과만 달라진다.
 
 ---
 

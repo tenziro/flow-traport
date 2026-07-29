@@ -1,6 +1,6 @@
 # 개발 진행 상황
 
-버전 0.20.3 · 2026-07-29 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
+버전 0.22.0 · 2026-07-29 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
 
 ## 요약
 
@@ -1040,13 +1040,44 @@ Tailwind `dark:` 변인은 블록 형태(`@custom-variant dark { … @slot }`)�
 두 곳은 밝기를 못 따라간다: **모바일 주소창**(meta `themeColor`는 media 쿼리만 받는다 — 기기
 설정을 따른다)과 **PWA 설치 스플래시**(매니페스트 `theme_color`가 한 칸뿐이라 늘 어둡다).
 
+### 헤더 계정 레일 (v0.22.0)
+
+밝기·알림·이름·부서·로그아웃이 헤더 오른쪽에 나란히 서 있었다. beUI `overflow-actions`로
+묶어 **접으면 알림 종만** 남고, 아바타 이니셜을 누르면 나머지가 벌어진다. 검색(⌘K)은 레일
+밖이다 — 계정과 상관없고 단축키가 주 통로다.
+설계는 [specs/2026-07-29-header-overflow-actions-design.md](superpowers/specs/2026-07-29-header-overflow-actions-design.md).
+
+| 결정 | 이유 |
+|---|---|
+| 원본 항목 API를 버리고 **슬롯**으로 갈았다 | 묶을 넷 중 셋이 `<button>`이 아니다 — 라디오 판, Radix 팝오버 트리거 + 배지, `<form method="post">` 서브밋. `{id,label,icon,onClick}`으로는 하나도 못 담는다 |
+| 밝기는 레일 안에서 **순환 버튼** | 한 칸에 라디오 셋이 안 들어간다. 라디오 판(`ThemeToggle`)은 좁지 않은 자리를 위해 남겼다 |
+| `aria-label`이 지금 갈래 + **누르면 될 갈래**를 함께 말한다 | 보이는 글자가 "밝게"면 누르면 밝아질 거라고 읽힌다. 펼침처럼 `aria-expanded`에 맡길 상태가 아니다 |
+| 바깥 클릭으로는 **안 닫는다** | 알림 팝오버 안을 누르는 것도 트랙 바깥이라 잘못 닫힌다. 레일은 팝오버가 아니라 헤더의 일부여서 열려 있어도 아무것도 가리지 않는다 |
+| Escape는 **포털에서 온 것만** 받는다 | 팝오버는 DOM에서는 body로 나가지만 React 트리에서는 레일의 자식이라 keydown이 그대로 올라온다. 그냥 받으면 팝오버를 닫는 첫 Escape에 레일까지 접힌다 |
+| 토글 원판은 트랙의 다른 칸과 같은 36px | 32px로 두면 한 줄에서 혼자 작아 보인다. `bg-primary`는 펼친 동안만 — 늘 칠하면 헤더에서 가장 시끄러운 요소가 된다 |
+
+브라우저 실측 (Playwright, 1280×800):
+
+| 항목 | 값 |
+|---|---|
+| 접힘 → 펼침 폭 | 90px → 172(375) / 217(640) / 303(≥1024) |
+| Escape 1회 | 팝오버만 닫히고 포커스는 종으로 |
+| Escape 2회 | 레일 접힘 + 포커스 이니셜로 |
+| 브랜드 스윕 재시작 | 10.03초 · 20.07초 (`repeatDelay` 9.1 + `duration` 0.9) |
+| 줄임 모드 | 스윕 114% 고정·반복 없음, 레일은 90 → 303px 즉시 |
+| 로그아웃 | `POST /api/auth/logout` → `/login` |
+
+검증 중에 hydration 오류 세 곳을 찾아 고쳤다 ([bug-report.md](bug-report.md) BUG-029) —
+`useReducedMotion()`으로 렌더를 가르면 서버(false)와 줄임 모드 클라이언트(true)가 반드시
+어긋난다.
+
 ## 검증
 
 ```
 npx tsc --noEmit   # clean
 npm run lint       # 0 error / 1 warning (아래 참고)
-npm test           # 84/84
-npm run build      # 10 라우트 + proxy
+npm test           # 86/86
+npm run build      # 11 라우트 + proxy
 ```
 
 **v0.15.0은 실화면으로 봤다.** 로그인 세션이 여전히 없어서, 셸에 목업 소식 6건을 넣은 임시

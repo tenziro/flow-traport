@@ -4,10 +4,15 @@ import { motion } from 'motion/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { IconRisk, IconSignOut, IconTeam, IconToday } from '@/components/icons';
+import {
+  ChromaticTextReveal,
+  SWEEP_CHART,
+} from '@/components/motion/chromatic-text-reveal';
+import { OverflowActions } from '@/components/motion/overflow-actions';
 import { NewsBell } from '@/components/news-bell';
 import { SearchPalette } from '@/components/search-palette';
 import { SiteFooter } from '@/components/site-footer';
-import { ThemeToggle } from '@/components/theme-toggle';
+import { ThemeCycle } from '@/components/theme-toggle';
 import type { TaskNews } from '@/lib/flow/queries';
 import type { Theme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
@@ -62,38 +67,27 @@ export function AppShell({
       <header className="sticky top-0 z-20 border-b border-border bg-card/55 backdrop-blur-2xl backdrop-saturate-200">
         <div className="flex h-14 w-full items-center gap-4 px-4 sm:px-6 lg:px-8">
           {/* 이름의 무게 중심은 `Cockpit`이다 — 앞의 `flow`는 올라탄 플랫폼 이름이라
-              한 급 얇게 둔다. 로그인 화면 제목도 같은 대비를 쓴다 */}
+              한 급 얇게 둔다. 로그인 화면 제목도 같은 대비를 쓴다.
+              색 띠가 10초마다 `Cockpit` 위를 한 번 쓸고 지나간다 — 로그인 제목과 같은 장치라
+              두 화면이 같은 이름을 같은 방식으로 부른다. `startOnView`는 끈다: 헤더는 늘
+              화면에 있어서 뷰포트 진입이라는 사건이 없다 */}
           <span className="shrink-0 text-base font-medium">
-            flow <span className="font-extrabold">Cockpit</span>
+            <ChromaticTextReveal
+              prefix="flow"
+              words={['Cockpit']}
+              colors={SWEEP_CHART}
+              startOnView={false}
+              duration={0.9}
+              repeatDelay={9.1}
+              className="[&>span:last-child]:font-extrabold"
+            />
           </span>
 
-          {/* 사용자 · 로그아웃
-              전에는 이름·부서 두 줄이 `text-right`로 떠 있고 그 옆에 muted 텍스트
-              "로그아웃"이 붙어 있었다. 부서명과 버튼이 같은 색·같은 크기라 어디까지가
-              정보고 어디부터 누르는 곳인지 구분이 안 됐다. 셋을 이렇게 갈랐다.
-              - 이니셜 원판: 두 줄 텍스트의 높이 기준점. 앵커가 없으면 옆 버튼과 중심이 어긋난다.
-              - 세로선: 정보와 액션 사이의 경계.
-              - 로그아웃: 아이콘 + 호버 면. 누르는 곳이라는 게 색이 아니라 모양으로 읽힌다. */}
+          {/* 검색은 레일 밖이다 — 목적지가 아니라 경유지이고, 밝기·소식·계정처럼 상태를
+              보거나 바꾸는 것과 성격이 다르다 */}
           <div className="ml-auto flex min-w-0 items-center gap-2">
-            {/* 검색·밝기·소식은 세 화면 공통이라 셸에 있다. 사용자 정보 왼쪽 — 로그아웃과
-                붙여 두면 종을 누르려다 로그아웃을 누른다 */}
             <SearchPalette />
-            <ThemeToggle theme={theme} />
-            <NewsBell news={news} />
-            <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
-              {user.fullname.slice(0, 1)}
-            </span>
-            <span className="hidden min-w-0 leading-tight sm:block">
-              <span className="block truncate text-xs font-medium">
-                {user.fullname}
-              </span>
-              <span className="block truncate text-[11px] text-muted-foreground">
-                {user.divisionName}
-              </span>
-            </span>
-            <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
-            <SignOut />
+            <AccountRail user={user} news={news} theme={theme} />
           </div>
         </div>
 
@@ -187,6 +181,54 @@ function TopNav({ activeHref }: { activeHref: string }) {
 }
 
 /**
+ * 계정 레일 — 소식 · 밝기 · 이름·부서 · 로그아웃.
+ *
+ * 전에는 이 넷이 헤더 오른쪽에 세로선 두 개로 갈린 여섯 덩어리로 늘어서 있었다. 배열에는
+ * 이유가 있었지만(정보와 액션의 경계) 덩어리 수 자체가 많아 헤더가 붐볐다. 하나로 묶고
+ * 이니셜 원판을 펼치기 토글로 쓴다.
+ *
+ * 접으면 소식 종과 이니셜만 남는다. **소식은 접히지 않는다** — 안 읽음 배지가 접히면
+ * 신호가 죽는다. 로그아웃은 접힘 안 맨 끝이다: 자주 쓰지 않고, 그 자리가 종에서 가장 멀다
+ * (전에는 나란히 붙어 있어서 종을 누르려다 로그아웃을 누를 수 있었다).
+ *
+ * 이름·부서만 배경이 없다. 다른 칸은 `bg-background`라, 세로선이 그려 주던 "여기까지는
+ * 정보, 여기부터는 누르는 곳"이라는 경계를 배경 유무가 대신한다.
+ */
+function AccountRail({
+  user,
+  news,
+  theme,
+}: {
+  user: { fullname: string; divisionName: string };
+  news: TaskNews[] | null;
+  theme: Theme;
+}) {
+  return (
+    <OverflowActions
+      label={`내 계정 — ${user.fullname} · ${user.divisionName}`}
+      overflowLabel="내 계정"
+      toggle={user.fullname.slice(0, 1)}
+      overflow={
+        <>
+          <ThemeCycle theme={theme} />
+          <span className="hidden min-w-0 px-1 leading-tight sm:block">
+            <span className="block truncate text-xs font-medium">
+              {user.fullname}
+            </span>
+            <span className="block truncate text-[11px] text-muted-foreground">
+              {user.divisionName}
+            </span>
+          </span>
+          <SignOut />
+        </>
+      }
+    >
+      <NewsBell news={news} />
+    </OverflowActions>
+  );
+}
+
+/**
  * 로그아웃은 POST로만. GET이면 링크 프리페치가 세션을 날릴 수 있다.
  *
  * 좁은 화면에서는 아이콘만 남긴다 — 헤더 오른쪽 끝의 이 아이콘은 관용어라 글자 없이도
@@ -198,7 +240,7 @@ function SignOut() {
       <button
         type="submit"
         title="로그아웃"
-        className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-md bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
       >
         <IconSignOut size={16} />
         <span className="sr-only lg:not-sr-only">로그아웃</span>

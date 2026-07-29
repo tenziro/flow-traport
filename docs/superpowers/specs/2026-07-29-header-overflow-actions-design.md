@@ -1,13 +1,17 @@
 # 헤더 오버플로 레일 · 타이틀 스윕 설계
 
 **날짜** 2026-07-29
-**버전** 0.20.2 → 0.21.0 (추가)
+**버전** 0.21.0 → 0.22.0 (추가)
+
+> 처음 쓸 때는 0.20.2 → 0.21.0이었다. 그 사이 화면 톤·모서리 정리가 0.21.0을 먹었고,
+> **그 작업이 알약을 다 없앴다**. 아래의 "알약 레일"은 모서리 8px 카드 레일로 읽는다 —
+> 트랙 8px(`rounded-lg`), 안쪽 항목 6px(`rounded-md`), 이니셜 원판만 원이다(지름 = 높이).
 
 ## 배경
 
 헤더 1행 오른쪽에 검색 · 밝기 3알약 · 알림 종 · 세로선 · 이니셜 원판 · 이름/부서 두 줄 · 세로선 · 로그아웃이 한 줄로 늘어서 있다. 여섯 덩어리다. 지금 배열에는 이유가 있고([app-shell.tsx](../../../src/components/app-shell.tsx) 69~75행 주석) 그 이유는 유효하지만, 덩어리 수 자체가 많아 헤더가 붐빈다.
 
-밝기 · 알림 · 사용자 정보 · 로그아웃을 beUI `overflow-actions` 형태의 알약 레일 하나로 묶는다. 검색은 밖에 남는다.
+밝기 · 알림 · 사용자 정보 · 로그아웃을 beUI `overflow-actions` 형태의 레일 하나로 묶는다. 검색은 밖에 남는다.
 
 ## 결정 사항
 
@@ -66,6 +70,8 @@ interface OverflowActionsProps {
 원본에서 **살린다** — `SHELL_TRANSITION` 스프링(`stiffness 220 / damping 17 / mass 0.85`), 접힐 때 펼침 그룹이 제자리에 남아 사라지게 하는 `useLayoutEffect` 위치 보정, `AnimatePresence mode="popLayout"`, `useControllableExpanded`, `useReducedMotion`, `useHoverCapable`, blur-in 변이.
 
 원본에서 **버린다** — `OverflowActionItem`, `ActionButton`, `onAction`, `collapseOnAction`, `size`와 그에 딸린 사이즈 클래스 맵 다섯 개(`TRACK_SIZE_CLASS` · `GROUP_GAP_CLASS` · `ACTION_SIZE_CLASS` · `TOGGLE_SIZE_CLASS` · `ICON_SIZE_CLASS`). 크기는 한 종류만 쓰니 상수로 인라인한다. 원본 항목의 `tabIndex={-1}` / `aria-hidden`도 버린다 — 펼침 슬롯은 `AnimatePresence`가 unmount하므로 DOM에 없다.
+
+원본에서 **고친다** — 트랙의 `rounded-full`을 `rounded-lg`(8px)로. v0.21.0에서 앱의 알약을 다 없앴다. 안쪽 항목은 호출부가 각자 `rounded-md`(6px)를 쓴다 — 항목이 슬롯이라 레일이 강제하지 않는다. 토글은 이니셜 원판이라 `rounded-full`을 유지한다(지름 = 높이인 원은 그대로 두는 게 이 앱의 규칙이다).
 
 의존 파일 [src/lib/ease.ts](../../../src/lib/ease.ts)(`EASE_OUT`)와 [src/lib/hooks/use-hover-capable.ts](../../../src/lib/hooks/use-hover-capable.ts)는 이미 프로젝트에 있다. 새로 받을 것이 없다.
 
@@ -138,9 +144,9 @@ Tab 순서가 시각 순서와 그대로 맞는다 — 알림 → 밝기 → 이
 
 밝기 버튼은 보이는 텍스트가 **지금 갈래**이고 `aria-label`이 **누르면 될 갈래**까지 알려준다. 텍스트만 "밝게"면 눌렀을 때 밝아질 거라고 읽힌다.
 
-### 이름·부서는 알약이 아니다
+### 이름·부서만 배경이 없다
 
-다른 항목은 `bg-background` 알약인데 이름·부서만 배경 없이 텍스트 두 줄로 둔다. 지금 헤더가 세로선으로 만들어 둔 "여기까지는 정보, 여기부터는 누르는 곳"이라는 경계를 배경 유무가 대신한다. 세로선은 사라진다.
+다른 항목은 `bg-background` 칸(`rounded-md`)인데 이름·부서만 배경 없이 텍스트 두 줄로 둔다. 지금 헤더가 세로선으로 만들어 둔 "여기까지는 정보, 여기부터는 누르는 곳"이라는 경계를 배경 유무가 대신한다. 세로선은 사라진다.
 
 ---
 
@@ -264,16 +270,18 @@ export function nextTheme(theme: Theme): Theme
 10 reduced-motion에서 스윕과 반복이 멈추는지
 ```
 
-`npm run lint`와 `npm test`(기존 80개)를 함께 돌린다.
+`npm run lint`와 `npm test`(기존 84개)를 함께 돌린다.
 
 ---
 
 ## 6. 버전과 문서
 
-**0.20.2 → 0.21.0** (추가). 새 컴포넌트 하나와 헤더 재배치이고 아키텍처가 바뀌지 않는다.
+**0.21.0 → 0.22.0** (추가). 새 컴포넌트 하나와 헤더 재배치이고 아키텍처가 바뀌지 않는다.
 
 - `docs/progress.md` — 이번 작업 섹션 추가
 - `docs/PRD.md` §7.3 — 731~733행이 "1행 브랜드·밝기·알림 종·사용자"와 "밝기 토글과 알림 종은 사용자 정보 왼쪽이다. 로그아웃과 붙여 두면 종을 누르려다 로그아웃을 누른다"를 기술한다. 레일에서는 알림이 상시 노출이고 로그아웃이 접힘 안 맨 끝이라 구조적으로 붙지 않으므로, 그 서술을 레일 구성으로 고친다
+- `docs/DEVELOPMENT_LOG.md` — "변경 이력" 맨 위에 항목 추가 (`기능`)
+- `src/lib/changelog.ts` — 맨 위에 `0.22.0` 항목. `package.json` 버전과 함께 올린다 (안 맞으면 `changelog.test.ts`가 막는다)
 - `docs/bug-report.md` — 버그가 아니므로 손대지 않는다
 
 ## 범위 밖

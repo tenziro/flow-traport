@@ -33,7 +33,10 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
 - **업무 소식(종)** — 알림을 전체·안 읽음·읽음으로 나눠 보고, 한 줄을 누르면 flow 문서로
   가면서 읽음이 된다.
 - **빠른 검색(⌘K)** — 프로젝트와 글을 찾아 flow 문서로 넘어간다.
-- **화면 밝기** — 밝게·어둡게·기기 설정 세 갈래. 첫 HTML에 박아서 번쩍임이 없다.
+- **계정 레일** — 헤더 오른쪽. 접으면 알림 종만, 아바타 이니셜을 누르면 밝기·이름·부서·
+  로그아웃이 벌어진다.
+- **화면 밝기** — 밝게·어둡게·기기 설정 세 갈래. 첫 HTML에 박아서 번쩍임이 없다. 레일
+  안에서는 라디오 판 대신 다음 갈래로 넘기는 순환 버튼이다.
 - **업데이트 로그** — 푸터 버튼 → 모달에서 버전별로 접어 본다.
 
 ### 데이터
@@ -47,11 +50,43 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
 
 - Next.js 16 App Router · React 19 · Tailwind v4 · Motion · beUI(vendoring) · Reicon.
 - 색은 `globals.css`의 `light-dark()` 토큰 한 벌. 컴포넌트에 raw hex 금지 (PRD §7.1).
-- 유닛 테스트는 `node:test`. 현재 84건.
+- 유닛 테스트는 `node:test`. 현재 86건.
 
 ---
 
 ## 변경 이력
+
+### 2026-07-29 — 헤더 계정 레일 + 브랜드 스윕 반복 (v0.22.0)
+
+`기능` 밝기·알림·사용자 정보·로그아웃을 beUI `overflow-actions` 한 줄로 묶었다. 아바타
+이니셜이 펼침 토글이고, 접으면 알림 종만 남는다. 헤더 브랜드(`flow Cockpit`)는 10초마다
+색이 한 번 흐른다.
+
+- `motion/overflow-actions.tsx` — 원본은 항목을 `{id,label,icon,onClick}` 배열로 받는데,
+  묶을 넷 중 셋이 버튼이 아니다(라디오 판·Radix 팝오버 트리거·`<form method="post">`).
+  **슬롯 방식으로 갈아냈다**: `children`(늘 보임) / `overflow`(펼침) / `toggle`(원판 안).
+  살린 것 — 스프링, 접힐 때 나가는 그룹을 제자리에 못 박는 `useLayoutEffect` 위치 보정,
+  `AnimatePresence mode="popLayout"`, blur-in. 버린 것 — 항목 API와 크기 맵 다섯 개.
+- 밝기는 레일 안에서 라디오 셋이 들어갈 자리가 없어 **순환 버튼**(`ThemeCycle`)을 새로
+  뒀다. `lib/theme.ts`에 `nextTheme()`을 추가하고 실패 테스트부터 썼다. 라디오 판
+  (`ThemeToggle`)은 지우지 않았다 — 좁은 자리를 위한 다른 모양이다.
+- `aria-label`이 "지금 갈래 + 누르면 될 갈래"를 함께 말한다. 조사는 표로 뒀다 —
+  "기기 설정"만 받침이 있어서 라벨에 조사를 붙여 조립하면 "기기 설정로"가 된다.
+- `ChromaticTextReveal`에 `repeatDelay`를 더했다. 원본 반복 장치는 어절을 갈아치우는
+  방식이라 어절이 하나면 갈 곳이 없어 즉시 빠져나갔다 — 별도 `cycle` 카운터를 키에 섞어
+  같은 어절도 다시 흐르게 했다. 스윕 색은 `SWEEP_CHART`(차트 팔레트)를 쓴다.
+- **hydration 오류 두 건을 뿌리에서 잡았다.** `useReducedMotion()`은 서버에서 false·
+  클라이언트에서 true라, 렌더 결과가 이 값으로 갈리면 반드시 어긋난다. `whileTap`을
+  지우는 분기는 motion이 `tabIndex={0}`을 서버에만 심게 만들었고(`overflow-actions`,
+  `button/base`), `ChromaticTextReveal`의 `initial`·`style` 분기는 시작 스타일을 서버에만
+  남겼다. 셋 다 분기를 없애고 값으로 껐다 — `transition`의 `duration: 0`이 이미 같은 일을
+  한다. 자세한 것은 `docs/bug-report.md` BUG-029.
+- Playwright로 실측: 접힘 90px → 펼침 172(375) / 217(640) / 303(≥1024). Escape 1회는
+  팝오버만, 2회에 레일이 접히고 포커스가 이니셜로 돌아온다. 스윕 재시작 10.03초·20.07초.
+  줄임 모드에서는 스윕이 114%에 고정되고 반복이 멈추며 레일은 즉시 벌어진다.
+- 관련: `src/components/motion/overflow-actions.tsx`(신규), `motion/chromatic-text-reveal.tsx`,
+  `motion/button/base.tsx`, `theme-toggle.tsx`, `app-shell.tsx`, `lib/theme.ts`,
+  `lib/theme.test.ts`, `app/login/page.tsx`, `docs/PRD.md`
 
 ### 2026-07-29 — 화면 톤·모서리·간격 정리 (v0.21.0)
 

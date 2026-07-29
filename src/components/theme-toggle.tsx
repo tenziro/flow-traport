@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { IconDark, IconLight, IconSystem } from "@/components/icons";
-import { THEME_COOKIE, type Theme } from "@/lib/theme";
+import { nextTheme, THEME_COOKIE, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 /**
@@ -19,6 +19,22 @@ const OPTIONS = [
   { value: "dark", label: "어둡게", Icon: IconDark },
   { value: "system", label: "기기 설정", Icon: IconSystem },
 ] as const satisfies readonly { value: Theme; label: string; Icon: typeof IconLight }[];
+
+/** 갈래 → 라벨·아이콘. `ThemeCycle`이 지금 갈래를 그릴 때 쓴다. */
+const BY_VALUE = Object.fromEntries(OPTIONS.map((o) => [o.value, o])) as Record<
+  Theme,
+  (typeof OPTIONS)[number]
+>;
+
+/**
+ * 다음 갈래를 부르는 말. 조사까지 적어 둔다 — "기기 설정"만 받침이 있어서 "으로"이고,
+ * 라벨에 조사를 붙여 조립하면 "기기 설정로"가 된다. 세 개뿐이라 규칙을 계산할 이유가 없다.
+ */
+const NEXT_PHRASE: Record<Theme, string> = {
+  light: "밝게로",
+  dark: "어둡게로",
+  system: "기기 설정으로",
+};
 
 /** 1년. 그 사이 한 번도 안 바꿨다면 다시 물어봐도 될 만큼 지난 값이다. */
 const ONE_YEAR = 60 * 60 * 24 * 365;
@@ -77,5 +93,38 @@ export function ThemeToggle({ theme: initial }: { theme: Theme }) {
         );
       })}
     </fieldset>
+  );
+}
+
+/**
+ * 같은 일을 버튼 하나로 — 헤더 레일용.
+ *
+ * 레일의 한 항목은 한 컨트롤이라 라디오 세 개가 들어갈 자리가 없다. 누르면 다음 갈래로
+ * 넘어간다 (`nextTheme`). 라디오 판을 대신하는 게 아니라 좁은 자리를 위한 다른 모양이라
+ * 위의 `ThemeToggle`은 그대로 둔다.
+ *
+ * 보이는 텍스트는 **지금 갈래**이고 `aria-label`이 **누르면 될 갈래**까지 알린다. 텍스트만
+ * "밝게"면 눌렀을 때 밝아질 거라고 읽힌다. 펼침/접힘처럼 `aria-expanded`에 맡길 상태가
+ * 아니라서 라벨이 직접 말해야 한다.
+ */
+export function ThemeCycle({ theme: initial }: { theme: Theme }) {
+  const [theme, setTheme] = useState(initial);
+  const { label, Icon } = BY_VALUE[theme];
+
+  return (
+    <button
+      type="button"
+      aria-label={`화면 밝기 — ${label}. 눌러서 ${NEXT_PHRASE[nextTheme(theme)]} 바꿔요`}
+      onClick={() => {
+        const value = nextTheme(theme);
+        setTheme(value);
+        apply(value);
+      }}
+      className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-background px-2.5 font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    >
+      <Icon size={14} />
+      {/* 좁은 화면에서는 아이콘만 남긴다 — `SignOut`이 이미 쓰는 패턴이다 */}
+      <span className="sr-only text-xs lg:not-sr-only">{label}</span>
+    </button>
   );
 }

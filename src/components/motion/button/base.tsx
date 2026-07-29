@@ -97,7 +97,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <motion.button
         ref={ref}
         type="button"
-        whileTap={reduce ? undefined : { scale: pressScale }}
+        // 배율 1로 껐다 — prop 자체를 지우면 motion이 `tabIndex={0}`을 서버에서만 심어서
+        // hydration이 어긋난다 (`motion/overflow-actions.tsx`에 같은 설명이 있다)
+        whileTap={{ scale: reduce ? 1 : pressScale }}
         whileHover={reduce || !canHover ? undefined : { scale: 1.02 }}
         transition={SPRING_PRESS}
         onPointerDown={handlePointerDown}
