@@ -16,7 +16,7 @@ import type { Participant, TaskFields } from "@/lib/flow/rest";
 import { TASK_STATUS, type TaskStatus } from "@/lib/task-status";
 import { TASK_PRIORITY, type TaskPriority } from "@/lib/task-priority";
 import { DateField } from "@/components/date-field";
-import { IconChevronDown, IconComment, IconNormal, IconPriority } from "@/components/icons";
+import { IconComment, IconNormal, IconPriority } from "@/components/icons";
 import { BouncyAccordion } from "@/components/motion/bouncy-accordion";
 import { Button } from "@/components/motion/button/base";
 import {
@@ -26,7 +26,6 @@ import {
   CenterMorphModalTrigger,
 } from "@/components/motion/center-morph-modal";
 import { Input } from "@/components/motion/input";
-import { STATUS_TONE } from "@/components/status-pill";
 import { ThreadView } from "@/components/thread-view";
 import { cn, fmtDate } from "@/lib/utils";
 
@@ -71,12 +70,10 @@ const FIELD = "flex min-w-0 flex-1 flex-wrap items-center gap-2";
  * 고치는 중의 값 열. 지금 값·컨트롤·저장이 각자 줄을 갖는다.
  *
  * 한 줄을 나눠 쓰던 때는 지금 값 글자 수만큼 컨트롤이 오른쪽으로 밀려서 네 줄이 저마다
- * 다른 x에서 고르기를 시작했고, 담당자는 pill이 여러 개라 두 칸씩 접혀 저장·취소 사이로
- * 끼어들었다. 위아래로 쌓으면 어느 줄을 펼쳐도 같은 모양이다.
+ * 다른 x에서 고르기를 시작했고, 후보 pill이 두 칸씩 접혀 저장·취소 사이로 끼어들었다.
+ * 위아래로 쌓으면 어느 줄을 펼쳐도 같은 모양이다.
  */
 const EDITING = "flex min-w-0 flex-1 flex-col items-start gap-2";
-/** 세 컨트롤이 같은 폭이다 — 줄을 바꿔 가며 펼쳐도 고르는 자리가 그 자리에 있다. */
-const CONTROL = "w-40";
 /** 고치는 중에도 지금 값은 남긴다 — 무엇에서 무엇으로 바뀌는지가 한 줄에서 읽힌다. */
 const FROM = "shrink-0 text-xs leading-8 text-muted-foreground";
 /** 모달 트리거. 바로 아래 댓글 접힘 트리거와 같은 치수·같은 색이라 둘이 한 벌로 읽힌다. */
@@ -362,71 +359,34 @@ function Shown({ now, label, onEdit }: { now: string; label: string; onEdit: () 
 }
 
 /**
- * 고르기 한 칸. 브라우저 기본 `<select>`다.
+ * 고르기 pill 한 칸. 상태·우선순위·담당자가 같이 쓴다.
  *
- * beUI `Select`를 여기서는 못 쓴다 — 목록이 트리거 밑에 `absolute`로 붙는데 이 모달 패널은
- * clip-path로 자기 네모를 잘라낸다(center-morph-modal). 마지막 줄에서 목록이 패널 밖으로
- * 자라면 그대로 사라진다 — 접힘 패널에서 같은 걸로 잘렸다 (bug-report BUG-009).
- * 기본 `<select>`의 목록은 브라우저가 띄우니 무엇에도 안 잘리고, 폼 값도 스스로 싣는다.
+ * 폼 값은 input이 스스로 싣는다 — 켠 것만 이름표를 달고 나가서 서버가 그대로 받는다.
+ * 담당자는 `checkbox`(여럿), 상태·우선순위는 `radio`(하나)다. 라디오는 켜질 때만 `change`를
+ * 주므로 `onPick`은 켜는 쪽만 알면 된다.
  *
- * 생김새는 같은 줄 날짜 버튼과 같은 pill로 맞춘다 (`date-field.tsx` TRIGGER_PILL).
- * `appearance-none`이 없으면 브라우저가 자기 네모를 그려서 반경이 안 먹는다 — 그래서
- * 화살표도 직접 그린다.
+ * 네모·동그라미는 그리지 않는다. 후보가 여섯이면 표식 여섯 개가 값 열을 채우는데 여기서
+ * 읽어야 할 것은 "무엇이 켜졌나" 하나다. 켬은 라임 배경이 말하고, 표식을 숨겨 사라진
+ * 키보드 포커스 표시는 `has-[:focus-visible]`로 pill이 대신 받는다.
+ *
+ * 드롭다운으로 돌아가지 않는다. 후보가 넷·다섯인데 목록을 접어 두면 무엇을 고를 수 있는지
+ * 알려면 한 번 더 눌러야 하고, beUI `Select`는 목록이 `absolute`로 붙어 clip-path로 자기
+ * 네모를 잘라내는 이 모달 패널 밖으로 자라면 그대로 사라진다 (bug-report BUG-009).
  */
-function Pick({
-  name,
-  labelId,
-  value,
-  onChange,
-  disabled,
-  children,
-}: {
-  name: string;
-  labelId: string;
-  value: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <span className={cn("relative", CONTROL)}>
-      <select
-        name={name}
-        aria-labelledby={labelId}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        className="h-8 w-full appearance-none rounded-full border border-border bg-background pr-8 pl-3 text-sm text-foreground transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50"
-      >
-        {children}
-      </select>
-      <IconChevronDown
-        size={13}
-        aria-hidden
-        className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground"
-      />
-    </span>
-  );
-}
-
-/**
- * 참여자 한 명 켜기·끄기 (담당자 줄).
- *
- * 폼 값은 체크박스가 스스로 싣는다 — 켠 것만 `workerId`로 나가서 서버가 `getAll`로 받는다.
- * 네모는 그리지 않는다. 참여자가 열 명이면 네모 열 개가 값 열을 채우는데 여기서 읽어야
- * 할 것은 "누가 담당인가" 하나다. 켬은 라임 배경이 말하고, 네모를 숨겨 사라진 키보드
- * 포커스 표시는 `has-[:focus-visible]`로 pill이 대신 받는다.
- */
-function Person({
+function Chip({
+  type,
   name,
   value,
+  label,
   on,
-  onToggle,
+  onPick,
 }: {
+  type: "checkbox" | "radio";
   name: string;
   value: string;
+  label: string;
   on: boolean;
-  onToggle: (on: boolean) => void;
+  onPick: (on: boolean) => void;
 }) {
   return (
     <label
@@ -438,17 +398,20 @@ function Person({
       )}
     >
       <input
-        type="checkbox"
-        name="workerId"
+        type={type}
+        name={name}
         value={value}
         checked={on}
-        onChange={(event) => onToggle(event.target.checked)}
+        onChange={(event) => onPick(event.target.checked)}
         className="sr-only"
       />
-      {name}
+      {label}
     </label>
   );
 }
+
+/** 후보 pill이 값 열 폭을 다 쓴다 — 다섯 개면 한 줄에 안 든다. */
+const CHIPS = "flex w-full flex-wrap gap-1.5";
 
 /**
  * 저장·취소. 네 줄이 같은 높이를 쓴다 — 줄마다 다르면 값 열이 다시 들쭉날쭉해진다.
@@ -513,24 +476,19 @@ function StatusField({
         {editing ? (
           <>
             <span className={FROM}>{current} →</span>
-            <Pick
-              name="status"
-              labelId={labelId}
-              value={picked}
-              onChange={(next) => setPicked(next as TaskStatus)}
-            >
-              <option value="">고르기</option>
+            <div role="radiogroup" aria-labelledby={labelId} className={CHIPS}>
               {Object.entries(TASK_STATUS).map(([value, label]) => (
-                // 목록도 배지와 같은 색을 쓴다 — 색을 살리는 브라우저에서만 보인다.
-                <option
+                <Chip
                   key={value}
+                  type="radio"
+                  name="status"
                   value={value}
-                  className={STATUS_TONE[label as keyof typeof STATUS_TONE]?.text}
-                >
-                  {label}
-                </option>
+                  label={label}
+                  on={picked === value}
+                  onPick={() => setPicked(value as TaskStatus)}
+                />
               ))}
-            </Pick>
+            </div>
             <Save pending={pending} disabled={!picked} onCancel={cancel} />
           </>
         ) : (
@@ -580,12 +538,13 @@ function EndDateField({
         {editing ? (
           <>
             <span className={FROM}>{current} →</span>
+            {/* 마감일만 pill 목록이 아니다 — 후보가 365개다 */}
             <DateField
               name="endDate"
               value={picked}
               onChange={setPicked}
               aria-labelledby={labelId}
-              className={CONTROL}
+              className="w-40"
             />
             <Save pending={pending} disabled={!picked} onCancel={cancel} />
           </>
@@ -631,19 +590,19 @@ function PriorityField({
         {editing ? (
           <>
             <span className={FROM}>{current} →</span>
-            <Pick
-              name="priority"
-              labelId={labelId}
-              value={picked}
-              onChange={(next) => setPicked(next as TaskPriority)}
-            >
-              <option value="">고르기</option>
+            <div role="radiogroup" aria-labelledby={labelId} className={CHIPS}>
               {Object.entries(TASK_PRIORITY).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
+                <Chip
+                  key={value}
+                  type="radio"
+                  name="priority"
+                  value={value}
+                  label={label}
+                  on={picked === value}
+                  onPick={() => setPicked(value as TaskPriority)}
+                />
               ))}
-            </Pick>
+            </div>
             <Save pending={pending} disabled={!picked} onCancel={cancel} />
           </>
         ) : (
@@ -662,9 +621,7 @@ function PriorityField({
  * 후보 목록은 **`변경`을 누를 때만 부른다.** 프로젝트 참여자 조회가 업무 한 줄에 한 번이라,
  * 모달을 열 때 같이 부르면 상태만 바꾸러 온 사람도 그 값을 치른다.
  *
- * 여기만 셋과 컨트롤이 다르다. 여러 명을 고르니까 `<select>`가 아니라 켜고 끄는 pill이다 —
- * `<select multiple>`은 Cmd+클릭을 아는 사람만 여럿을 고를 수 있고, 목록 상자로 렌더돼
- * 같은 줄의 pill 컨트롤들과 안 맞는다. 그래서 `CONTROL`의 고정 폭도 이 줄만 안 쓴다.
+ * pill은 상태·우선순위와 같은 모양이지만 여기만 `checkbox`다 — 담당은 여럿이 나눠 진다.
  */
 function WorkerField({
   projectId,
@@ -754,19 +711,16 @@ function WorkerField({
             {asking ? (
               <span className={FROM}>불러오는 중…</span>
             ) : (
-              // pill이 값 열 폭을 다 쓴다 — 참여자가 여섯 명이면 한 줄에 안 든다
-              <div
-                role="group"
-                aria-labelledby={labelId}
-                className="flex w-full flex-wrap gap-1.5"
-              >
+              <div role="group" aria-labelledby={labelId} className={CHIPS}>
                 {candidates.map((person) => (
-                  <Person
+                  <Chip
                     key={person.userId}
-                    name={person.name}
-                    on={picked.includes(person.userId)}
+                    type="checkbox"
+                    name="workerId"
                     value={person.userId}
-                    onToggle={(on) =>
+                    label={person.name}
+                    on={picked.includes(person.userId)}
+                    onPick={(on) =>
                       setPicked((prev) =>
                         on
                           ? [...prev, person.userId]
