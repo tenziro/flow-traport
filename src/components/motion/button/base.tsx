@@ -44,11 +44,13 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
     "border border-border bg-transparent text-foreground hover:bg-primary/5",
 };
 
+// 원본에서 모서리를 고쳤다: 세 크기 다 `rounded-full` → `rounded-md`. 버튼은 늘 입력·고르기
+// 칸 옆에 서는데, 알약 하나만 그 줄에서 다른 곡률로 튀었다 (`남기기` 버튼).
 const SIZE_CLASS: Record<ButtonSize, string> = {
-  sm: "h-8 px-3 text-xs gap-1.5 rounded-full",
-  md: "h-10 px-5 text-sm gap-2 rounded-full",
-  lg: "h-12 px-6 text-base gap-2 rounded-full",
-  icon: "h-8 w-8 rounded-lg",
+  sm: "h-8 px-3 text-xs gap-1.5 rounded-md",
+  md: "h-10 px-5 text-sm gap-2 rounded-md",
+  lg: "h-12 px-6 text-base gap-2 rounded-md",
+  icon: "h-8 w-8 rounded-md",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(

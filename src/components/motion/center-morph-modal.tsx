@@ -1,11 +1,13 @@
 "use client";
 // beui.dev/components/motion/center-morph-modal
 //
-// beUI 원본에서 고친 것은 둘이다.
+// beUI 원본에서 고친 것은 셋이다.
 // 1. 닫기 아이콘을 `lucide-react`의 `X`에서 이 앱의 `IconClose`(reicon)로 바꿨다.
 //    `lucide-react`는 의존성에 없다 (icons.tsx 주석).
 // 2. 마운트 감지를 `useEffect(() => setMounted(true))`에서 `useSyncExternalStore`로
 //    바꿨다 (`mounted`). 원본 패턴이 React 19 린트에 걸린다 — 아래 주석 참고.
+// 3. 패널 모서리를 `rounded-[30px]` → `rounded-lg`. 이 앱의 모서리는 카드 기준 8px이고,
+//    모달은 화면에서 가장 큰 면인데 그 면만 30px이면 안에 든 카드·버튼과 계열이 어긋난다.
 // 나머지 구조·모션·포커스 트랩은 그대로 둔다.
 
 import {
@@ -177,8 +179,12 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(",");
 
-const CENTER_FOLDED_CLIP = "inset(48% 48% 48% 48% round 30px)";
-const CENTER_OPEN_CLIP = "inset(0% 0% 0% 0% round 30px)";
+// 이 8px은 `--radius`와 같은 값이다 — 여기서 CSS 변수를 못 쓴다. Motion이 clip-path 문자열을
+// 숫자로 풀어서 보간하기 때문에 `var(--radius)`를 넣으면 애니메이션이 서고, 값이 패널의
+// `rounded-lg`와 어긋나면 모서리에서 테두리가 잘려 나간다 — 잘린 자리에 큰 반지름의 실루엣만
+// 남아서 테두리가 두 겹으로 보였다.
+const CENTER_FOLDED_CLIP = "inset(48% 48% 48% 48% round 8px)";
+const CENTER_OPEN_CLIP = "inset(0% 0% 0% 0% round 8px)";
 
 // Complex clip-path strings can snap when a spring resolves its final distance.
 // Keep the radius constant so the whole duration reads as surface unfolding,
@@ -347,7 +353,7 @@ export function CenterMorphModalContent({
                         : CENTER_UNFOLD_TRANSITION
                     }
                     className={cn(
-                      "pointer-events-auto relative w-full max-w-[26rem] origin-center overflow-hidden rounded-[30px] border border-border bg-background will-change-[clip-path]",
+                      "pointer-events-auto relative w-full max-w-[26rem] origin-center overflow-hidden rounded-lg border border-border bg-background will-change-[clip-path]",
                       className,
                     )}
                   >

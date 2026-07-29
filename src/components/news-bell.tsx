@@ -24,8 +24,10 @@ import { cn, fmtDateTime } from "@/lib/utils";
  * 한 줄을 누르면 그 글로 가고(새 탭) 그 알림은 읽음이 된다. 링크는 flow가 만들어 준
  * `connectUrl`이다 — 로그인 화면을 건너서도 대상을 지킨다 (queries.ts, BUG-024).
  *
- * 카드 한 장은 프로젝트명 · 업무명 · 내용 · 작성자 네 줄이다. 프로젝트명과 업무명은 알림에
- * 없어서 `loadNews`가 풀어 붙인 값이고, 못 풀면 그 줄이 빠진다 — 없는 걸 지어내지 않는다.
+ * 카드 한 장은 업무명 · 프로젝트명 · 내용 · 작성자 네 줄이다. 제목 자리는 업무명이다 —
+ * 업무 목록의 한 줄도 업무명이 제목이라, 같은 대상을 두 화면에서 다른 이름으로 부르지 않는다.
+ * 둘 다 알림에 없어서 `loadNews`가 풀어 붙인 값이고, 업무명을 못 풀면 프로젝트명이 제목
+ * 자리로 올라온다 — 없는 걸 지어내지 않고, 제목 없는 카드도 만들지 않는다.
  */
 export function NewsBell({ news }: { news: TaskNews[] | null }) {
   const unread = news?.filter((n) => n.unread).length ?? 0;
@@ -127,30 +129,33 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
                   onClick={item.unread ? () => markRead(item.id) : undefined}
                   className="flex min-w-0 flex-col gap-1.5 rounded-lg px-2.5 py-3 outline-none transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
-                  <span className="flex min-w-0 items-start justify-between gap-3">
-                    {/* 프로젝트명은 한 줄로 자른다 — `[비즈플레이]B2603-…` 처럼 길어서 안 자르면
-                        카드가 프로젝트명으로 찬다. 업무명도 같은 이유로 한 줄이다. */}
-                    <span className="truncate text-sm font-bold">
+                  <span className="flex min-w-0 items-center justify-between gap-3">
+                    {/* 점과 제목을 한 줄짜리 flex로 묶는다 — `align-middle`로는 글자 상자
+                        기준이라 점이 살짝 위에 떴다. 여기서는 `items-center`가 두 개를
+                        같은 세로 중앙에 놓는다. */}
+                    <span className="flex min-w-0 items-center gap-1.5">
                       {item.unread && (
                         <>
                           {/* 안 읽은 줄에만 점. 눌러서 읽음이 되면 사라진다 */}
-                          <span
-                            aria-hidden
-                            className="mr-1.5 inline-block size-1.5 rounded-full bg-primary align-middle"
-                          />
+                          <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary" />
                           <span className="sr-only">안 읽음 · </span>
                         </>
                       )}
-                      {item.project}
+                      {/* 한 줄로 자른다 — `[비즈플레이]B2603-…` 처럼 길어서 안 자르면 카드가
+                          제목 한 줄로 찬다. 아래 프로젝트명도 같은 이유로 한 줄이다. */}
+                      <span className="truncate text-sm font-bold">
+                        {item.title || item.project}
+                      </span>
                     </span>
                     <span className="tabular shrink-0 text-xs text-muted-foreground">
                       {fmtDateTime(item.at)}
                     </span>
                   </span>
-                  {/* 업무명은 게시글 제목을 따로 풀어 온 값이라 없을 수 있다 (queries.ts) */}
+                  {/* 업무명이 제목 자리로 올라갔을 때만 프로젝트명이 아래에 붙는다. 업무명을
+                      못 풀었으면 프로젝트명이 이미 위에 있어서 같은 값을 두 번 쓰지 않는다. */}
                   {item.title && (
                     <span className="truncate text-xs font-medium text-muted-foreground">
-                      {item.title}
+                      {item.project}
                     </span>
                   )}
                   <span className="line-clamp-2 text-[13px] text-foreground">{item.message}</span>
@@ -159,6 +164,15 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
               </li>
             ))}
           </ul>
+        )}
+
+        {/* 목록이 스크롤돼도 이 줄은 아래에 붙어 있다. 숫자는 탭과 무관하게 전체 기준이다 —
+            "안 읽음" 탭에서 세 건만 보일 때 그게 전체 중 몇 건인지가 여기서 읽힌다.
+            소식이 아예 없거나 못 가져왔으면 `0건`을 적지 않는다 — 위 빈 화면이 이미 말한다. */}
+        {!!news?.length && (
+          <p className="tabular border-t border-border px-3 py-2 text-xs text-muted-foreground">
+            전체 {news.length}건{unread > 0 && ` · 안 읽음 ${unread}건`}
+          </p>
         )}
       </PopoverContent>
     </Popover>

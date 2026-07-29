@@ -44,7 +44,7 @@ export function ThemeToggle({ theme: initial }: { theme: Theme }) {
   }
 
   return (
-    <fieldset className="flex shrink-0 items-center gap-0.5 rounded-full bg-muted p-0.5">
+    <fieldset className="flex shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5">
       <legend className="sr-only">화면 밝기</legend>
       {OPTIONS.map(({ value, label, Icon }) => {
         const on = theme === value;
@@ -53,9 +53,10 @@ export function ThemeToggle({ theme: initial }: { theme: Theme }) {
             key={value}
             title={label}
             className={cn(
-              "flex size-7 cursor-pointer items-center justify-center rounded-full transition-colors",
+              // 판이 `rounded-md`(6px)이고 안쪽 여백이 2px이라 칸은 `rounded-sm`(4px)이다
+              "flex size-7 cursor-pointer items-center justify-center rounded-sm transition-colors",
               "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
-              // 밝게에서는 판(`muted`)과 알약(`background`)의 차이가 얇다 — 그림자가
+              // 밝게에서는 판(`muted`)과 켠 칸(`background`)의 차이가 얇다 — 그림자가
               // 그 경계를 대신한다. 어둡게에서는 그림자가 안 보이지만 두 색 차이가 크다.
               on
                 ? "bg-background text-foreground shadow-sm"

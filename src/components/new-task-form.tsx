@@ -20,9 +20,10 @@ import { cn } from "@/lib/utils";
  * 높이가 스프링으로 따라와서 카드 안에서 폼이 튀어나오는 느낌이 사라진다.
  */
 
-/** beUI Input 기본 치수(h-11 rounded-full text-base)를 이 앱의 촘촘한 행에 맞춘다. */
+/** beUI Input 기본 치수(h-11 text-base)를 이 앱의 촘촘한 행에 맞춘다. 모서리는 기본값이
+    이미 옆 `DateField`·`Button`과 같은 6px이라 여기서 지정하지 않는다. */
 const DENSE = {
-  field: "h-8 rounded-lg bg-background",
+  field: "h-8 bg-background",
   input: "text-sm",
 } as const;
 
@@ -82,8 +83,8 @@ export function NewTaskForm({ projectId, project, path }: {
                 <span id={`new-end-${projectId}`} className="sr-only">
                   마감일
                 </span>
-                {/* 옆 업무명 입력과 같은 높이(32px)다. 모서리만 pill인데, 달력이 뜨는
-                    자리라 네모난 입력보다 눌러야 할 것으로 읽힌다 */}
+                {/* 옆 업무명 입력과 같은 높이(32px)·같은 모서리다 — 한 줄에 나란히 선
+                    입력 두 칸이라 서로 다른 모양일 이유가 없다 */}
                 <DateField
                   name="endDate"
                   value={endDate}

@@ -5,7 +5,9 @@
 // 접근 가능한 이름이 있어야 하는데 원본은 넘길 구멍이 없었다 (select.tsx의
 // `aria-labelledby`와 같은 이유의 최소 개조).
 //
-// 부서 전환(`dept-tabs.tsx`)이 `variant="pill"`로 쓴다.
+// 부서 전환(`dept-tabs.tsx`)이 `variant="segment"`, 소식 함(`news-bell.tsx`)이
+// `variant="underline"`로 쓴다. `pill`은 남겨 뒀지만 쓰는 곳이 없다 — 이 앱의 모서리는
+// 카드 기준 8px이고 알약은 그 계열에서 혼자 튄다.
 
 import { motion, MotionConfig, useReducedMotion, type Transition } from "motion/react";
 import {

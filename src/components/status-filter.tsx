@@ -73,7 +73,7 @@ function Chip({
       href={href}
       aria-current={active ? "true" : undefined}
       className={cn(
-        "tabular inline-flex min-h-6 items-center gap-1.5 rounded-full px-2 text-xs transition-colors duration-300",
+        "tabular inline-flex min-h-6 items-center gap-1.5 rounded-md px-2 text-xs transition-colors duration-300",
         active
           ? (tone?.chip ?? "bg-secondary text-foreground")
           : "text-muted-foreground hover:bg-muted",

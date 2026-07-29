@@ -14,9 +14,12 @@ function Card({
       className={cn(
         // 원본(shadcn)에 있던 `overflow-hidden`을 뺐다. 카드 안에 Select가 있으면
         // 드롭다운이 `absolute`라 카드 높이·라운드에서 잘린다 (BUG-014). 배경은
-        // `rounded-xl`이 알아서 자르고, 이미지 모서리는 아래 `*:[img:...]` 규칙이 직접
+        // `rounded-lg`가 알아서 자르고, 이미지 모서리는 아래 `*:[img:...]` 규칙이 직접
         // 깎는다 — 클리핑이 하던 일이 애초에 없다.
-        "group/card flex flex-col gap-(--card-spacing) rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        //
+        // `rounded-xl`(--radius + 4px)이던 것을 `rounded-lg`(--radius)로 내렸다. 카드가
+        // 버튼·배지보다 더 둥글면 같은 화면에서 두 개의 모서리 곡률이 경쟁한다.
+        "group/card flex flex-col gap-(--card-spacing) rounded-lg bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-lg *:[img:last-child]:rounded-b-lg",
         className
       )}
       {...props}
@@ -29,7 +32,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-xl px-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-(--card-spacing)",
+        "group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-lg px-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-(--card-spacing)",
         className
       )}
       {...props}
@@ -91,7 +94,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center rounded-b-xl border-t bg-muted/50 p-(--card-spacing)",
+        "flex items-center rounded-b-lg border-t bg-muted/50 p-(--card-spacing)",
         className
       )}
       {...props}

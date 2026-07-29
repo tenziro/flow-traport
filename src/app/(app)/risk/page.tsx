@@ -83,7 +83,7 @@ export default async function RiskPage({
 
   return (
     <>
-      <header className="rise mb-3">
+      <header className="rise mb-4">
         <h1 className="text-xl font-semibold tracking-tight">리스크</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
           {dept}이 물고 있는 프로젝트를 위험도순으로 세웠어요. 목록이 아니라
@@ -95,7 +95,7 @@ export default async function RiskPage({
 
       <section
         aria-label="부서 요약"
-        className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
+        className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4"
       >
         <Kpi
           i={1}
@@ -147,7 +147,7 @@ export default async function RiskPage({
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-4">
           {/* 등급 분포 한 줄. 카드를 다 세지 않아도 부서가 지금 어떤 상태인지 읽힌다 */}
           <div
             className="rise flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl bg-card px-4 py-2.5 ring-1 ring-foreground/10"
@@ -210,7 +210,7 @@ export default async function RiskPage({
       )}
 
       {unresolved > 0 && (
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p className="mt-6 text-xs text-muted-foreground">
           프로젝트 {unresolved}개는 flow에서 이름을 찾지 못해 상태 변경과 댓글을
           막아뒀어요.
         </p>

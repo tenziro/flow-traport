@@ -47,7 +47,7 @@ export function SiteFooter() {
           <CenterMorphModalTrigger>
             <button
               type="button"
-              className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
+              className="flex shrink-0 items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
             >
               <IconChangelog size={13} aria-hidden />
               업데이트 로그

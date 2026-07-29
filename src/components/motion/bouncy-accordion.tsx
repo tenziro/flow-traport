@@ -6,10 +6,14 @@
 //
 // 두 번째 개조: 내용 래퍼의 `px-5 pb-5`를 `classNames.body`로 열었다. 원본은 하드코딩이라
 // 호출부에서 `description`에 `-mx-5`를 걸어 상쇄해야 했는데, 그러면 내용이 행보다 40px
-// 넓어져서 `overflow-hidden`(높이 애니메이션용) + 라운드 28px에 오른쪽이 잘렸다.
+// 넓어져서 `overflow-hidden`(높이 애니메이션용) + 모서리 라운드에 오른쪽이 잘렸다.
 // 상쇄가 아니라 `body: "px-0"`으로 끄는 게 맞다.
 //
-// 주의 — 행이 `bg-card` + `overflow-hidden` + 라운드 28px 카드다. 이 앱은 이미 Card
+// 세 번째 개조: 묶음 첫·끝 행의 모서리를 28px → 8px. 이 앱의 모서리는 카드 기준 8px이고,
+// 업데이트 로그에서는 이 행들이 8px 모달 안에 든다 — 안쪽이 더 둥글면 두 곡률이 겹쳐 보인다.
+// `--radius`를 못 읽는 자리다: Motion이 숫자로 보간한다 (center-morph-modal.tsx와 같은 이유).
+//
+// 주의 — 행이 `bg-card` + `overflow-hidden` + 라운드 카드다. 이 앱은 이미 Card
 // 안에서 쓰기 때문에 호출부에서 `classNames.item`에 `bg-transparent overflow-visible`을
 // 준다. **둘 다 필요하다**: 배경만 지우면 라운드는 안 보이는데 `overflow-hidden`은 살아
 // 있어서 네 모서리 곡선이 계속 내용을 잘라낸다 (`px-0`이면 특히 눈에 띈다).
@@ -190,10 +194,10 @@ function BouncyAccordionRow({
         data-state={open ? "open" : "closed"}
         initial={false}
         animate={{
-          borderTopLeftRadius: startsGroup ? 28 : 0,
-          borderTopRightRadius: startsGroup ? 28 : 0,
-          borderBottomLeftRadius: endsGroup ? 28 : 0,
-          borderBottomRightRadius: endsGroup ? 28 : 0,
+          borderTopLeftRadius: startsGroup ? 8 : 0,
+          borderTopRightRadius: startsGroup ? 8 : 0,
+          borderBottomLeftRadius: endsGroup ? 8 : 0,
+          borderBottomRightRadius: endsGroup ? 8 : 0,
         }}
         transition={reduce ? { duration: 0 } : ROW_TRANSITION}
         className={cn(

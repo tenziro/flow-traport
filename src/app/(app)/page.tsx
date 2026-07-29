@@ -102,7 +102,7 @@ export default async function TodayPage({
 
   return (
     <>
-      <header className="rise mb-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+      <header className="rise mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">
             {worklist.user.name}님, 오늘 챙길 건 이거예요
@@ -121,7 +121,7 @@ export default async function TodayPage({
       {/* KPI는 한 줄로 세운다. 2×2로 접으면 4칸이 두 덩어리로 보여서 순위가 안 읽힌다 */}
       <section
         aria-label="요약"
-        className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
+        className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4"
       >
         <Stat
           i={1}
@@ -168,7 +168,7 @@ export default async function TodayPage({
       {/* `items-start` — 방치된 업무는 길이가 들쭉날쭉하다. 높이를 맞추면 짧은 쪽이 빈 상자가 된다.
           `grid-cols-1`은 좁은 화면에서 반드시 필요하다 — 안 적으면 열이 `auto`라 카드가
           내용 최소폭 아래로 안 줄어든다 (bug-report BUG-025) */}
-      <div className="mb-3 grid grid-cols-1 items-start gap-3 xl:grid-cols-12">
+      <div className="mb-6 grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
         <Card
           id="focus"
           className="rise scroll-mt-32 xl:col-span-8"
@@ -282,7 +282,7 @@ export default async function TodayPage({
        * 칸 나눔은 **위 줄과 같은 8:4**다. 6:6으로 두면 두 줄의 세로 경계가 어긋나서
        * 화면에 기준선이 두 개 생긴다. `items-start` — 높이를 맞추면 짧은 쪽이 빈 상자가 된다.
        */}
-      <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-12">
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
         <Card
           id="overdue"
           className="rise scroll-mt-32 xl:col-span-8"
@@ -371,11 +371,11 @@ export default async function TodayPage({
                     className="disclose group px-2 py-1.5"
                   >
                     <summary className="flex cursor-pointer list-none items-start gap-2 text-sm">
-                      {/* 안 읽은 게 남았으면 알약을 꽉 채운다. 옅은 배경(다 읽은 그룹)과
+                      {/* 안 읽은 게 남았으면 배지를 꽉 채운다. 옅은 배경(다 읽은 그룹)과
                           나란히 놓였을 때 눈이 먼저 가는 쪽이 아직 답 안 한 쪽이다 */}
                       <span
                         className={cn(
-                          'tabular mt-0.5 min-w-8 shrink-0 rounded-full px-1.5 text-center text-xs font-semibold',
+                          'tabular mt-0.5 min-w-8 shrink-0 rounded-md px-1.5 text-center text-xs font-semibold',
                           group.unread > 0
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-primary/15 text-primary',
@@ -507,7 +507,7 @@ export default async function TodayPage({
        * (news-bell.tsx), 남은 일정 하나가 폭을 다 쓰면 시각 열 옆이 허허벌판이라
        * 위 카드들과 같은 8칸에 세워 왼쪽 경계선을 유지한다.
        */}
-      <div className="mt-3 grid grid-cols-1 items-start gap-3 xl:grid-cols-12">
+      <div className="mt-6 grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
         {/* 오늘 일정 (PRD §13 B3). 캘린더는 REST에만 있다 — MCP로는 못 가져왔다 */}
         <Card
           className="rise xl:col-span-8"

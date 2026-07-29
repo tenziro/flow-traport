@@ -53,7 +53,7 @@ export default async function TeamPage({
 
   return (
     <>
-      <header className="rise mb-3 flex flex-wrap items-start justify-between gap-3">
+      <header className="rise mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">팀</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
@@ -68,7 +68,7 @@ export default async function TeamPage({
 
       <section
         aria-label="부서 요약"
-        className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
+        className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4"
       >
         <Kpi
           i={1}
@@ -116,7 +116,7 @@ export default async function TeamPage({
        */}
       {/* `grid-cols-1` — 안 적으면 좁은 화면 열이 `auto`라 카드가 내용 최소폭 아래로
           안 줄어든다 (bug-report BUG-025) */}
-      <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
         {ranked.map((member, i) => (
           <MemberCard
             key={member.name}
@@ -130,7 +130,7 @@ export default async function TeamPage({
         ))}
       </div>
 
-      <p className="mt-3 text-xs text-muted-foreground">
+      <p className="mt-6 text-xs text-muted-foreground">
         &lsquo;어제 끝낸 일&rsquo;은 아직 없어요. 지금 막힌 것과 곧 마감할 것만
         모았어요.
       </p>

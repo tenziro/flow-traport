@@ -103,8 +103,8 @@ export const viewport: Viewport = {
   // 쿼리 말고는 조건을 걸 수단이 없다. 기기는 어두운데 앱만 밝게 쓰는 경우 주소창만
   // 어둡게 남는다 — 거슬리면 `<meta name="theme-color">`를 클라이언트에서 갈아끼워야 한다.
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#fafbf7' },
-    { media: '(prefers-color-scheme: dark)', color: '#0a0b09' },
+    { media: '(prefers-color-scheme: light)', color: '#fafafa' },
+    { media: '(prefers-color-scheme: dark)', color: '#151c2c' },
   ],
 };
 

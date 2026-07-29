@@ -1,11 +1,13 @@
 "use client";
 // beui.dev/components/motion/input
 //
-// beUI 원본 그대로다. 컴포넌트 자체에는 lucide 의존이 없어 아이콘 치환이 없었다
-// (성공 체크는 인라인 SVG를 직접 그린다).
+// beUI 원본에서 한 군데 고쳤다: 필드 모서리를 `rounded-full` → `rounded-md`. 이 앱의
+// 모서리는 카드 기준 8px이고, 알약 입력은 옆에 선 버튼·배지와 다른 곡률로 혼자 튄다.
+// 기본값에서 고치는 이유는 호출부마다 덮는 걸 잊으면 알약이 다시 나타나기 때문이다.
+// 컴포넌트 자체에는 lucide 의존이 없어 아이콘 치환은 없었다 (성공 체크는 인라인 SVG).
 //
-// 주의 — 이 앱은 촘촘한 행에 쓰기 때문에 기본 치수(`h-11 rounded-full text-base`)를
-// 호출부에서 `classNames.field` / `classNames.input`으로 덮는다. 컴포넌트를 고치지 않는다.
+// 주의 — 이 앱은 촘촘한 행에 쓰기 때문에 남은 기본 치수(`h-11 text-base`)는
+// 호출부에서 `classNames.field` / `classNames.input`으로 덮는다.
 //
 // `onChange`는 DOM 이벤트가 아니라 `(value: string) => void`다. `name`은 `...rest`로
 // 내부 `<input>`에 그대로 흘러가므로 FormData 수집은 평소대로 된다.
@@ -137,7 +139,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
                 : "idle"
         }
         className={cn(
-          "relative h-11 overflow-hidden rounded-full border transition-colors duration-200",
+          "relative h-11 overflow-hidden rounded-md border transition-colors duration-200",
           "border-border",
           focused && !hasError && "border-foreground/40 ring-2 ring-ring/40",
           hasError && "border-destructive ring-2 ring-destructive/25",

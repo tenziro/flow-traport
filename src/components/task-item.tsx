@@ -104,7 +104,7 @@ export function TaskItem({
             {pick.reasons.map((reason) => (
               <li
                 key={reason}
-                className="rounded-full bg-secondary px-1.5 py-0.5 text-[11px] text-secondary-foreground"
+                className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] text-secondary-foreground"
               >
                 {withUnit(reason)}
               </li>

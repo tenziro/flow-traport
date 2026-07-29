@@ -1,5 +1,8 @@
 "use client";
 // beui.dev/components/motion/animated-badge
+//
+// 원본에서 모서리를 고쳤다: `rounded-full` → `rounded-md`(맥동 겹면도 같이). 이 앱의
+// 모서리는 카드 기준 8px이고, 업무 줄에서 이 배지는 상태 배지·프로젝트 배지와 나란히 선다.
 
 // 아이콘은 Reicon으로 교체 (원본 beUI는 lucide-react를 쓴다). 앱에 아이콘 체계는 하나만 둔다.
 import {
@@ -151,7 +154,7 @@ export function AnimatedBadge({
       layout
       transition={{ type: "spring", stiffness: 420, damping: 30, mass: 0.7 }}
       className={cn(
-        "relative inline-flex shrink-0 items-center overflow-hidden whitespace-nowrap rounded-full border font-medium tabular-nums",
+        "relative inline-flex shrink-0 items-center overflow-hidden whitespace-nowrap rounded-md border font-medium tabular-nums",
         "transition-colors duration-300",
         STATUS_CLASS[status],
         SIZE_CLASS[size],
@@ -162,7 +165,7 @@ export function AnimatedBadge({
       {pulse && !reduce ? (
         <motion.span
           aria-hidden
-          className="absolute inset-0 rounded-full bg-current opacity-10"
+          className="absolute inset-0 rounded-md bg-current opacity-10"
           animate={{ scale: [0.94, 1.08, 0.94], opacity: [0.08, 0.16, 0.08] }}
           transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
         />

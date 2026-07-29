@@ -21,9 +21,9 @@ import { cn } from "@/lib/utils";
  * 변환은 아래 두 함수가 로컬 필드로만 한다.
  */
 
-/** 바꾸기 모달의 고르기 칸과 같은 pill (`task-actions.tsx` `Pick`). */
-const TRIGGER_PILL =
-  "flex h-8 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-left text-sm transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50";
+/** 바꾸기 모달의 고르기 칸과 같은 모양·같은 높이 (`task-actions.tsx` `Chip`). */
+const TRIGGER =
+  "flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-left text-sm transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50";
 
 /** `YYYY-MM-DD` → 로컬 자정 `Date`. 형식이 어긋나면 undefined. */
 function toDate(value: string): Date | undefined {
@@ -65,7 +65,7 @@ export function DateField({
       <PopoverTrigger
         type="button"
         aria-labelledby={labelledBy}
-        className={cn("tabular", TRIGGER_PILL, !value && "text-muted-foreground", className)}
+        className={cn("tabular", TRIGGER, !value && "text-muted-foreground", className)}
       >
         <IconCalendar size={13} className="shrink-0" />
         <span className="min-w-0 flex-1 truncate">{value || placeholder}</span>

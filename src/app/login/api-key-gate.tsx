@@ -97,7 +97,7 @@ export function ApiKeyGate({ hasKey }: { hasKey: boolean }) {
           </a>
 
           <form action={submit} className="mt-6">
-            {/* 치수는 beUI 기본값(h-11 rounded-full)을 그대로 쓴다 — pill이 기본이다.
+            {/* 치수는 beUI 기본값(h-11)을 그대로 쓴다 — 로그인 화면은 촘촘하지 않다.
                 입력을 `disabled`로 잠그지 않는다: 잠긴 필드는 FormData에서 빠진다.
                 제출 버튼만 잠그면 이중 제출은 막힌다 (new-task-form.tsx와 같은 방식). */}
             <Input

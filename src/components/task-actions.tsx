@@ -70,7 +70,7 @@ const FIELD = "flex min-w-0 flex-1 flex-wrap items-center gap-2";
  * 고치는 중의 값 열. 지금 값·컨트롤·저장이 각자 줄을 갖는다.
  *
  * 한 줄을 나눠 쓰던 때는 지금 값 글자 수만큼 컨트롤이 오른쪽으로 밀려서 네 줄이 저마다
- * 다른 x에서 고르기를 시작했고, 후보 pill이 두 칸씩 접혀 저장·취소 사이로 끼어들었다.
+ * 다른 x에서 고르기를 시작했고, 후보 칸이 두 개씩 접혀 저장·취소 사이로 끼어들었다.
  * 위아래로 쌓으면 어느 줄을 펼쳐도 같은 모양이다.
  */
 const EDITING = "flex min-w-0 flex-1 flex-col items-start gap-2";
@@ -359,15 +359,15 @@ function Shown({ now, label, onEdit }: { now: string; label: string; onEdit: () 
 }
 
 /**
- * 고르기 pill 한 칸. 상태·우선순위·담당자가 같이 쓴다.
+ * 고르기 칸 하나. 상태·우선순위·담당자가 같이 쓴다.
  *
  * 폼 값은 input이 스스로 싣는다 — 켠 것만 이름표를 달고 나가서 서버가 그대로 받는다.
  * 담당자는 `checkbox`(여럿), 상태·우선순위는 `radio`(하나)다. 라디오는 켜질 때만 `change`를
  * 주므로 `onPick`은 켜는 쪽만 알면 된다.
  *
- * 네모·동그라미는 그리지 않는다. 후보가 여섯이면 표식 여섯 개가 값 열을 채우는데 여기서
- * 읽어야 할 것은 "무엇이 켜졌나" 하나다. 켬은 라임 배경이 말하고, 표식을 숨겨 사라진
- * 키보드 포커스 표시는 `has-[:focus-visible]`로 pill이 대신 받는다.
+ * 체크 네모·라디오 동그라미는 그리지 않는다. 후보가 여섯이면 표식 여섯 개가 값 열을
+ * 채우는데 여기서 읽어야 할 것은 "무엇이 켜졌나" 하나다. 켬은 강조 배경이 말하고, 표식을
+ * 숨겨 사라진 키보드 포커스 표시는 `has-[:focus-visible]`로 칸이 대신 받는다.
  *
  * 드롭다운으로 돌아가지 않는다. 후보가 넷·다섯인데 목록을 접어 두면 무엇을 고를 수 있는지
  * 알려면 한 번 더 눌러야 하고, beUI `Select`는 목록이 `absolute`로 붙어 clip-path로 자기
@@ -391,7 +391,7 @@ function Chip({
   return (
     <label
       className={cn(
-        "inline-flex h-8 cursor-pointer items-center rounded-full border px-3 text-sm transition-colors select-none has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50",
+        "inline-flex h-8 cursor-pointer items-center rounded-md border px-3 text-sm transition-colors select-none has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50",
         on
           ? "border-primary bg-primary text-primary-foreground"
           : "border-border bg-background text-foreground hover:bg-muted",
@@ -410,7 +410,7 @@ function Chip({
   );
 }
 
-/** 후보 pill이 값 열 폭을 다 쓴다 — 다섯 개면 한 줄에 안 든다. */
+/** 후보 칸이 값 열 폭을 다 쓴다 — 다섯 개면 한 줄에 안 든다. */
 const CHIPS = "flex w-full flex-wrap gap-1.5";
 
 /**
@@ -538,7 +538,7 @@ function EndDateField({
         {editing ? (
           <>
             <span className={FROM}>{current} →</span>
-            {/* 마감일만 pill 목록이 아니다 — 후보가 365개다 */}
+            {/* 마감일만 고르기 칸 목록이 아니다 — 후보가 365개다 */}
             <DateField
               name="endDate"
               value={picked}
@@ -621,7 +621,7 @@ function PriorityField({
  * 후보 목록은 **`변경`을 누를 때만 부른다.** 프로젝트 참여자 조회가 업무 한 줄에 한 번이라,
  * 모달을 열 때 같이 부르면 상태만 바꾸러 온 사람도 그 값을 치른다.
  *
- * pill은 상태·우선순위와 같은 모양이지만 여기만 `checkbox`다 — 담당은 여럿이 나눠 진다.
+ * 고르기 칸은 상태·우선순위와 같은 모양이지만 여기만 `checkbox`다 — 담당은 여럿이 나눠 진다.
  */
 function WorkerField({
   projectId,
@@ -780,8 +780,8 @@ function CommentForm({
       <label className="sr-only" htmlFor={`comment-${taskId}`}>
         댓글
       </label>
-      {/* beUI Input 기본 치수(h-11 rounded-full text-base)를 촘촘한 행에 맞춘다.
-          모서리는 기본값 그대로 pill이다 — 바로 옆 `남기기` 버튼이 pill이라 둘이 한 벌로 붙는다. */}
+      {/* beUI Input 기본 치수(h-11 text-base)를 촘촘한 행에 맞춘다. 모서리는 기본값
+          그대로다 — 바로 옆 `남기기` 버튼과 같은 계열이라 둘이 한 벌로 붙는다. */}
       <Input
         id={`comment-${taskId}`}
         name="content"
