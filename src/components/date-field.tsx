@@ -21,8 +21,8 @@ import { cn } from "@/lib/utils";
  * 변환은 아래 두 함수가 로컬 필드로만 한다.
  */
 
-/** 셀렉트와 같은 pill. 담당자 버튼도 같은 열에 서야 해서 밖으로 뺀다. */
-export const TRIGGER_PILL =
+/** 바꾸기 모달의 고르기 칸과 같은 pill (`task-actions.tsx` `Pick`). */
+const TRIGGER_PILL =
   "flex h-8 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-left text-sm transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50";
 
 /** `YYYY-MM-DD` → 로컬 자정 `Date`. 형식이 어긋나면 undefined. */
@@ -70,8 +70,10 @@ export function DateField({
         <IconCalendar size={13} className="shrink-0" />
         <span className="min-w-0 flex-1 truncate">{value || placeholder}</span>
       </PopoverTrigger>
-      {/* 달력 폭에 맞춘다. 기본값(`w-72` + 안쪽 여백)은 7칸짜리 격자보다 넓어 오른쪽이 빈다 */}
-      <PopoverContent align="start" className="w-auto p-0">
+      {/* 달력 폭에 맞춘다. 기본값(`w-72` + 안쪽 여백)은 7칸짜리 격자보다 넓어 오른쪽이 빈다.
+          `z-[110]`은 바꾸기 모달(`z-[100]` — center-morph-modal)보다 위로 올리는 값이다.
+          기본 `z-50`이면 모달 안에서 열었을 때 달력이 패널 뒤로 들어간다 */}
+      <PopoverContent align="start" className="z-[110] w-auto p-0">
         <Calendar
           mode="single"
           locale={ko}

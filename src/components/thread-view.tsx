@@ -92,10 +92,12 @@ export function ThreadView({
                     {comment.system && <span className="text-muted-foreground/70">기록</span>}
                     <span className="text-muted-foreground">{fmtDateTime(comment.at)}</span>
                   </p>
-                  {/* 줄바꿈은 살린다 — 댓글이 목록 형태로 오는 경우가 많다 */}
+                  {/* 줄바꿈은 살린다 — 댓글이 목록 형태로 오는 경우가 많다.
+                      `wrap-anywhere` — 링크는 띄어쓰기가 없어서 안 끊으면 그 한 덩어리가
+                      카드 최소폭이 되고 좁은 화면에서 카드가 화면을 넘는다 (BUG-025) */}
                   <p
                     className={cn(
-                      "mt-0.5 text-[13px] leading-relaxed whitespace-pre-line",
+                      "mt-0.5 text-[13px] leading-relaxed whitespace-pre-line wrap-anywhere",
                       comment.system && "text-muted-foreground",
                     )}
                   >

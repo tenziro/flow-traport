@@ -118,8 +118,10 @@ export function TaskItem({
             <span className="flex h-[1lh] shrink-0 items-center">
               <IconLastComment size={13} />
             </span>
-            {/* 폭은 열 끝까지 쓰고 2줄에서 자른다 — 좁혀 두면 같은 2줄에 담기는 말이 줄어든다 */}
-            <span className="line-clamp-2">{task.lastComment}</span>
+            {/* 폭은 열 끝까지 쓰고 2줄에서 자른다 — 좁혀 두면 같은 2줄에 담기는 말이 줄어든다.
+                `wrap-anywhere` — 댓글에 섞여 오는 링크는 띄어쓰기가 없다. 안 끊으면 그 한
+                덩어리가 통째로 잘려서 뒤에 오는 말까지 안 보인다 (BUG-025) */}
+            <span className="line-clamp-2 wrap-anywhere">{task.lastComment}</span>
           </p>
         )}
         <FlowLink href={task.link} className="mt-1.5" />

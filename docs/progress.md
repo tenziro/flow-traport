@@ -1,6 +1,6 @@
 # 개발 진행 상황
 
-버전 0.19.0 · 2026-07-29 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
+버전 0.20.1 · 2026-07-29 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
 
 ## 요약
 
@@ -12,6 +12,7 @@
 | 3 | 리스크 보드 | 완료 |
 | 4 | 팀 화면 | 완료 |
 | 5 | REST 확장 (Tier A·B) | 완료 (Tier C는 안 한다) |
+| 6 | 내 업무 화면 (`/tasks`) | **설계만** — PRD §6.5, 구현 전 |
 
 기능은 다 붙었다. **아직 실제로 쓰기 도구를 한 번도 호출하지 않았다** — 검증 안 된
 가정이 하나 남아 있다 ([bug-report.md](bug-report.md) BUG-005).
@@ -829,6 +830,91 @@ BUG-022 이후로 붙인 습관대로 가정을 세우기 전에 두 경로를 �
 `/api/go/79148381` 은 세션 없이 부르면 `/login`으로 튕기고(프록시 게이트), 그 `postId`로
 게시글 상세를 부르면 `connectUrl: https://flow.team/l/Q7ccJ` 가 나온다 — 검색의 `postId`와
 게시글 상세의 ID 공간이 같다는 확인이다.
+
+### 업무 바꾸기 모달 (v0.20.0)
+
+v0.15의 편집 패널은 셀렉트 네 개를 행 안에 펼쳐 놨다. 지금 값이 그 셀렉트의 placeholder라서
+**값을 확인하려면 고르는 UI를 마주해야** 했고, 하나를 고르면 확인 문구와 버튼 둘이 그 줄에 더
+붙어 네 줄이 통째로 흔들렸다. 읽는 자리와 고치는 자리를 갈랐다 — 설계 근거는 PRD §6.1.4.
+
+| 붙은 것 | 어디 |
+|---|---|
+| `업무 바꾸기` 모달 | [task-actions.tsx](../src/components/task-actions.tsx) — beUI [center-morph-modal](../src/components/motion/center-morph-modal.tsx) |
+| 네 줄 다 텍스트 → `변경` 누른 줄만 컨트롤 | 같은 파일 `Row` / `useSave` |
+| 고르기는 브라우저 기본 `<select>` | 같은 파일 `Pick` — `appearance-none` + 손으로 그린 `IconChevronDown` |
+| 달력은 모달 위로 | [date-field.tsx](../src/components/date-field.tsx) — `PopoverContent`에 `z-[110]` |
+
+**beUI `Select`를 쓸 수 없었다.** 모달 패널이 `clip-path`로 자기 네모를 잘라내서, 트리거 밑에
+`absolute`로 붙는 목록은 마지막 줄에서 그대로 사라진다. 기본 `<select>` 목록은 브라우저가
+띄우니 무엇에도 안 잘리고 폼 값도 스스로 싣는다. 잘림·레이어 재현은 [BUG-026](bug-report.md#bug-026).
+
+**저장한 뒤 다시 `변경`을 누르면 옛 값이 보였다.** 서버가 다시 그려도 `props`로 온 값은
+`useState` 초기값이라 안 바뀐다 — `저장`으로 받은 값을 따로 들고 `saved || now`로 읽고,
+`변경`·`취소` 둘 다 고른 값을 비우게 했다 ([BUG-027](bug-report.md#bug-027)).
+
+확인한 것 (브라우저): 320px에서 모달이 화면에 들어가고, 두 줄을 동시에 `변경`으로 열면
+현재값 → 컨트롤 → `저장`·`취소`로 접혀 내려가며 넘치는 곳이 없다. 1440px에서 네 줄 라벨
+왼쪽 경계가 맞고 컨트롤 폭이 같다.
+
+### 모바일에서 카드가 화면을 넘던 것 (v0.20.0)
+
+오늘 화면의 `밀리는 업무` · `나를 부른 사람들`이 390px에서 화면 밖으로 나갔다 (`scrollWidth` 443).
+원인은 카드가 아니라 **격자 열**이었다. `xl:grid-cols-12`만 적으면 좁은 화면 열은 `auto`
+= `minmax(auto, max-content)`이고, 그 최소값은 **내용 최소폭**이라 열이 화면을 밀어낸다.
+[BUG-023](bug-report.md#bug-023)과 같은 기제인데 그때 적어 둔 게 "스택 컨테이너" 이야기라
+격자 기본 상태에 적용되는 줄로 안 읽혔다. 이번엔 규칙으로 적었다 — [BUG-025](bug-report.md#bug-025).
+
+| 고친 것 | 왜 |
+|---|---|
+| 격자 넷에 `grid-cols-1` | `repeat(1, minmax(0,1fr))`이라 열도, 그 안 카드도 0까지 줄어든다 ([page.tsx](<../src/app/(app)/page.tsx>) 셋, [team/page.tsx](<../src/app/(app)/team/page.tsx>) 하나) |
+| 댓글 본문 셋에 `wrap-anywhere` | 최소폭을 크게 만든 건 댓글에 섞여 온 링크다. 안 끊으면 열은 줄어도 링크가 카드를 잘라 뒤 글자까지 감춘다 ([page.tsx](<../src/app/(app)/page.tsx>), [thread-view.tsx](../src/components/thread-view.tsx), [task-item.tsx](../src/components/task-item.tsx)) |
+
+`min-w-0`은 안 붙였다 — `grid-cols-1`이 열을 `auto`에서 빼면 격자 항목의 자동 최소 크기도
+0이 된다. 한 클래스가 둘을 다 덮는다.
+
+확인한 것 (브라우저, 목업 데이터): 390px 접힘 390 / 펼침 390, 320px 전부 펼쳐도 `scrollWidth`
+320이고 넘치는 요소 0개, 1440px에서 두 카드 913 · 451로 8:4 비율 유지.
+
+### 내 업무 화면 설계 (v0.20.1) — 문서만, 구현 전
+
+"내 참여 프로젝트와 프로젝트별 담당 업무 전량"을 볼 화면이 필요하다는 요청. 설계를
+[PRD.md](PRD.md) §6.5에 썼다. **코드는 아직 없다** — Phase 6이다.
+
+실측이 화면의 이유를 만들었다.
+
+| 무엇 | 건수 |
+|---|---|
+| 오늘 화면이 보여 주는 내 담당 업무 | **16건** |
+| 실제 내 담당 업무 | **880건** (38개 프로젝트, 21개는 0건) |
+
+`flow_get_my_worklist`는 전체 목록을 주는 도구가 아니다 — `counts` · `imminent` ·
+`overdueActive` · `mentions`뿐이고, 그마저 담당·공개·진행률 100 미만으로 좁힌다. 864건이
+어느 화면에도 없었다.
+
+**경로를 세 개 시도해서 하나만 남았다.**
+
+| 시도 | 결과 |
+|---|---|
+| `flow_list_projects_by_participant` | 내 `userId`를 줘도 **1개**만 온다. REST `/user/projects/participants`가 그렇고 래퍼도 같다 |
+| `flow_list_project_items(templateType:"task")` | 담당자 · 마감일 · 업무 ID를 **하나도 안 준다** |
+| REST `tasks/filter` + `filterRecords` | **된다.** `WORKER_ID IN <내 userId>`가 서버에서 걸려서 딱 내 것만 온다 |
+
+`flow_list_projects` 1회(59개) + 프로젝트별 `tasks/filter` 59회 동시 10 = **2.1초**. 100건을
+넘는 프로젝트 2개의 커서 페이징까지 64회 4.1초.
+
+**실측 중에 문서 셋을 정정했다.**
+
+| 정정 | 원래 적혀 있던 것 |
+|---|---|
+| REST는 **분당 120회**다 | PRD §12 Q3 "rate limit 없음" — 그건 MCP 얘기였다. 59회 훑기를 1분에 세 번 돌려서 `429`를 봤다 |
+| 완료 판정 = `optionCategory == "2"` | api-spec §2.2 "`columns/status`로 옵션 목록을 받는 편이 안전하다" — **반대였다.** `STTS` 프로젝트는 그 응답이 옵션을 0건 준다 |
+| 상태 컬럼이 **둘**이다 (`STTS` 9 / `STATUS` 12) | api-spec §2.1에 `STTS` 행이 없었다. 표본 8개 중 7개가 `STTS`였고, 이걸 놓쳐서 처음엔 798건이 빈 상태로 보였다 |
+| `STTS` 코드 = 0 요청 · 1 진행 · 2 완료 · 3 보류 · 4 피드백 | api-spec §6.1 "대응표는 아직 없다". `flow_get_post` 시스템 기록의 `SYS_CODE:"S45^^0^^2"`("'요청' → '완료'")로 확정했다 — 빈도로 추측하지 않았다 |
+| `connectUrl`이 **880건 전부 빈 문자열** | "빈 문자열일 수 있음". `projectId`·`postId`가 응답에 있어서 조립하면 된다 |
+
+**보안**: 공용 API 키에 남의 `userId`를 넣어도 그 사람 업무가 그대로 온다 (실측이 정확히 그
+경우였다). 필터 값은 요청에서 받지 않고 서버에서 세션으로 채운다 — PRD §6.5와 api-spec §6.1
+양쪽에 박아 뒀다.
 
 ### 밝기 세 갈래 (v0.15.0)
 

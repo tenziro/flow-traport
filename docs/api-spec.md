@@ -90,7 +90,7 @@ https://api.flow.team
 | 412 | `PRECONDITION_FAILED_ERROR` | 선행조건 불만족 |
 | 412 | `NOT_EXIST_ERROR` / `NOT_EXISTS_ERROR` | 수정·삭제 대상 없음 (문서 내에서 두 철자가 혼용됨) |
 | 412 | `REACHED_MAX_ERROR` | 생성 한도 도달 |
-| 429 | `RATE_LIMIT_EXCEEDED_ERROR` | 사용량 초과 |
+| 429 | `RATE_LIMIT_EXCEEDED_ERROR` | 사용량 초과 — **분당 120회** `(관측 2026-07-28)`. 메시지가 상한을 알려 준다: `요청이 너무 많습니다. (분당 최대 요청가능 횟수: 120)` |
 | 500 | `INTERNAL_SERVER_ERROR` | 내부 오류 |
 | 500 | `SQL_EXECUTION_ERROR` | DB 쿼리 실패 |
 | - | `BETA_API_ACCESS_DENIED_ERROR` | `해당 API는 준비 중 입니다.` — **`/user/*` 는 베타이므로 계정/플랜에 따라 이게 나올 수 있다** |
@@ -128,9 +128,12 @@ https://api.flow.team
 | 6 | `TASK_NM` | 업무명 | 문자열 |
 | 7 | `PRIORITY` | **우선순위** | `low`/`normal`/`high`/`urgent` 계열 |
 | 8 | `PROGRESS` | **진행률** | `"0"`~`"100"` |
+| 9 | `STTS` | **상태 (기본 체계)** | 코드 `"0"`~`"4"`. `optionName`이 **항상 빈 문자열**이다 (§6.1) |
 | 10 | `START_DT` | 시작일 | `YYYYMMDD` |
 | 11 | `END_DT` | **마감일** | `YYYYMMDD` |
-| 12 | `STATUS` | **상태** | `optionSrno` (숫자 문자열) |
+| 12 | `STATUS` | **상태 (커스텀 체계)** | `optionSrno` (숫자 문자열). `optionName`에 라벨이 온다 |
+
+> **상태 컬럼이 둘이다** `(관측 2026-07-28)`. 같은 "상태"가 프로젝트에 따라 `STTS`(9) 또는 `STATUS`(12)로 온다. 표본 8개 프로젝트 중 **7개가 `STTS`**, 1개만 `STATUS`였다. 한쪽만 읽으면 나머지 프로젝트의 상태가 통째로 빈칸이 된다. 코드→라벨 대응표는 §6.1 끝.
 
 `columnType` 값 집합: `TEXT | CHECKBOX | OPTION | NUMBER | DATE | FORMULA | STATUS | ...` (커스텀 컬럼 생성 API 기준 앞 6개, `STATUS` 는 기본 상태 컬럼에서 관측).
 
@@ -172,7 +175,7 @@ https://api.flow.team
 핵심:
 - **값을 읽는 두 경로가 공존한다.** 평면 필드(`END_DT`, `PROGRESS`, `PRIORITY`, `STTS`, `WORKER_REC`)와 컬럼 배열(`TASK_COLUMN_REC[].COLUMN_DATA_REC[].CUSTOM_COLUMN_DATA`). 업무 2.0 프로젝트에서는 컬럼 배열이 정본이고 평면 필드는 비어 있을 수 있다 `(추정)`.
 - **미설정 값은 `null` 이 아니라 빈 문자열 `""`** 이다. falsy 체크로 통일해야 한다.
-- `OPTION_CATEGORY` 가 상태의 완료/미완료 구분에 쓰이는 것으로 보인다 `(추정 — "대기"가 `"0"`)`. 완료 판정은 `optionCategory` 대신 `GET /user/projects/{id}/columns/status` 로 옵션 목록을 받아 `optionName` / `optionOrder` 로 매핑하는 편이 안전하다.
+- **완료 판정은 `optionCategory == "2"` 다** `(실측 2026-07-29 — 아래 추정을 정정한다)`. 원래 이 자리에는 "`optionCategory` 대신 `GET /user/projects/{id}/columns/status` 로 옵션 목록을 받아 매핑하는 편이 안전하다"고 적혀 있었는데 **반대였다**: `STTS` 프로젝트는 그 엔드포인트가 옵션을 하나도 주지 않고(§5.6), 두 상태 체계가 공통으로 주는 필드가 `optionCategory` 하나뿐이다. 코드 대응표는 §6.1 끝.
 - `WORKER_REC[]` 의 **아이템 형태는 관측하지 못했다** (샘플 업무 모두 담당자 미지정). `[{ USER_ID, USER_NM, PRFL_PHTG }]` 형태 `(추정)`.
 
 ### 2.3 PRD 집계 로직 → 필드 매핑
@@ -180,7 +183,7 @@ https://api.flow.team
 | PRD 개념 | 필드 |
 |---|---|
 | 마감일 | `END_DT` (raw) / `defaultColumnType="END_DT"` 컬럼값, `YYYYMMDD` |
-| 상태 | 업무 2.0: `defaultColumnType="STATUS"` 컬럼값 = `optionSrno` → `GET /user/projects/{id}/columns/status` 로 해석. legacy: `STTS` 또는 `taskStatus` |
+| 상태 | `defaultColumnType="STATUS"`(커스텀, `optionName`에 라벨) 또는 `="STTS"`(기본, 코드만). **둘 다 봐야 한다** — 표본 8개 중 7개가 `STTS`였다 (§2.1) |
 | 진행률 | `PROGRESS` (raw) / `defaultColumnType="PROGRESS"` 컬럼값, `"0"`~`"100"` |
 | 최종수정일시 | `EDTR_DTTM` 컬럼값 (`columnSrno=4`), `YYYYMMDDHHmmss`. 게시글 단위로는 `GET /user/posts/{postId}` 의 평면 필드 `editedDateTime` 이 훨씬 쓰기 쉽다 |
 | 담당자 | `WORKER_REC[]` (raw) / `defaultColumnType="WORKER_ID"` 컬럼값 |
@@ -255,6 +258,8 @@ https://api.flow.team
 > 문서 산문에는 `userId` 를 넣으라는 오래된 서술이 남아 있으나, 실제 스펙 정의상 파라미터는 0개다.
 
 > **정정 (실측)**: 이 엔드포인트는 "내 프로젝트 전체"가 **아니다.** API Key 소유자 기준 **1개**만 반환한다. 같은 계정으로 5.2 `GET /user/projects` 는 **59개**(`lastCursor: 58`), MCP `flow_list_projects` 도 59개다. PRD의 "59개 프로젝트 전량 조회"는 **5.2**를 써야 한다. `participants` 가 무엇을 기준으로 1개만 거르는지는 확인하지 못했다.
+>
+> **재확인 (2026-07-29)**: MCP 래퍼 `flow_list_projects_by_participant`에 내 `userId`를 명시해도 같은 **1개**다. 래퍼 문제가 아니라 엔드포인트 자체다. PRD §6.5의 "참여 프로젝트 목록"도 `flow_list_projects`로 간다.
 
 **응답 `data.projects[]`**
 
@@ -345,6 +350,8 @@ https://api.flow.team
 | `optionColor` | string | ✓ | `"Multi06"` | 색상 코드 (헥스 아님, 팔레트 토큰) |
 | `rgsrId` / `rgsnDateTime` / `edtrId` / `edtrDateTime` | string | ✓ | | 감사 필드 |
 
+> **`STTS`만 쓰는 프로젝트는 `options`가 빈 배열이다** `(실측 2026-07-29)`. 이 엔드포인트는 커스텀 상태 컬럼(`STATUS`, `columnSrno` 12)의 옵션만 준다. 표본 8개 중 7개가 `STTS`(9) 프로젝트였고 전부 옵션이 0건이었다 — 그쪽 라벨은 여기서 못 얻는다. §6.1 끝의 코드 대응표를 쓴다.
+
 ### 5.7 쓰기 계열 (참고 — 이 프로젝트에서는 미사용)
 
 | 메서드 | 경로 | Body 요약 | 응답 `data` |
@@ -398,6 +405,14 @@ https://api.flow.team
 
 > 마감일 범위 필터(예: `END_DT <= 오늘+7일`)를 서버에서 걸 수 있는지는 **확인 불가**. `IN` 외 연산자가 문서화되지 않았다. 안전한 구현은 `filterRecords` 없이 전량 조회 후 클라이언트에서 날짜 비교 `(추정)`.
 
+> **담당자 필터는 서버에서 걸린다** `(실측 2026-07-28)`. 전량을 받아 걸러 내는 게 아니라 딱 그 사람 것만 온다.
+> ```json
+> [{"COLUMN_SRNO":"1","OPERATOR_TYPE":"IN","FILTER_DATA":"<userId>"}]
+> ```
+> 59개 프로젝트를 이 필터로 훑어 담당 업무 880건을 받았다 — 동시 10으로 **2.1초**, 100건을 넘는 프로젝트 2개의 커서 페이징까지 64회 4.1초. 프로젝트당 평균 23건. PRD §6.5가 이 경로로 서 있다.
+>
+> **경고**: API Key 소유자가 아닌 사람의 `userId`를 넣어도 **그 사람 업무가 그대로 온다** (실측으로 확인). 필터 값은 요청에서 받지 말고 서버에서 세션으로 채운다.
+
 **응답 `data`**
 
 | 필드 | 타입 | 필수 | 설명 |
@@ -427,7 +442,7 @@ https://api.flow.team
 | `directlyFilteredYn` | string | ✓ | `"Y"` | 직접 필터에 걸린 항목인지 |
 | `hasFilteredSubtaskYn` | string | ✓ | `"N"` | 필터된 하위 업무 보유 여부 |
 | `backgroundColor` | string | | `"#FFFFFF"` | |
-| `connectUrl` | string | | `""` | 업무 링크 |
+| `connectUrl` | string | | `""` | 업무 링크. **실측 880건 전부 빈 문자열이다** — 게시글 상세(§6.3)가 주는 짧은 링크가 여기엔 없다. `projectId`·`postId`가 응답에 있으니 `main.act?projectId=…&postId=…`로 조립한다 |
 | `postViewAuthYn` | string | ✓ | `"Y"` | 게시글 조회 권한 |
 | `columns` | array | ✓ | | 업무 컬럼 목록. 아래 (2026-07-28 실측) |
 
@@ -451,7 +466,17 @@ https://api.flow.team
 | `optionCategory` | `"1"` | `STTS`에서 상태 그룹 |
 | `optionColor` · `customColumnDataId` · `columnType` | `""` | 실측에서 대부분 비어 있다 |
 
-> 상태 코드(`STTS`의 `customColumnData`)와 flow 커스텀 상태 라벨의 대응표는 **아직 없다**. 화면은 워크리스트가 주는 라벨을 쓰고 있어서 필요하지 않았다.
+> **상태 코드 대응표** `(실측 2026-07-29 — 위 "아직 없다"를 정정한다)`. `STTS` 컬럼은 `optionName`이 항상 빈 문자열이고 `customColumnData`에 코드만 온다. 코드 의미는 `flow_get_post` 시스템 댓글의 상태 변경 기록으로 확정했다 — `SYS_CODE:"S45^^<이전>^^<이후>"` 형식에 사람 말 문구가 붙어 온다.
+>
+> | 코드 | 라벨 | `optionCategory` | 근거 |
+> |---|---|---|---|
+> | `0` | 요청 | `"0"` | `S45^^0^^2` = "'요청' → '완료'" |
+> | `1` | 진행 | `"1"` | 카테고리 |
+> | `2` | 완료 | `"2"` | 위 기록의 도착점. 같은 업무 `PROGRESS`가 100이 됐다 |
+> | `3` | 보류 | `"3"` | 카테고리 |
+> | `4` | 피드백 | `"1"` | `S45^^4^^0` = "'피드백' → '요청'" |
+>
+> **완료 판정은 `optionCategory == "2"`로 한다.** `STTS`·`STATUS` 두 체계가 공통으로 이 값을 주는 유일한 필드다. §2.1의 `OPTION_CATEGORY` 추정("대기가 0")은 이걸로 확정됐다.
 
 ### 6.2 `GET /user/posts/projects/{projectId}` — 프로젝트 게시글 목록
 

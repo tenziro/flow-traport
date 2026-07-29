@@ -179,8 +179,10 @@ export default async function TodayPage({
         />
       </section>
 
-      {/* `items-start` — 방치된 업무는 길이가 들쭉날쭉하다. 높이를 맞추면 짧은 쪽이 빈 상자가 된다 */}
-      <div className="mb-3 grid items-start gap-3 xl:grid-cols-12">
+      {/* `items-start` — 방치된 업무는 길이가 들쭉날쭉하다. 높이를 맞추면 짧은 쪽이 빈 상자가 된다.
+          `grid-cols-1`은 좁은 화면에서 반드시 필요하다 — 안 적으면 열이 `auto`라 카드가
+          내용 최소폭 아래로 안 줄어든다 (bug-report BUG-025) */}
+      <div className="mb-3 grid grid-cols-1 items-start gap-3 xl:grid-cols-12">
         <Card
           id="focus"
           className="rise scroll-mt-32 xl:col-span-8"
@@ -294,7 +296,7 @@ export default async function TodayPage({
        * 칸 나눔은 **위 줄과 같은 8:4**다. 6:6으로 두면 두 줄의 세로 경계가 어긋나서
        * 화면에 기준선이 두 개 생긴다. `items-start` — 높이를 맞추면 짧은 쪽이 빈 상자가 된다.
        */}
-      <div className="grid items-start gap-3 xl:grid-cols-12">
+      <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-12">
         <Card
           id="overdue"
           className="rise scroll-mt-32 xl:col-span-8"
@@ -479,7 +481,9 @@ export default async function TodayPage({
                               {alarm.content && (
                                 // 줄바꿈은 살린다 — 댓글이 목록 형태로 오는 경우가 많다.
                                 // 폭은 열 끝까지. 2단 격자 안이라 이미 화면 절반이다.
-                                <p className="mt-1 text-[13px] leading-relaxed whitespace-pre-line">
+                                // `wrap-anywhere` — 댓글에 링크가 섞여 온다. 띄어쓰기가 없어서
+                                // 안 끊으면 그 한 덩어리가 카드 최소폭이 된다 (BUG-025).
+                                <p className="mt-1 text-[13px] leading-relaxed whitespace-pre-line wrap-anywhere">
                                   {alarm.content}
                                 </p>
                               )}
@@ -517,7 +521,7 @@ export default async function TodayPage({
        * (news-bell.tsx), 남은 일정 하나가 폭을 다 쓰면 시각 열 옆이 허허벌판이라
        * 위 카드들과 같은 8칸에 세워 왼쪽 경계선을 유지한다.
        */}
-      <div className="mt-3 grid items-start gap-3 xl:grid-cols-12">
+      <div className="mt-3 grid grid-cols-1 items-start gap-3 xl:grid-cols-12">
         {/* 오늘 일정 (PRD §13 B3). 캘린더는 REST에만 있다 — MCP로는 못 가져왔다 */}
         <Card
           className="rise xl:col-span-8"

@@ -103,7 +103,9 @@ export default async function TeamPage({
        * 3단까지만. 업무 줄이 오늘 화면과 같은 `TaskItem`이 되면서 한 줄에 상태 배지·
        * 프로젝트·flow 링크·액션이 다 들어간다 — 4단으로 쪼개면 그게 줄줄이 접힌다.
        */}
-      <div className="grid items-start gap-2 md:grid-cols-2 xl:grid-cols-3">
+      {/* `grid-cols-1` — 안 적으면 좁은 화면 열이 `auto`라 카드가 내용 최소폭 아래로
+          안 줄어든다 (bug-report BUG-025) */}
+      <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-2 xl:grid-cols-3">
         {ranked.map((member, i) => (
           <MemberCard
             key={member.name}
