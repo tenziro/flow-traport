@@ -190,9 +190,10 @@ export async function updateTaskPriority(
 /**
  * 담당자 교체 (PRD §13 A4).
  *
- * ponytail: 한 명으로 덮는다. flow API는 배열을 받지만 화면에서 여럿을 고르게 하면
- * 이 행 하나가 폼이 되어버린다 — 공동 담당이 필요하면 flow에서 하면 된다.
- * 덮어쓰기라는 걸 확인 문구에 그대로 적는다.
+ * 여러 명을 받는다 — flow는 공동 담당을 두는데, 한 명으로 덮으면 이 화면에서 담당자를
+ * 건드릴 때마다 나머지가 조용히 떨어졌다. 체크한 사람 전원으로 덮는다 (`workerId` 여러 개).
+ *
+ * 그래도 덮어쓰기다. 안 켠 사람은 담당에서 빠지므로 화면이 그 말을 그대로 적는다.
  */
 export async function updateTaskWorker(
   _prev: ActionResult | null,
@@ -200,15 +201,19 @@ export async function updateTaskWorker(
 ): Promise<ActionResult> {
   const projectId = String(form.get("projectId") ?? "");
   const taskId = String(form.get("taskId") ?? "");
-  const workerId = String(form.get("workerId") ?? "").trim();
+  const workerIds = form.getAll("workerId").map(String).filter(Boolean);
   const workerName = String(form.get("workerName") ?? "").trim();
 
   if (!projectId || !taskId) return { ok: false, message: "업무를 찾지 못했어요." };
-  if (!workerId) return { ok: false, message: "담당자를 골라주세요." };
+  if (workerIds.length === 0) return { ok: false, message: "담당자를 골라주세요." };
 
   return restRun(async () => {
-    await setTaskWorkers(projectId, taskId, [workerId]);
-    return `담당자를 ${workerName || workerId}(으)로 바꿨어요.`;
+    await setTaskWorkers(projectId, taskId, workerIds);
+    const who = workerName || workerIds.join(", ");
+    // 여럿이면 `(으)로`가 이름 목록 끝에 붙어 안 읽힌다 — 인원으로 맺는다
+    return workerIds.length > 1
+      ? `담당자를 ${who} ${workerIds.length}명으로 바꿨어요.`
+      : `담당자를 ${who}(으)로 바꿨어요.`;
   }, form.get("path"));
 }
 

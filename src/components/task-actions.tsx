@@ -12,7 +12,7 @@ import {
   type ActionResult,
   type ParticipantResult,
 } from "@/app/(app)/actions";
-import type { TaskFields } from "@/lib/flow/rest";
+import type { Participant, TaskFields } from "@/lib/flow/rest";
 import { TASK_STATUS, type TaskStatus } from "@/lib/task-status";
 import { TASK_PRIORITY, type TaskPriority } from "@/lib/task-priority";
 import { DateField } from "@/components/date-field";
@@ -58,8 +58,11 @@ import { cn, fmtDate } from "@/lib/utils";
  * 네 줄이 라벨 열과 값 열을 같이 쓴다. 라벨을 값의 형제로 그냥 두면 글자 수가 다른
  * 만큼(상태 2자 · 우선순위 4자) 값 시작점이 줄마다 어긋나고, 넘친 결과 문구가 라벨
  * 밑(x=0)까지 되감긴다. 열을 고정하면 네 줄의 왼쪽 끝과 오른쪽 끝이 같이 맞는다.
+ *
+ * `py`는 줄 사이 구분선과 값 사이의 숨이다 — 여백을 부모의 `space-y`로 주면 선이 줄
+ * 가장자리가 아니라 여백 한가운데에 떠서 어느 줄에 속한 선인지 안 읽힌다.
  */
-const ROW = "flex items-start gap-2";
+const ROW = "flex items-start gap-2 py-1.5";
 /** `leading-8`이 컨트롤 높이(32px)와 같아서 라벨이 첫 줄 한가운데에 선다. */
 const LABEL = "w-14 shrink-0 text-xs leading-8 text-muted-foreground";
 /** 접힘은 여기서 일어난다 — 넘친 결과 문구가 값 열 안쪽에서 다음 줄로 간다. */
@@ -217,20 +220,27 @@ function EditDialog({
       </CenterMorphModalTrigger>
 
       {/* 오른쪽 위 닫기 아이콘은 끈다 — 아래 `닫기` 버튼과 이름이 같아서 화면 낭독기에
-          `닫기`가 두 번 읽힌다. 왼쪽 아래 한 자리로 모은다 (TEXT_GUIDE) */}
+          `닫기`가 두 번 읽힌다. 오른쪽 아래 한 자리로 모은다 (TEXT_GUIDE).
+          패널 패딩을 안 주고 머리·본문·바닥이 각자 갖는다 — 경계선이 패널 폭 끝까지
+          닿아야 세 덩어리가 갈린다 (site-footer.tsx의 업데이트 로그 모달과 같은 구조) */}
       <CenterMorphModalContent
         ariaLabel="업무 바꾸기"
         ariaDescribedBy={descId}
         showCloseButton={false}
-        className="max-w-[34rem] p-5"
+        className="max-w-[34rem]"
       >
-        <h2 className="text-sm font-semibold">업무 바꾸기</h2>
-        {/* 어느 업무인지를 머리에 적는다 — 목록이 뒤로 가려도 대상이 남는다 */}
-        <p id={descId} className="mt-1 truncate text-xs text-muted-foreground">
-          {title}
-        </p>
+        <div className="border-b border-border px-5 pt-5 pb-4">
+          <h2 className="text-base font-semibold">업무 바꾸기</h2>
+          {/* 어느 업무인지를 머리에 적는다 — 목록이 뒤로 가려도 대상이 남는다 */}
+          <p id={descId} className="mt-0.5 truncate text-xs text-muted-foreground">
+            {title}
+          </p>
+        </div>
 
-        <div className="mt-4 space-y-2">
+        {/* 줄 사이에 선을 둔다. `변경`을 누른 줄만 컨트롤로 커지는데, 선이 없으면 커진
+            줄이 위아래 줄까지 한 덩어리로 읽혔다 — 특히 결과 문구가 값 열 아래로
+            접히면 그게 다음 줄의 값처럼 보였다 */}
+        <div className="divide-y divide-border/60 px-5 py-1">
           <StatusField projectId={projectId} taskId={taskId} now={status} path={path} />
           <EndDateField
             projectId={projectId}
@@ -248,16 +258,19 @@ function EditDialog({
             projectId={projectId}
             taskId={taskId}
             now={restNow(fields?.workers.join(", ") ?? "")}
+            workers={fields?.workers ?? []}
             path={path}
           />
         </div>
 
-        <CenterMorphModalClose>
-          {/* `취소`가 아니라 `닫기`다 — 하던 일이 취소된다고 읽힌다 (TEXT_GUIDE) */}
-          <Button type="button" size="sm" variant="ghost" className="mt-4">
-            닫기
-          </Button>
-        </CenterMorphModalClose>
+        <div className="flex justify-end border-t border-border px-5 py-3">
+          <CenterMorphModalClose>
+            {/* `취소`가 아니라 `닫기`다 — 하던 일이 취소된다고 읽힌다 (TEXT_GUIDE) */}
+            <Button type="button" size="sm" variant="ghost">
+              닫기
+            </Button>
+          </CenterMorphModalClose>
+        </div>
       </CenterMorphModalContent>
     </CenterMorphModal>
   );
@@ -386,6 +399,47 @@ function Pick({
         className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground"
       />
     </span>
+  );
+}
+
+/**
+ * 참여자 한 명 켜기·끄기 (담당자 줄).
+ *
+ * 폼 값은 체크박스가 스스로 싣는다 — 켠 것만 `workerId`로 나가서 서버가 `getAll`로 받는다.
+ * 네모는 그리지 않는다. 참여자가 열 명이면 네모 열 개가 값 열을 채우는데 여기서 읽어야
+ * 할 것은 "누가 담당인가" 하나다. 켬은 라임 배경이 말하고, 네모를 숨겨 사라진 키보드
+ * 포커스 표시는 `has-[:focus-visible]`로 pill이 대신 받는다.
+ */
+function Person({
+  name,
+  value,
+  on,
+  onToggle,
+}: {
+  name: string;
+  value: string;
+  on: boolean;
+  onToggle: (on: boolean) => void;
+}) {
+  return (
+    <label
+      className={cn(
+        "inline-flex h-8 cursor-pointer items-center rounded-full border px-3 text-sm transition-colors select-none has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50",
+        on
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border bg-background text-foreground hover:bg-muted",
+      )}
+    >
+      <input
+        type="checkbox"
+        name="workerId"
+        value={value}
+        checked={on}
+        onChange={(event) => onToggle(event.target.checked)}
+        className="sr-only"
+      />
+      {name}
+    </label>
   );
 }
 
@@ -599,19 +653,26 @@ function PriorityField({
  *
  * 후보 목록은 **`변경`을 누를 때만 부른다.** 프로젝트 참여자 조회가 업무 한 줄에 한 번이라,
  * 모달을 열 때 같이 부르면 상태만 바꾸러 온 사람도 그 값을 치른다.
+ *
+ * 여기만 셋과 컨트롤이 다르다. 여러 명을 고르니까 `<select>`가 아니라 켜고 끄는 pill이다 —
+ * `<select multiple>`은 Cmd+클릭을 아는 사람만 여럿을 고를 수 있고, 목록 상자로 렌더돼
+ * 같은 줄의 pill 컨트롤들과 안 맞는다. 그래서 `CONTROL`의 고정 폭도 이 줄만 안 쓴다.
  */
 function WorkerField({
   projectId,
   taskId,
   now,
+  workers,
   path,
 }: {
   projectId: string;
   taskId: number;
   now: string;
+  /** 지금 담당자 실명. 프리체크와 누락 안내가 이걸 후보 목록과 맞춘다. */
+  workers: readonly string[];
   path: string;
 }) {
-  const [picked, setPicked] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
   const {
     editing,
     saved,
@@ -620,27 +681,60 @@ function WorkerField({
     pending,
     edit: openEdit,
     cancel,
-  } = useSave(updateTaskWorker, () => setPicked(""));
+  } = useSave(updateTaskWorker, () => setPicked([]));
   const [people, setPeople] = useState<ParticipantResult | null>(null);
   const [asking, startAsk] = useTransition();
-  const pickedName = people?.participants?.find((p) => p.userId === picked)?.name ?? "";
   const labelId = `worker-label-${taskId}`;
   const current = saved || now;
+  const candidates = people?.participants ?? [];
+  const pickedNames = candidates
+    .filter((p) => picked.includes(p.userId))
+    .map((p) => p.name)
+    .join(", ");
+  /** 지금 담당자. 저장한 뒤에는 방금 보낸 목록이 정답이다 (`saved`를 우리가 `, `로 이었다). */
+  const currentNames = (saved ? saved.split(", ") : workers).filter(Boolean);
+  /**
+   * 지금 담당자인데 후보 목록에 없는 이름. flow에서 프로젝트 참여자를 빼도 담당은 남기
+   * 때문에 생긴다 — 목록에 없으면 userId를 몰라 켤 수가 없고, 그대로 저장하면 담당에서
+   * 조용히 빠진다. 그래서 저장 전에 이름을 적어 준다.
+   */
+  const missing = people
+    ? currentNames.filter((name) => !candidates.some((p) => p.name === name))
+    : [];
+
+  /**
+   * 지금 담당자를 미리 켠다. flow 쓰기가 덮어쓰기라서, 켜 두지 않으면 한 명을 더 붙이려는
+   * 사람이 기존 담당자까지 다시 찾아 골라야 한다 — 그러다 빠뜨리면 조용히 떨어진다.
+   *
+   * 이름으로 맞춘다 (flow는 담당자를 실명으로만 준다 — rest.ts `TaskFields.workers`).
+   * 그래서 아무것도 안 바꾸고 저장하면 flow가 같은 값이라고 거절하는데, 그 메시지는
+   * 이 줄에 그대로 나온다.
+   */
+  const mine = (list: readonly Participant[]) =>
+    list.filter((p) => currentNames.includes(p.name)).map((p) => p.userId);
 
   function edit() {
     openEdit();
-    if (people?.participants || asking) return;
+    if (people?.participants) {
+      setPicked(mine(people.participants));
+      return;
+    }
+    if (asking) return;
     const form = new FormData();
     form.set("projectId", projectId);
-    startAsk(async () => setPeople(await loadParticipants(null, form)));
+    startAsk(async () => {
+      const next = await loadParticipants(null, form);
+      setPeople(next);
+      setPicked(mine(next.participants ?? []));
+    });
   }
 
   return (
     <form action={action} className={ROW}>
       <TaskRef projectId={projectId} taskId={taskId} path={path} />
       {/* 이름은 성공 문구용이다 — 서버가 id로만 답하면 "누구로 바꿨는지"를 못 적는다 */}
-      <input type="hidden" name="workerName" value={pickedName} />
-      <input type="hidden" name="shown" value={pickedName} />
+      <input type="hidden" name="workerName" value={pickedNames} />
+      <input type="hidden" name="shown" value={pickedNames} />
 
       <span id={labelId} className={LABEL}>
         담당자
@@ -648,27 +742,44 @@ function WorkerField({
       <div className={FIELD}>
         {editing ? (
           <>
-            <span className={FROM}>{current} →</span>
-            <Pick
-              name="workerId"
-              labelId={labelId}
-              value={picked}
-              onChange={setPicked}
-              disabled={asking}
-            >
-              <option value="">{asking ? "불러오는 중…" : "참여자 고르기"}</option>
-              {(people?.participants ?? []).map((person) => (
-                <option key={person.userId} value={person.userId}>
-                  {person.name}
-                </option>
-              ))}
-            </Pick>
-            {/* 덮어쓰기라는 걸 그대로 적는다. flow는 담당자를 여럿 둘 수 있는데
-                여기서 바꾸면 한 명만 남는다 */}
+            {/* 담당자 줄만 값 열을 위아래로 쌓는다 (`w-full`이 셋을 각자 줄로 밀어낸다).
+                이름 목록·pill 여러 개·저장·취소가 한 줄을 나눠 쓰면 pill이 두 칸씩 접혀
+                버튼 사이로 끼어든다 — 담당자가 다섯 명이면 지금 값만으로도 줄이 찬다 */}
+            <span className={cn(FROM, "w-full leading-6")}>{current} →</span>
+            {asking ? (
+              <span className={cn(FROM, "w-full leading-6")}>불러오는 중…</span>
+            ) : (
+              <div
+                role="group"
+                aria-labelledby={labelId}
+                className="flex w-full flex-wrap gap-1.5"
+              >
+                {candidates.map((person) => (
+                  <Person
+                    key={person.userId}
+                    name={person.name}
+                    on={picked.includes(person.userId)}
+                    value={person.userId}
+                    onToggle={(on) =>
+                      setPicked((prev) =>
+                        on
+                          ? [...prev, person.userId]
+                          : prev.filter((id) => id !== person.userId),
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            )}
+            {/* 덮어쓰기라는 걸 그대로 적는다 — 안 켠 사람은 담당에서 빠진다 */}
             <Save
               pending={pending}
-              disabled={!picked}
-              note="고른 사람 혼자 담당이 돼요."
+              disabled={picked.length === 0}
+              note={
+                missing.length > 0
+                  ? `참여자 목록에 없는 담당자 ${missing.length}명(${missing.join(", ")}) — 저장하면 담당에서 빠져요.`
+                  : "켠 사람들만 담당이 돼요."
+              }
               onCancel={cancel}
             />
           </>
