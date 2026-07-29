@@ -67,7 +67,15 @@ const ROW = "flex items-start gap-2 py-1.5";
 const LABEL = "w-14 shrink-0 text-xs leading-8 text-muted-foreground";
 /** 접힘은 여기서 일어난다 — 넘친 결과 문구가 값 열 안쪽에서 다음 줄로 간다. */
 const FIELD = "flex min-w-0 flex-1 flex-wrap items-center gap-2";
-/** 네 컨트롤이 같은 폭이라 오른쪽 끝도 맞는다. */
+/**
+ * 고치는 중의 값 열. 지금 값·컨트롤·저장이 각자 줄을 갖는다.
+ *
+ * 한 줄을 나눠 쓰던 때는 지금 값 글자 수만큼 컨트롤이 오른쪽으로 밀려서 네 줄이 저마다
+ * 다른 x에서 고르기를 시작했고, 담당자는 pill이 여러 개라 두 칸씩 접혀 저장·취소 사이로
+ * 끼어들었다. 위아래로 쌓으면 어느 줄을 펼쳐도 같은 모양이다.
+ */
+const EDITING = "flex min-w-0 flex-1 flex-col items-start gap-2";
+/** 세 컨트롤이 같은 폭이다 — 줄을 바꿔 가며 펼쳐도 고르는 자리가 그 자리에 있다. */
 const CONTROL = "w-40";
 /** 고치는 중에도 지금 값은 남긴다 — 무엇에서 무엇으로 바뀌는지가 한 줄에서 읽힌다. */
 const FROM = "shrink-0 text-xs leading-8 text-muted-foreground";
@@ -381,8 +389,7 @@ function Pick({
   children: React.ReactNode;
 }) {
   return (
-    // `shrink-0`이라야 네 줄의 컨트롤 폭이 같다 — 왼쪽 `지금 값` 글자가 길면 줄어든다.
-    <span className={cn("relative shrink-0", CONTROL)}>
+    <span className={cn("relative", CONTROL)}>
       <select
         name={name}
         aria-labelledby={labelId}
@@ -446,7 +453,7 @@ function Person({
 /**
  * 저장·취소. 네 줄이 같은 높이를 쓴다 — 줄마다 다르면 값 열이 다시 들쭉날쭉해진다.
  *
- * 옆 컨트롤(32px)보다 한 급 낮춘다. 같은 높이에 라임을 채우면 이 줄에서 제일 큰 덩어리가
+ * 위 컨트롤(32px)보다 한 급 낮춘다. 같은 높이에 라임을 채우면 이 줄에서 제일 큰 덩어리가
  * 되어, 고르는 컨트롤보다 저장 버튼이 먼저 읽힌다.
  */
 function Save({
@@ -462,7 +469,8 @@ function Save({
   onCancel: () => void;
 }) {
   return (
-    <>
+    // 값 열이 세로 스택이라 둘을 한 덩어리로 묶는다 — 그냥 두면 각자 줄로 갈라진다.
+    <div className="flex flex-wrap items-center gap-2">
       <Button type="submit" size="sm" disabled={disabled || pending} className="h-7 px-2.5">
         {pending ? "저장 중…" : "저장"}
       </Button>
@@ -470,7 +478,7 @@ function Save({
         취소
       </Button>
       {note && <span className="w-full text-xs text-warning-foreground">{note}</span>}
-    </>
+    </div>
   );
 }
 
@@ -501,7 +509,7 @@ function StatusField({
       <span id={labelId} className={LABEL}>
         상태
       </span>
-      <div className={FIELD}>
+      <div className={editing ? EDITING : FIELD}>
         {editing ? (
           <>
             <span className={FROM}>{current} →</span>
@@ -568,7 +576,7 @@ function EndDateField({
       <span id={labelId} className={LABEL}>
         마감일
       </span>
-      <div className={FIELD}>
+      <div className={editing ? EDITING : FIELD}>
         {editing ? (
           <>
             <span className={FROM}>{current} →</span>
@@ -619,7 +627,7 @@ function PriorityField({
       <span id={labelId} className={LABEL}>
         우선순위
       </span>
-      <div className={FIELD}>
+      <div className={editing ? EDITING : FIELD}>
         {editing ? (
           <>
             <span className={FROM}>{current} →</span>
@@ -739,16 +747,14 @@ function WorkerField({
       <span id={labelId} className={LABEL}>
         담당자
       </span>
-      <div className={FIELD}>
+      <div className={editing ? EDITING : FIELD}>
         {editing ? (
           <>
-            {/* 담당자 줄만 값 열을 위아래로 쌓는다 (`w-full`이 셋을 각자 줄로 밀어낸다).
-                이름 목록·pill 여러 개·저장·취소가 한 줄을 나눠 쓰면 pill이 두 칸씩 접혀
-                버튼 사이로 끼어든다 — 담당자가 다섯 명이면 지금 값만으로도 줄이 찬다 */}
-            <span className={cn(FROM, "w-full leading-6")}>{current} →</span>
+            <span className={FROM}>{current} →</span>
             {asking ? (
-              <span className={cn(FROM, "w-full leading-6")}>불러오는 중…</span>
+              <span className={FROM}>불러오는 중…</span>
             ) : (
+              // pill이 값 열 폭을 다 쓴다 — 참여자가 여섯 명이면 한 줄에 안 든다
               <div
                 role="group"
                 aria-labelledby={labelId}
