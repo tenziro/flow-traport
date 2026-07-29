@@ -10,6 +10,7 @@ import {
 } from '@/components/icons';
 import { Kpi } from '@/components/kpi';
 import { Meter } from '@/components/meter';
+import { StatHint } from '@/components/stat-hint';
 import { TaskItem } from '@/components/task-item';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { StandupMember, StandupTask } from '@/lib/aggregate';
@@ -171,35 +172,32 @@ function MemberCard({
               {member.role}
             </span>
           )}
-          {/* 아이콘 세 개가 뭘 세는지는 요약 카드에만 적혀 있어서 카드를 스크롤해 내려오면
-              단서가 사라진다. `title`로 기준을 붙인다 — 화면 낭독은 `sr-only`가 맡는다.
-              news-bell.tsx의 종 아이콘과 같은 방식이다. */}
+          {/* 아이콘 세 개가 뭘 세는지는 요약 카드에만 적혀 있어서 카드를 스크롤해
+              내려오면 단서가 사라진다 — `StatHint`가 마우스를 올릴 때 기준을 띄운다.
+              화면 낭독은 그대로 `sr-only`가 맡는다. */}
           <span className="tabular ml-auto flex shrink-0 items-center gap-2.5 text-xs font-normal text-muted-foreground">
-            <span
-              className="flex items-center gap-1"
-              title="밀리는 업무 — 마감이 지났어요"
-            >
-              <IconRisk size={12} className="text-danger" />
-              <span className="sr-only">밀리는 업무 </span>
-              {member.blocked.length}건
-            </span>
-            <span
-              className="flex items-center gap-1"
-              title="마감 임박 — 7일 안에 마감해요"
-            >
-              <IconImminent size={12} className="text-warning" />
-              <span className="sr-only">마감 임박 </span>
-              {member.imminent.length}건
-            </span>
-            {member.staleCount > 0 && (
-              <span
-                className="flex items-center gap-1"
-                title="방치된 업무 — 30일 넘게 손 안 댔어요"
-              >
-                <IconStale size={12} />
-                <span className="sr-only">방치된 업무 </span>
-                {member.staleCount}건
+            <StatHint hint="밀리는 업무 — 마감이 지났어요">
+              <span className="flex items-center gap-1">
+                <IconRisk size={12} className="text-danger" />
+                <span className="sr-only">밀리는 업무 </span>
+                {member.blocked.length}건
               </span>
+            </StatHint>
+            <StatHint hint="마감 임박 — 7일 안에 마감해요">
+              <span className="flex items-center gap-1">
+                <IconImminent size={12} className="text-warning" />
+                <span className="sr-only">마감 임박 </span>
+                {member.imminent.length}건
+              </span>
+            </StatHint>
+            {member.staleCount > 0 && (
+              <StatHint hint="방치된 업무 — 30일 넘게 손 안 댔어요">
+                <span className="flex items-center gap-1">
+                  <IconStale size={12} />
+                  <span className="sr-only">방치된 업무 </span>
+                  {member.staleCount}건
+                </span>
+              </StatHint>
             )}
           </span>
         </CardTitle>
