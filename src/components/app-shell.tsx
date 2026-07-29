@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { IconRisk, IconSignOut, IconTeam, IconToday } from '@/components/icons';
 import { NewsBell } from '@/components/news-bell';
+import { SearchPalette } from '@/components/search-palette';
 import { ThemeToggle } from '@/components/theme-toggle';
 import type { TaskNews } from '@/lib/flow/queries';
 import type { Theme } from '@/lib/theme';
@@ -73,8 +74,9 @@ export function AppShell({
               - 세로선: 정보와 액션 사이의 경계.
               - 로그아웃: 아이콘 + 호버 면. 누르는 곳이라는 게 색이 아니라 모양으로 읽힌다. */}
           <div className="ml-auto flex min-w-0 items-center gap-2">
-            {/* 밝기·소식은 세 화면 공통이라 셸에 있다. 사용자 정보 왼쪽 — 로그아웃과
+            {/* 검색·밝기·소식은 세 화면 공통이라 셸에 있다. 사용자 정보 왼쪽 — 로그아웃과
                 붙여 두면 종을 누르려다 로그아웃을 누른다 */}
+            <SearchPalette />
             <ThemeToggle theme={theme} />
             <NewsBell news={news} />
             <span aria-hidden className="h-5 w-px shrink-0 bg-border" />

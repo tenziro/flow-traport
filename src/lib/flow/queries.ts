@@ -11,6 +11,7 @@ import { kstYmd } from "@/lib/aggregate/date";
 import { getSession } from "@/lib/auth";
 import { createFlowMcp, type FlowMcp } from "./mcp";
 import {
+  getPostBrief,
   listEmployeeIds,
   listEvents,
   listMentionAlarms,
@@ -75,12 +76,26 @@ export interface TaskNews {
   from: string;
   /** `YYYYMMDDHHmmss` */
   at: string;
-  /** flow가 만든 알림 문구. 없으면 댓글 본문으로 대신한다. */
+  /** 카드에 낼 한 줄. 댓글 본문이 있으면 본문, 없으면 flow 알림 문구. */
   message: string;
   unread: boolean;
+  /** flow 게시글 딥링크 (`flowPostUrl`). */
+  url: string;
   /** 프로젝트명. 알림은 id만 줘서 따로 풀어 붙인다 — 못 풀면 없다. */
   project?: string;
+  /** 업무명(게시글 제목). 이것도 알림이 안 줘서 따로 풀어 붙인다 — 못 풀면 없다. */
+  title?: string;
 }
+
+/**
+ * flow 게시글 딥링크.
+ *
+ * `flow_search`가 결과마다 돌려주는 `url`이 이 형식이다 — 우리가 지어낸 규칙이 아니다.
+ * 알림은 `projectId`와 `postId`를 둘 다 줘서 호출 하나 없이 만든다. (워크리스트의
+ * `link`는 flow가 만든 단축 URL이라 이렇게 못 만든다 — 그건 그대로 쓴다.)
+ */
+export const flowPostUrl = (projectId: string, postId: string) =>
+  `https://flow.team/main.act?projectId=${encodeURIComponent(projectId)}&postId=${encodeURIComponent(postId)}`;
 
 export interface TodayData {
   /** 조회 기준 시각. 렌더 중 `Date.now()`를 부르지 않으려고 여기서 찍어 내려보낸다. */
@@ -161,9 +176,15 @@ export async function loadToday(): Promise<TodayData> {
 /**
  * 헤더 알림 종에 올릴 소식 (PRD §13 B1·B2).
  *
- * 오늘 화면 카드에 있던 걸 셸로 올렸다 — 세 화면 어디서나 같은 종이 뜬다. 대신 호출은
- * 레이아웃으로 옮겨 갔을 뿐 늘지 않았다(`loadToday`에서 뺐다). 프로젝트명은 알림이 안 줘서
- * 전량 목록을 한 번 더 부른다. 둘 다 실패해도 종은 뜬다 — 목록만 비거나 이름만 빠진다.
+ * 오늘 화면 카드에 있던 걸 셸로 올렸다 — 세 화면 어디서나 같은 종이 뜬다.
+ *
+ * 알림은 이름을 하나도 안 준다 (`projectId`·`postId`뿐). 프로젝트명은 전량 목록에서,
+ * 업무명과 링크는 게시글 상세에서 풀어 붙인다. 이름 조회는 전부 실패를 삼킨다 — 못 풀면
+ * 그 줄만 이름이 빠지고 소식은 그대로 뜬다.
+ *
+ * ponytail: 게시글 상세는 소식 줄 수(`NEWS_LIMIT`)만큼 붙는다. `postId`가 겹치는 알림은
+ * 한 번만 부르고(같은 업무에 댓글이 여러 개 달리는 게 흔해서 실측 12건이 게시글 3~4개였다)
+ * 나머지는 병렬이라 왕복 한 번 값이다. 더 무거워지면 응답을 캐시하는 게 다음 수다.
  */
 export async function loadNews(me: string): Promise<TaskNews[] | null> {
   const [alarms, projects] = await Promise.all([
@@ -172,16 +193,35 @@ export async function loadNews(me: string): Promise<TaskNews[] | null> {
   ]);
   if (!alarms) return null;
 
+  const news = taskNews(alarms, me);
   const nameOf = new Map([...(projects ?? [])].map(([name, id]) => [id, name]));
-  return taskNews(alarms, me).map((n) => ({ ...n, project: nameOf.get(n.projectId) }));
+  const briefs = new Map(
+    await Promise.all(
+      [...new Set(news.map((n) => n.postId))].map(
+        async (postId) => [postId, await getPostBrief(postId).catch(() => null)] as const,
+      ),
+    ),
+  );
+  return news.map((n) => {
+    const brief = briefs.get(n.postId);
+    return {
+      ...n,
+      project: nameOf.get(n.projectId),
+      title: brief?.title ?? undefined,
+      // flow가 만든 짧은 링크가 있으면 그걸 쓴다 — 로그인 화면을 건너서도 대상을 지킨다.
+      url: brief?.url ?? n.url,
+    };
+  });
 }
 
 /**
  * 헤더 알림 레이어에 올리는 최대 줄 수. 그 아래는 flow 알림함이 할 일이다.
  *
- * 레이어가 펼쳐지며 내려오는 높이라 6이 상한이다 — 12였을 때는 카드가 화면 밖까지 갔다.
+ * 6이었다 — 레이어가 스택으로 펼쳐져 내려와서 그보다 많으면 화면 밖까지 갔다. 목록에 스크롤이
+ * 생기고 읽음/안 읽음 탭이 붙어서(v0.18) 6은 탭마다 두세 줄밖에 안 남는다. 12로 올렸다 —
+ * 줄 수만큼 게시글 상세가 붙어서(`loadNews`) 여기가 곧 호출 수의 상한이다.
  */
-const NEWS_LIMIT = 6;
+const NEWS_LIMIT = 12;
 
 /**
  * 담당 업무·내가 올린 글 알림을 카드용 한 줄로 (PRD §13 B1·B2).
@@ -199,9 +239,12 @@ export function taskNews(alarms: readonly MentionAlarm[], me: string): TaskNews[
       postId: a.postId,
       from: a.registerName || a.registerId,
       at: a.registeredDateTime,
-      // 문구가 비면 댓글 본문으로 대신한다 — 둘 다 비는 경우가 실측에 있었다.
-      message: a.message?.trim() || a.content?.trim() || "업무에 새 소식이 있어요",
+      // 본문이 먼저다. `message`는 `"서동조님의 댓글 등록"` 같은 템플릿이라 이름은 이미
+      // 등록자 줄에 있고 내용은 전부 `content`에 있다. 둘 다 비는 알림도 실측에 있었다
+      // (`message: null` + `content: ""`, 10건 중 2건) — 그때만 기본 문구로 세운다.
+      message: a.content?.trim() || a.message?.trim() || "업무에 새 소식이 있어요",
       unread: a.readYn === "N",
+      url: flowPostUrl(a.projectId, a.postId),
     }))
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, NEWS_LIMIT);

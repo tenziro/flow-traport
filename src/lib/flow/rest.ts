@@ -223,8 +223,8 @@ export const listMentionAlarms = () => listAlarms("MENTION", { days: 90 });
  * 담당 업무·내가 올린 글 알림 (PRD §13 B1·B2). 첫 페이지 한 장만 본다 —
  * "최근에 무슨 일이 있었나"를 보는 카드라 최신 100건이면 충분하다.
  *
- * ponytail: 알림은 업무명도 딥링크도 주지 않는다 (`postId`·`projectId`뿐). 제목을 붙이려면
- * `postId`마다 게시글 상세를 한 번씩 더 불러야 해서, 프로젝트명과 알림 문구까지만 낸다.
+ * 알림은 이름도 링크도 안 준다 (`postId`·`projectId`뿐). 업무명과 딥링크는 `getPostBrief`,
+ * 프로젝트명은 `listProjects`로 `loadNews`가 풀어 붙인다.
  */
 export const listTaskAlarms = () => listAlarms("WORKER,REGISTRANT");
 
@@ -469,6 +469,26 @@ export async function getTaskFields(
 export const resolvePostId = async (projectId: string, taskSrno: string, title: string) =>
   (await getTaskFields(projectId, taskSrno, title))?.postId ?? null;
 
+/**
+ * 게시글 제목(= 업무명)과 flow가 만든 짧은 링크. 알림은 `postId`만 줘서 둘 다 여기서만
+ * 나온다 (api-spec §6.3).
+ *
+ * `connectUrl`(`https://flow.team/l/Qmcn5`)은 **로그인 화면을 건너 살아남는 링크**다 —
+ * 세션이 없으면 `signin.act?postlink=Qmcn5`로 대상을 들고 가서 로그인 뒤 그 글로 간다.
+ * 우리가 만든 `main.act?projectId=…&postId=…`는 그 자리에서 대상을 잃는다 (BUG-024).
+ *
+ * ponytail: 두 줄 때문에 게시글 상세를 통째로 받는다 — 본문·HTML·댓글 원본까지 딸려 온다.
+ * 제목만 주는 엔드포인트가 없다. 부르는 쪽에서 `postId`를 중복 제거하고 병렬로 부르는 게
+ * 지금의 상한이고, 무거워지면 응답을 캐시하는 게 다음 수다.
+ */
+export async function getPostBrief(postId: string) {
+  const d = await get<{ title?: string; connectUrl?: string }>(
+    `/user/posts/${postId}`,
+    "게시글 조회",
+  );
+  return { title: d.title?.trim() || null, url: d.connectUrl?.trim() || null };
+}
+
 /* ── 업무 단일 필드 수정 (api-spec §6.4, PRD §13 A4) ───────────────────── */
 
 const taskField = (projectId: string, taskId: string, field: string) =>
@@ -638,6 +658,98 @@ export async function listEvents(
   return (data.events ?? []).sort((a, b) =>
     a.eventStartDateTime.localeCompare(b.eventStartDateTime),
   );
+}
+
+/* ── 검색 (api-spec §9.1~9.2, PRD §6.4) ───────────────────────────────── */
+
+/**
+ * 검색 결과의 글 한 건. **제목·본문에 `!#!…!#!` 하이라이트가 들어 있다** — flow가 맞은
+ * 자리를 표시해 준 것이라 그리는 쪽이 쪼개 쓴다 (`splitHighlight`).
+ */
+export interface SearchPost {
+  postId: string;
+  projectId: string;
+  /** 게시글 제목(`commtTtl`). 제목 없는 글도 있어서 빌 수 있다. */
+  title: string;
+  /** 본문 발췌(`content`). */
+  content: string;
+  /** 프로젝트명(`ttl`). 검색 API만 이 이름을 같이 준다. */
+  project: string;
+  registerName: string;
+  /** `YYYYMMDDHHmmss` */
+  at: string;
+}
+
+export interface SearchProject {
+  projectId: string;
+  /** 프로젝트명(`ttl`). 하이라이트 포함. */
+  title: string;
+  participantCount: string;
+  /** 마지막 수정 `YYYYMMDDHHmmss` */
+  at: string;
+}
+
+/**
+ * 글 검색. 팔레트가 부르는 두 호출 중 하나다 (PRD §6.4).
+ *
+ * MCP `flow_search`로는 이걸 못 만든다 — 거기서 오는 `title`은 **프로젝트** 제목이고
+ * 게시글 제목에 해당하는 필드가 응답에 없다 (실측 2026-07-29). REST는 `ttl`(프로젝트)과
+ * `commtTtl`(게시글)을 둘 다 준다.
+ *
+ * 딥링크는 여기 없다. 게시글 상세를 따로 불러야 `connectUrl`이 나오는데(`getPostBrief`)
+ * 결과 전체를 미리 푸는 건 검색 한 번에 호출 여덟 번이라, 눌린 것만 푼다 (`/api/go`).
+ *
+ * ponytail: 첫 페이지만 본다. `score`+`pageTargetId`로 다음 장을 받을 수 있지만
+ * (api-spec §9.1) 상위 몇 줄이 안 맞으면 검색어를 고치는 게 빠르다.
+ */
+export async function searchPosts(searchWord: string, size: number): Promise<SearchPost[]> {
+  const query = new URLSearchParams({ searchWord, size: String(size) });
+  const data = await get<{
+    posts?: {
+      postId: string;
+      projectId: string;
+      commtTtl?: string;
+      content?: string;
+      ttl?: string;
+      registerName?: string;
+      registeredDateTime?: string;
+    }[];
+  }>(`/user/search/posts?${query}`, "글 검색");
+
+  return (data.posts ?? []).map((p) => ({
+    postId: p.postId,
+    projectId: p.projectId,
+    title: p.commtTtl?.trim() ?? "",
+    content: p.content?.trim() ?? "",
+    project: p.ttl?.trim() ?? "",
+    registerName: p.registerName ?? "",
+    at: p.registeredDateTime ?? "",
+  }));
+}
+
+/**
+ * 프로젝트 검색.
+ *
+ * 프로젝트에는 딥링크가 없다 — 이 응답에도, 상세에도 없다. 상세의 링크성 값은
+ * `INVT_URL`(초대 URL) 하나뿐이라 화면은 `main.act?projectId=`를 조립한다 (MCP도 같은 걸
+ * 준다). 세션이 없으면 대상을 잃는 링크고, 게시글의 `connectUrl`에 해당하는 짝이 없다
+ * (api-spec §9.2, BUG-024).
+ */
+export async function searchProjects(
+  searchWord: string,
+  size: number,
+): Promise<SearchProject[]> {
+  const query = new URLSearchParams({ searchWord, size: String(size) });
+  const data = await get<{
+    projects?: { projectId: string; ttl?: string; participantCount?: string; editedDateTime?: string }[];
+  }>(`/user/search/projects?${query}`, "프로젝트 검색");
+
+  return (data.projects ?? []).map((p) => ({
+    projectId: p.projectId,
+    title: p.ttl?.trim() ?? "",
+    participantCount: p.participantCount ?? "",
+    at: p.editedDateTime ?? "",
+  }));
 }
 
 /**

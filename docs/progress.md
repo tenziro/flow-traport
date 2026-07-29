@@ -1,6 +1,6 @@
 # 개발 진행 상황
 
-버전 0.15.0 · 2026-07-29 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
+버전 0.19.0 · 2026-07-29 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
 
 ## 요약
 
@@ -126,7 +126,7 @@ v0.15.0에서 여기에 밝기 두 벌이 붙었다 (아래 [밝기 세 갈래](
 | 모든 버튼 | `motion/button` |
 | 폼 입력 4곳 | `motion/input` |
 | 상태 드롭다운 | `motion/select` |
-| 부서 탭 | `motion/tabs` (Segment) |
+| 부서 탭 | `motion/tabs` (Pill — v0.18.1까지 Segment) |
 | 상단 메뉴 탭바 | `motion/tabs` (Underline) 패턴을 `<Link>`에 이식 |
 | 업무 상세 접기 | `motion/bouncy-accordion` |
 | 상단 요약 4칸 건수 | `motion/number-ticker` |
@@ -719,9 +719,116 @@ Tier C는 손대지 않았다 (0건 근거는 PRD §13에 그대로).
 헤더를 덮는다). 데이터 경로도 `loadToday` → `loadNews`로 셸에 올라갔다: `listTaskAlarms`를
 `loadToday`에서 뺐으니 순증은 `listProjects` 한 번이다 (알림이 `projectId`만 줘서 이름을 잇는다).
 
-알림이 주는 건 프로젝트 id · 문구 · 등록자 · 시각뿐이다. **업무명도 딥링크도 없어서** 소식 줄에서
-업무로 건너갈 수 없다 — flow 딥링크는 MCP 워크리스트·스탠드업에서만 오는 불투명한 단축 URL이라
-알림 응답으로는 만들지 못한다. 없는 걸 지어내지 않고 화살표를 껐다.
+알림이 주는 건 프로젝트 id · 문구 · 등록자 · 시각뿐이다. **업무명은 없다** — 붙이려면 `postId`마다
+게시글 상세를 한 번씩 더 불러야 한다.
+
+### 소식 한 줄 → 문서 + 읽음 (v0.16.0)
+
+v0.15.0에서는 "알림 응답으로는 딥링크를 못 만든다"고 적고 화살표를 껐다. **틀렸다.** 못 만드는 건
+워크리스트의 `link`(flow가 만든 불투명한 단축 URL)고, 게시글 딥링크는 `flow_search`가 결과마다
+`url`로 돌려주는 `https://flow.team/main.act?projectId=…&postId=…` 형식이다. 알림은 두 id를 다
+줘서 **호출 하나 없이** 만든다.
+
+| 붙은 것 | 어디 |
+|---|---|
+| `flowPostUrl(projectId, postId)` + `TaskNews.url` | [queries.ts](../src/lib/flow/queries.ts) |
+| 카드 = 링크(`item.href`, 새 탭) + 누른 순간 콜백(`item.onSelect`) | `motion/notification-stack.tsx` (v0.18.0에서 삭제) |
+| 한 건 읽음 처리 — 멘션과 같은 액션을 그대로 재사용 | [news-bell.tsx](../src/components/news-bell.tsx) → `markMentionsRead` |
+| 안 읽은 줄에 점 | 읽으면 점이 사라지고 종 배지도 하나 준다 (`revalidatePath`) |
+
+**스택 구조를 바꿔야 했다.** beUI 원본은 스택 전체가 `<button>` 하나여서 안에 링크를 넣을 수 없다.
+바깥을 `<div>`로 벗기고(포커스 이벤트는 올라오니 focus-within 동작은 그대로), 카드를 `<a>`로,
+펼치기/접기를 푸터 버튼으로 옮겼다. 손가락으로 쓰는 화면에서는 카드를 누르면 문서로 가버려서
+펼칠 자리가 따로 있어야 한다. Escape 처리는 지웠다 — 팝오버가 이미 Escape로 닫는다.
+
+v0.15.0의 `sr-only` 복제 목록도 지웠다. 그건 "버튼 하나라 안쪽 글자가 안 읽힌다"는 문제를
+막던 것인데([BUG-020](bug-report.md#bug-020)), 카드가 진짜 링크가 되면서 원인이 사라졌다.
+카드 포커스 링은 `inset-ring`이다 — 카드가 `clip-path`로 잘려서 바깥 링은 안 보인다.
+
+### 소식 카드 네 줄 — 업무명 붙이기 (v0.17.0)
+
+한 줄이 `"서동조님의 댓글 등록"` 한 문장이라 **무슨 일인지 알 수 없었다.** 실제 내용은
+`content`에 따로 들어 있고 `message`는 그걸 요약한 템플릿이었다. 카드를 네 줄로 세웠다 —
+프로젝트명(굵게, 한 줄 말줄임) · 업무명 · 내용(13px, 두 줄 말줄임) · 작성자, 시각은 첫 줄 오른쪽.
+
+| 붙은 것 | 어디 |
+|---|---|
+| `getPostBrief(postId)` — 게시글 상세에서 `title` | [rest.ts](../src/lib/flow/rest.ts) |
+| `postId` 중복 제거 후 병렬 조회 → `TaskNews.title` | [queries.ts](../src/lib/flow/queries.ts) `loadNews` |
+| 내용은 `content` 우선, `message`는 대비 | `taskNews()` |
+
+**알림은 이름을 하나도 안 준다.** 실측 응답 필드가 `alarmId · alarmType · content · message ·
+postId · projectId · readYn · registerName …`까지다 — 프로젝트명도 업무명도 없다. 프로젝트명은
+`listProjects` 한 번으로 되지만 업무명은 `GET /user/posts/{postId}`가 유일한 출처라 소식마다
+호출이 붙는다. 같은 업무에 댓글이 여러 개 달리는 게 흔해서 `postId`를 먼저 중복 제거한다 —
+실제 데이터에서 6건 → 2~3건이었다. 제목 한 줄 때문에 본문·HTML·댓글 원본까지 딸려 오는 건
+이 API의 한계다.
+
+카드가 레이어 밖으로 삐져 나온 건 그리드 트랙 문제였다 ([BUG-023](bug-report.md#bug-023)).
+
+### 소식 레이어 = 탭 + 목록 (v0.18.0)
+
+접기 버튼과 "업무소식" 라벨을 걷어내고 위를 탭으로 바꿨다. 남은 게 카드 목록 하나여서
+**beUI Notification Stack도 같이 물렸다** — 팝오버를 열면 Radix가 안쪽으로 포커스를 넣어서
+스택은 늘 펼친 상태였고, 겹쳐 쌓인 모습은 실제로 보이지도 않았다. 컴포넌트 파일을 지웠고
+목록은 평범한 `<ul>`이다. BUG-023의 `minmax(0,1fr)`도 그리드가 없어지면서 같이 사라졌다.
+
+| 붙은 것 | 어디 |
+|---|---|
+| 탭 전체 · 안 읽음 · 읽음 — beUI `Tabs` 재사용 (v0.18.1에서 `underline`) | [news-bell.tsx](../src/components/news-bell.tsx) |
+| 전체 읽음 버튼 — `markRead(...ids)` 가변인자로 한 건/여러 건 겸용 | 같은 파일. 안 읽은 게 없으면 비활성 |
+| 목록만 스크롤 (`max-h-[min(28rem,60vh)]`) | 탭과 버튼은 긴 목록에서도 위에 붙어 있다 |
+| 탭별 빈 상태 문구 | "안 읽은 소식이 없어요" / "읽은 소식이 없어요" / "새 소식이 없어요" |
+| 상한 6 → 12 | 읽은 것까지 탭으로 나눠 보면 6줄로는 "읽음" 탭이 늘 빈다 |
+
+**탭 모양은 v0.18.1에서 갈랐다** — 알림 레이어는 `underline`, 부서 전환은 `pill`. 좁은 레이어에
+채운 블록이 들어가면 목록보다 헤더가 무거웠고, 부서는 개수가 많아 알약이 개별 항목으로 읽힌다.
+알림 쪽은 감싼 줄의 아래 패딩을 없애고 탭 자체 `border-b`를 지웠다 — 그래야 밑줄
+인디케이터(`-bottom-px`)가 그 줄의 구분선 자리에 정확히 앉는다. beUI의 `underline` 트리거에는
+`-mb-px`가 박혀 있어서 `mb-0`으로 눌러야 1px이 안 밀린다 (인디케이터 90~91px = 구분선 90~91px로
+확인).
+
+**`PATCH /user/alarms/read/all`은 안 썼다.** 받는 게 선택적 `projectId`뿐이라 **알림 종류를 못
+가린다** — 그걸 부르면 오늘 화면 멘션 카드가 근거로 삼는 `MENTION` 알림까지 조용히 지워진다.
+지금 화면에 있는 `alarmId`만 기존 액션에 넘긴다 (상한 12건).
+
+**딥링크는 조립을 그만뒀다.** v0.16의 `main.act?projectId=…&postId=…`는 세션이 없으면 로그인
+화면에서 대상을 잃었다 — 실사용에서 거의 항상 그랬다. 업무명 때문에 이미 부르는 게시글 상세가
+`connectUrl`(`https://flow.team/l/Qmcn5`)을 같이 주고, 그건 `postlink`로 대상을 들고 간다.
+호출은 안 늘었다. 근거와 재현은 [BUG-024](bug-report.md#bug-024).
+
+### 검색 팔레트 ⌘K (v0.19.0)
+
+화면 셋은 전부 "지금 챙길 일"이라 지난 문서를 다시 찾는 길이 없었다. 네 번째 화면을 만들지
+않고 레이어로 얹었다 — 검색은 목적지가 아니라 경유지다. 설계 근거는 PRD §6.4.
+
+| 붙은 것 | 어디 |
+|---|---|
+| `⌘K`/`Ctrl+K` + 헤더 버튼(`⌘K` 표기) | [search-palette.tsx](../src/components/search-palette.tsx), [app-shell.tsx](../src/components/app-shell.tsx) |
+| REST 검색 둘 병렬 — 프로젝트 5 + 글 8 | `searchProjects`·`searchPosts` ([rest.ts](../src/lib/flow/rest.ts)) → `searchFlow` ([actions.ts](../src/app/(app)/actions.ts)) |
+| `!#!…!#!` → `<mark>` | `splitHighlight` ([search.ts](../src/lib/flow/search.ts)) — `stripHighlight`와 같은 마커를 지우지 않고 쪼갠다 |
+| 글 링크는 누른 것만 해소 | [api/go/[postId]/route.ts](<../src/app/api/go/[postId]/route.ts>) — `getPostBrief`로 `connectUrl` 받아 302 |
+| 두 글자부터 · 300ms 디바운스 | 입력 길이는 100자에서 자른다 (URL에 그대로 들어가는 자리다) |
+
+**MCP로는 만들 수 없는 화면이었다.** `flow_search`가 주는 `title`은 **프로젝트** 제목이고
+게시글 제목에 해당하는 필드가 응답에 없다. REST `/user/search/posts`는 `ttl`(프로젝트) ·
+`commtTtl`(게시글)을 둘 다 주고 하이라이트도 본문까지 찍어 준다 (실측 2026-07-29, api-spec §9.1).
+BUG-022 이후로 붙인 습관대로 가정을 세우기 전에 두 경로를 다 불러 본 게 이 선택을 뒤집었다.
+
+**프로젝트 링크는 한계가 있다.** 프로젝트에는 `connectUrl`에 해당하는 짧은 링크가 없다 —
+검색·상세 응답에도, MCP에도 없고, 상세의 링크성 값은 `INVT_URL`(초대 URL) 하나다. `main.act?projectId=`를
+조립해 쓰는데 세션이 없으면 `signin.act?why=no-session&from=ssr-helper`로 대상을 잃는다(실측).
+초대 URL은 쓰지 않았다 — 그건 남을 들이는 링크다.
+
+**이펙트 본문에서 setState 하면 린트가 막는다** (`react-hooks/set-state-in-effect`, React 19).
+검색어가 두 글자 미만일 때 결과를 비우는 줄이 걸려서, 비우는 것도 디바운스 타이머 안으로
+옮겼다 — 지우는 게 300ms 늦지만 화면에서는 안 보인다.
+
+확인한 것 (브라우저, 실제 데이터): `⌘K` 열기 → 입력 자동 포커스 → `출장관리` 검색 결과
+프로젝트 5 + 글 8, 강조 구간 `<mark>` 렌더, `Esc` 닫기 + 트리거로 포커스 복귀, 밝게/어둡게 둘 다.
+`/api/go/79148381` 은 세션 없이 부르면 `/login`으로 튕기고(프록시 게이트), 그 `postId`로
+게시글 상세를 부르면 `connectUrl: https://flow.team/l/Q7ccJ` 가 나온다 — 검색의 `postId`와
+게시글 상세의 ID 공간이 같다는 확인이다.
 
 ### 밝기 세 갈래 (v0.15.0)
 
@@ -757,6 +864,21 @@ npm run build      # 10 라우트 + proxy
 공개로 두기 때문에 프록시를 건드리지 않아도 됐다). 확인한 것: 밝게 팔레트, 종 레이어가 **아래로**
 자라며 6장 + 푸터가 다 보이는 것, 밝게→어둡게 전환이 새로고침 없이 즉시 되는 것. **확인 후
 라우트는 지웠다** — 남기면 목업 헤더가 공개로 배포된다.
+
+**v0.16.0도 같은 방식으로 봤다** (임시 `/login/preview` + 목업 6건, 확인 후 삭제). 확인한 것:
+여섯 줄이 다 `<a>`로 나오고 `href`가 `…main.act?projectId=317536&postId=…` 형식인 것, 안 읽은
+세 줄에만 점이 있는 것, 접근성 이름이 "안 읽음 · 문구 · 시각 · 프로젝트 · 등록자"로 읽히는 것,
+Tab 포커스 링이 카드 안쪽에 제대로 그려지는 것(`clip-path`에 안 잘린다), 푸터가 "6 접기" 버튼인 것.
+
+**아직 못 본 것 둘**: 링크가 실제로 그 문서를 여는지, 읽음 처리 후 배지가 하나 주는지. 로그인
+세션이 있어야 한다. URL 형식 자체는 `flow_search` 응답으로 확인한 것이라 추측이 아니다.
+→ **앞의 것은 v0.18.0에서 "안 열린다"로 판명됐다** ([BUG-024](bug-report.md#bug-024)). 형식이
+맞는 것과 로그인 리다이렉트가 대상을 들고 가는 것은 별개였다.
+
+**v0.17.0·v0.18.0도 임시 `/login/preview` + 목업으로 봤다** (확인 후 삭제). v0.17에서 확인한 것:
+네 줄이 순서대로 나오는 것, 프로젝트명·업무명이 한 줄에서 잘리는 것, 내용이 두 줄에서 잘리는 것,
+카드 폭 328px로 뒷판(352px) 안에 들어오는 것. v0.18에서 확인한 것: 탭이 목록을 실제로 거르는 것
+(전체 6 → 읽음 3), 목록만 스크롤되고 탭·전체 읽음이 위에 붙어 있는 것, 넘침 0px.
 
 남아 있는 warning은 [motion/select.tsx:409](../src/components/motion/select.tsx)의
 `react-hooks/exhaustive-deps` 하나다 — beUI에서 가져온 코드라 손대지 않았다.

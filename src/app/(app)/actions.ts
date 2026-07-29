@@ -31,11 +31,15 @@ import {
   markAlarmRead,
   markAllAlarmsRead,
   resolvePostId,
+  searchPosts,
+  searchProjects,
   setTaskEndDate,
   setTaskPriority,
   setTaskWorkers,
   stripMentions,
   type Participant,
+  type SearchPost,
+  type SearchProject,
   type StaleTask,
   type TaskFields,
 } from "@/lib/flow/rest";
@@ -343,6 +347,46 @@ export async function scanStaleTasks(
         : `마감일이 ${days}일 넘게 지난 업무는 없어요.`,
       tasks,
       hasMore,
+    };
+  } catch (error) {
+    return { ok: false, message: reasonOf(error) };
+  }
+}
+
+export interface SearchResult extends ActionResult {
+  projects?: SearchProject[];
+  posts?: SearchPost[];
+}
+
+/** 검색어 길이 상한. flow가 100자까지 받는다 (api-spec §9.1). */
+const SEARCH_MAX = 100;
+/** 프로젝트 · 글 각각 몇 줄까지 볼지. 합쳐서 한 화면에 담기는 수다 (PRD §6.4). */
+const SEARCH_SIZE = { projects: 5, posts: 8 } as const;
+
+/**
+ * 검색 팔레트 (PRD §6.4). 프로젝트와 글을 병렬로 찾는다.
+ *
+ * 두 글자부터 받는다 — flow는 한 글자도 받지만 결과가 수천이라 고를 수가 없다.
+ * 입력을 그대로 URL에 넣는 자리라 길이를 여기서 자른다.
+ *
+ * ponytail: 한쪽이 실패하면 둘 다 실패로 낸다. 같은 키로 같은 서버를 부르는 두 호출이라
+ * 하나만 죽는 경우가 사실상 없고, 반쪽 결과를 전체인 척 보여 주는 게 더 위험하다.
+ */
+export async function searchFlow(word: string): Promise<SearchResult> {
+  const searchWord = word.trim().slice(0, SEARCH_MAX);
+  if (searchWord.length < 2) return { ok: false, message: "두 글자 이상 적어주세요." };
+
+  try {
+    const [projects, posts] = await Promise.all([
+      searchProjects(searchWord, SEARCH_SIZE.projects),
+      searchPosts(searchWord, SEARCH_SIZE.posts),
+    ]);
+    return {
+      ok: true,
+      // 결과가 있으면 화면이 목록만 그린다 — 이 문구는 빈 결과에서만 읽힌다.
+      message: projects.length + posts.length ? "" : "다른 말로 찾아보세요.",
+      projects,
+      posts,
     };
   } catch (error) {
     return { ok: false, message: reasonOf(error) };

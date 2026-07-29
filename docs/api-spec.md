@@ -527,6 +527,17 @@ https://api.flow.team
 > 같은 게시글 81211887에서 **14건 전부** 왔다. 이 문서가 §13~15 세 도메인을 놓쳤던 탓이다
 > (§0 참고).
 
+> **`title` 이 업무명의 유일한 출처다 `(실측 2026-07-29)`.** 알림(§7.1)은 이름을 하나도 주지
+> 않아서 헤더 소식 카드의 업무명이 여기서 나온다 (`getPostBrief`, PRD §6.1.5). 게시글 82010144
+> → `title: "[예약 시 동행자 선택 필드] 동행자 필드 위치 개선"`. **제목만 주는 엔드포인트는
+> 없다** — 한 줄 때문에 `content`·`htmlContent`·`remarks` 원본까지 딸려 온다.
+
+> **`connectUrl` 은 로그인 화면을 건너 살아남는 링크다 `(실측 2026-07-29)`.** 같은 응답에
+> `connectUrl: "https://flow.team/l/Qmcn5"` 가 온다 — flow가 만든 짧은 링크다. 세션이 없을 때
+> `/l/{code}` 는 `signin.act?meta=no&postlink=Qmcn5` 로 **대상을 들고** 튕겨서 로그인 뒤 그 글을
+> 연다. 우리가 조립한 `main.act?projectId=…&postId=…` 는 `signin.act?why=no-session&from=ssr-helper`
+> 로 가서 **대상이 사라진다** ([BUG-024](bug-report.md#bug-024)). 소식 카드는 이 값을 쓴다.
+
 ### 6.4 쓰기 계열 (실제 호출하지 않음)
 
 #### `POST /user/posts/projects/{projectId}` — 게시글 등록
@@ -642,6 +653,19 @@ Body: `title`*(1~200), `todoList[]`*(1~50개) `{ contents*(1~60), endDate(YYYYMM
 
 > **조인 키는 `registerId` + `registeredDateTime`.** 워크리스트(`flow_get_my_worklist.mentions`)는 `postId` 를 주지 않아서 그걸로는 못 묶는다. 두 응답이 같은 알림 레코드에서 나오므로 1:1로 맞는다. 알림 쪽이 실명(`registerName`)을 주므로 화면 표시도 아이디 대신 실명을 쓴다.
 
+**실측 (2026-07-29)** — `filters=WORKER,REGISTRANT` 응답 필드는 `alarmId` · `alarmType` ·
+`content` · `mentionYn` · `message` · `postId` · `projectId` · `readYn` · `receiverId` ·
+`registerId` · `registerName` · `registeredDateTime` · `registrantYn` · `remarkId` · `replyId` ·
+`workerYn` **이 전부다.** 제목·프로젝트명 같은 이름은 하나도 없다.
+
+| 관측 | 내용 |
+|---|---|
+| `message` | `"서동조님의 댓글 등록"` 처럼 **`{이름}님의 {행동}` 템플릿**이다. `null` 도 온다 |
+| `content` | 실제 본문. 화면에 낼 한 줄은 **`content` 가 먼저고 `message` 가 대타**다 (v0.17) — 이름은 작성자 줄에 이미 있어서 템플릿을 앞세우면 카드가 정보 없이 찬다 |
+| 이름 조회 | 프로젝트명은 §5.x `listProjects`, 업무명은 §6.3 `title`. 둘 다 별도 호출이다 |
+
+> **딥링크는 이 응답만으로 만들어진다** (v0.16.0): `https://flow.team/main.act?projectId={projectId}&postId={postId}`. `flow_search` 가 결과마다 `url` 로 돌려주는 형식 그대로다 — 우리가 추측한 규칙이 아니다. 워크리스트의 `link`(`https://flow.team/l/QBJyf`)는 flow 가 만든 단축 URL이라 여전히 못 만든다. 둘을 혼동해서 "알림으로는 링크를 못 만든다"고 적었던 게 [BUG-022](bug-report.md#bug-022).
+
 ### 7.2 `PATCH /user/alarms/read` — 알림 단건 읽음
 
 Body: `alarmId`* (string, 숫자)
@@ -725,9 +749,11 @@ Path: `eventSrno` (숫자). Query: `eventStartDateTime`, `eventFinishDateTime` (
 
 ---
 
-## 9. Search API (참고용)
+## 9. Search API
 
-### 9.1 `GET /user/search/posts` — 게시글 검색
+> 9.1·9.2는 **검색 팔레트(⌘K)가 실제로 쓰는 두 호출**이다 (PRD §6.4, v0.19). 9.3·9.4는 참고용이다.
+
+### 9.1 `GET /user/search/posts` — 게시글 검색 ⭐
 
 **Query**
 
@@ -751,10 +777,24 @@ Path: `eventSrno` (숫자). Query: `eventStartDateTime`, `eventFinishDateTime` (
 
 > 필드명이 다른 API와 다르다 (`ttl` / `commtTtl`). 검색 API만 내부 컬럼명을 그대로 쓴다.
 
-### 9.2 `GET /user/search/projects`
+> **하이라이트 `(실측 2026-07-29)`**: 맞은 자리를 `!#!…!#!`로 감싸 온다 — `commtTtl`과
+> `content` 둘 다다 (`ttl`도 프로젝트명이 걸리면 감싼다). 형태소 단위로 끊겨서
+> (`[bzp!#!출장!#!]`) 화면에서 다시 찾을 수 없는 정보다. 그리는 쪽은 이 마커를 쪼개고,
+> 안 쓰는 쪽은 `stripHighlight`로 지운다 (`lib/flow/search.ts`).
+
+> **MCP로는 안 된다**: `flow_search`가 주는 `title`은 **프로젝트** 제목이다 (`ttl` 쪽).
+> 게시글 제목(`commtTtl`)에 해당하는 필드가 응답에 없다 — 검색 팔레트가 REST를 쓰는 이유다.
+
+### 9.2 `GET /user/search/projects` ⭐
 
 Query: `searchWord`*, `startDateTime`, `endDateTime`, `orderType`, `size`, `score`+`pageTargetId`, `participantIds`
 응답 `data.projects[]`: `projectId`, `ttl`, `homeTabCode`, `backgroundColorCode`, `importantYn`, `participantCount`, `editedDateTime`, `participants[]{userId, userName}`
+
+> **프로젝트 딥링크는 없다 `(실측 2026-07-29)`**: 이 응답에도, 상세(§5.3)에도 링크가 없다 —
+> 상세의 링크성 값은 `INVT_URL`(`https://flow.team/Invitation/…`, 초대 URL) 하나다. MCP
+> `flow_search_project`의 `url`도 `https://flow.team/main.act?projectId=…`를 조립해 준다.
+> 그 URL은 세션이 없으면 `signin.act?why=no-session&from=ssr-helper`로 대상을 잃는다
+> (게시글의 `connectUrl`에 해당하는 짝이 프로젝트에는 없다 — §6.3, BUG-024).
 
 ### 9.3 `GET /user/search/employees`
 

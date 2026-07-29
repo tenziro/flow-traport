@@ -31,6 +31,7 @@ export {
   Logout as IconSignOut,
   Calendar as IconCalendar,
   BellRing as IconNews,
+  Magnifier as IconSearch,
   Flag as IconPriority,
   User as IconWorker,
   Sun as IconLight,

@@ -5,7 +5,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import type { Division } from "@/lib/flow/queries";
 
 /**
- * 부서 전환 — beUI Tabs(segment). 활성 블록이 layoutId 스프링으로 미끄러진다.
+ * 부서 전환 — beUI Tabs(pill). 활성 알약이 layoutId 스프링으로 미끄러진다.
  *
  * 탭은 `<button>`이라 그 자체로는 URL이 생기지 않는다. 부서별 화면을 링크로
  * 공유할 수 있어야 하므로 `onValueChange`에서 `?dept=`를 직접 밀어 넣는다 —
@@ -26,7 +26,7 @@ export function DeptTabs({
     <Tabs
       value={current}
       onValueChange={(dept) => router.push(`${base}?dept=${encodeURIComponent(dept)}`)}
-      variant="segment"
+      variant="pill"
       className="mb-5"
     >
       <TabsList aria-label="부서" className="flex-wrap bg-secondary">
