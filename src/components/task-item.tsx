@@ -31,8 +31,10 @@ export function TaskItem({
 }) {
   const pick = "score" in task ? task : null;
 
+  // 줄 전체에 hover 배경을 두지 않는다 — 줄 자체는 누를 수 없고 링크와 액션 버튼이 안에
+  // 따로 있다. 배경이 따라 바뀌면 줄을 누를 수 있는 것으로 읽힌다.
   return (
-    <div className="flex gap-3 rounded-lg px-2 py-2 transition-colors duration-300 ease-out hover:bg-muted">
+    <div className="flex gap-3 px-2 py-2">
       {/* 라임은 1위 한 곳에만 쓴다. 다섯 칸을 다 채우면 "지금 이거"가 안 읽힌다 */}
       {rank !== undefined && (
         <span

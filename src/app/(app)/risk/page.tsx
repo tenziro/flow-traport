@@ -1,7 +1,13 @@
 import { DeptTabs } from '@/components/dept-tabs';
 import { EmptyState } from '@/components/empty-state';
 import { FlowLink } from '@/components/flow-link';
-import { IconChevronDown, IconImminent, IconRisk } from '@/components/icons';
+import {
+  IconChevronDown,
+  IconDelay,
+  IconImminent,
+  IconProject,
+  IconRisk,
+} from '@/components/icons';
 import { Kpi } from '@/components/kpi';
 import { Meter } from '@/components/meter';
 import { NewTaskForm } from '@/components/new-task-form';
@@ -95,6 +101,7 @@ export default async function RiskPage({
           label="프로젝트"
           value={rollups.length}
           unit="개"
+          Icon={IconProject}
           note={`위험·주의 ${risky.length}개`}
         />
         <Kpi
@@ -102,6 +109,7 @@ export default async function RiskPage({
           label="밀리는 업무"
           value={blocked}
           unit="건"
+          Icon={IconRisk}
           tone="danger"
           note="마감이 지났어요"
         />
@@ -110,6 +118,7 @@ export default async function RiskPage({
           label="마감 임박"
           value={imminent}
           unit="건"
+          Icon={IconImminent}
           tone="warning"
           note="7일 안에 마감해요"
         />
@@ -118,6 +127,7 @@ export default async function RiskPage({
           label="최장 지연"
           value={worst}
           unit="일"
+          Icon={IconDelay}
           tone={worst >= 8 ? 'danger' : 'neutral'}
           note={worst > 0 ? '가장 오래 밀린 업무예요' : '밀린 업무가 없어요'}
         />

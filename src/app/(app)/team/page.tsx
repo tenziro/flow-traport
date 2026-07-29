@@ -6,6 +6,7 @@ import {
   IconImminent,
   IconRisk,
   IconStale,
+  IconTeam,
 } from '@/components/icons';
 import { Kpi } from '@/components/kpi';
 import { Meter } from '@/components/meter';
@@ -68,12 +69,19 @@ export default async function TeamPage({
         aria-label="부서 요약"
         className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
       >
-        <Kpi i={1} label="인원" value={counts.members} unit="명" />
+        <Kpi
+          i={1}
+          label="인원"
+          value={counts.members}
+          unit="명"
+          Icon={IconTeam}
+        />
         <Kpi
           i={2}
           label="밀리는 업무"
           value={counts.blocked}
           unit="건"
+          Icon={IconRisk}
           tone="danger"
           note={
             ranked[0] && ranked[0].blocked.length > 0
@@ -86,6 +94,7 @@ export default async function TeamPage({
           label="마감 임박"
           value={counts.imminent}
           unit="건"
+          Icon={IconImminent}
           tone="warning"
           note="7일 안에 마감해요"
         />
@@ -94,6 +103,7 @@ export default async function TeamPage({
           label="방치된 업무"
           value={stale}
           unit="건"
+          Icon={IconStale}
           tone="neutral"
           note="30일 넘게 손 안 댄 업무예요"
         />

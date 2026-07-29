@@ -368,7 +368,7 @@ export default async function TodayPage({
                   // 여닫는 움직임도 CSS다 (`disclose` — globals.css).
                   <details
                     key={group.taskId}
-                    className="disclose group rounded-lg px-2 py-1.5 transition-colors duration-300 ease-out hover:bg-muted"
+                    className="disclose group px-2 py-1.5"
                   >
                     <summary className="flex cursor-pointer list-none items-start gap-2 text-sm">
                       {/* 안 읽은 게 남았으면 알약을 꽉 채운다. 옅은 배경(다 읽은 그룹)과

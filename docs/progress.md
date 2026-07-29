@@ -1,6 +1,6 @@
 # 개발 진행 상황
 
-버전 0.20.1 · 2026-07-29 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
+버전 0.20.3 · 2026-07-29 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
 
 ## 요약
 
@@ -946,6 +946,30 @@ v0.15의 편집 패널은 셀렉트 네 개를 행 안에 펼쳐 놨다. 지금 
 남긴 것: `STATUS_TONE`에 `대기` 키가 없어서 대기 배지는 회색이다(모르는 라벨은 칠하지 않는
 설계 그대로). `listStaleTasks`도 `STTS` 코드를 라벨로 못 바꾼다 — 둘 다 이 수정에 묶지 않았다.
 
+### 요약 카드 세 화면 정렬 (v0.20.3)
+
+리스크·팀 화면 맨 위 요약 카드가 오늘 화면과 달랐다 — 라벨 앞에 아이콘이 없고 숫자가 24px로
+4px 작았다. 세 화면을 나란히 열면 같은 자리의 같은 카드가 다른 물건처럼 보였다.
+
+| 결정 | 이유 |
+|---|---|
+| `Kpi`에 `Icon`을 **필수** prop으로 | 옵션이면 호출부 한 곳을 빼먹어도 조용히 통과한다. 여덟 칸이 다 아이콘을 받아야 정렬이 성립한다 |
+| 아이콘 타입은 `React.ComponentType<IconProps>` | 오늘 화면 `Stat`은 `typeof IconRisk`를 쓰지만 그건 그 파일이 이미 값을 임포트해서다. `kpi.tsx`는 타입만 필요하다 |
+| `Stat`과 합치지 않았다 | 오늘 카드는 점유율 막대(`Meter`)와 `share%`가 붙는다. 합치면 안 쓰는 prop이 절반이 된다 ([kpi.tsx](../src/components/kpi.tsx) 주석 그대로) |
+| Reicon에서 두 개를 새로 들였다 | 리스크의 `프로젝트`·`최장 지연`은 기존 30개에 맞는 글리프가 없었다 — `Folder`→`IconProject`, `Hourglass`→`IconDelay` |
+
+팀 네 칸은 오늘 화면과 **같은 글리프**로 맞췄다(`IconTeam`·`IconRisk`·`IconImminent`·`IconStale`).
+같은 뜻의 카드가 화면마다 다른 그림을 쓰면 정렬한 의미가 없다.
+
+카드 간격(`gap`·`space-y`)은 손대지 않았다. 오늘 카드는 막대가 한 줄 더 들어가서 원래 더 넓다.
+
+**업무 줄의 hover 배경도 뺐다** ([task-item.tsx](../src/components/task-item.tsx)). 줄 자체는
+누를 수 없고 flow 링크와 액션 버튼이 줄 안에 따로 있다 — 배경이 따라 바뀌면 줄 전체를 누를 수
+있는 것으로 읽힌다. `hover:bg-muted`를 지우면서 그것만 쓰던 `transition-colors
+duration-300 ease-out`과 `rounded-lg`도 함께 지웠다. 오늘 화면 멘션 줄(`page.tsx:371`)도 같이
+뺐다 — 그쪽은 `<details>`라 눌러서 펼치는 줄이지만, `summary`에 `cursor-pointer`와 열림 화살표가
+이미 있어서 배경까지 바꿀 필요가 없다. `disclose group`과 여백만 남겼다.
+
 ### 밝기 세 갈래 (v0.15.0)
 
 밝게 · 어둡게 · 기기 설정. 팔레트 값과 근거는 PRD §7.1에 있다.
@@ -971,7 +995,7 @@ Tailwind `dark:` 변인은 블록 형태(`@custom-variant dark { … @slot }`)�
 ```
 npx tsc --noEmit   # clean
 npm run lint       # 0 error / 1 warning (아래 참고)
-npm test           # 69/69
+npm test           # 80/80
 npm run build      # 10 라우트 + proxy
 ```
 
