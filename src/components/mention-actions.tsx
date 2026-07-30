@@ -57,7 +57,10 @@ export function MentionActions({
             </Button>
           </form>
         )}
-        {postId && <ThreadView postId={postId} />}
+        {/* 이 줄에서 혼자 한 줄을 쓴다 (`basis-full`). 버튼 옆에 끼면 폭이 버튼 너비로
+            줄어드는데, 기다리는 동안 세우는 골격은 폭을 비율로 잡아서(`w-full`) 기댈 폭이
+            없으면 막대가 사라진다 — 도착할 댓글도 본문 아래 전폭으로 앉을 자리가 맞다 */}
+        {postId && <ThreadView postId={postId} className="basis-full" />}
       </div>
 
       {result && (

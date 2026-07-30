@@ -12,6 +12,7 @@ import {
 } from "react";
 import { searchFlow, type SearchResult } from "@/app/(app)/actions";
 import { IconInbox, IconLoader, IconSearch } from "@/components/icons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { splitHighlight } from "@/lib/flow/search";
 import { fmtDateTime } from "@/lib/utils";
 
@@ -127,12 +128,33 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
               </kbd>
             </div>
 
-            {projects.length + posts.length === 0 ? (
+            {pending && projects.length + posts.length === 0 ? (
+              /* 찾는 동안 결과 줄과 같은 모양을 세운다. `찾고 있어요` 한 줄이던 자리인데,
+                 글자만 있으면 레이어 높이가 결과가 올 때 열 배로 뛰었다 — 세 줄을 미리
+                 세우면 그만큼은 이미 자리를 잡고 있다. 도는 표시는 입력줄 왼쪽에 있다.
+                 이미 결과가 떠 있는 채로 다시 찾을 때는 이 골격을 세우지 않는다 — 있던
+                 결과를 지우고 회색 줄로 바꾸는 건 뒤로 가는 것이다 */
+              <div className="p-2">
+                <Skeleton className="mx-2.5 mt-2 mb-1 h-3 w-16" />
+                <ul>
+                  {[0, 1, 2].map((i) => (
+                    <li key={i} className="flex flex-col gap-1 px-2.5 py-2.5">
+                      <span className="flex items-baseline justify-between gap-3">
+                        <Skeleton className={i % 2 ? "h-4 w-1/3" : "h-4 w-1/2"} />
+                        <Skeleton className="h-3 w-20 shrink-0" />
+                      </span>
+                      <Skeleton className="h-3 w-2/5" />
+                      <Skeleton className="h-3.5 w-full" />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : projects.length + posts.length === 0 ? (
               <p className="flex items-center justify-center gap-2 p-10 text-sm font-medium text-muted-foreground">
                 <IconInbox size={16} aria-hidden />
                 {/* 결과가 없을 때 할 말은 액션이 들고 온다 — 실패면 flow가 준 사유 그대로,
                     빈 결과면 다음에 할 일이다 (actions.ts) */}
-                {pending ? "찾고 있어요" : (result?.message ?? "두 글자 이상 적으면 찾아드려요")}
+                {result?.message ?? "두 글자 이상 적으면 찾아드려요"}
               </p>
             ) : (
               <div className="overflow-y-auto p-2">

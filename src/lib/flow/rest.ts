@@ -129,7 +129,7 @@ export class FlowRestError extends Error {
 async function call<T>(
   path: string,
   what: string,
-  init?: { method?: string; body?: unknown; apiKey?: string },
+  init?: { method?: string; body?: unknown; apiKey?: string; revalidate?: number },
 ): Promise<T | null> {
   // `cookies()`는 요청 스코프 밖에서 던진다. 이 파일을 요청 없이 직접 부르는 곳이
   // 단위 테스트라, 그때는 쿠키를 건너뛰고 환경변수로 간다.
@@ -143,7 +143,12 @@ async function call<T>(
       ...(init?.body === undefined ? {} : { "content-type": "application/json" }),
     },
     body: init?.body === undefined ? undefined : JSON.stringify(init.body),
-    cache: "no-store",
+    // 기본은 매번 새로 받는다. `revalidate`를 준 호출만 Next 데이터 캐시에 올린다 —
+    // URL에 조회 대상(`userId` 등)이 들어 있는 호출만 그렇게 한다. 안 그러면 캐시 한 칸을
+    // 여러 사람이 나눠 쓴다.
+    ...(init?.revalidate === undefined
+      ? { cache: "no-store" as const }
+      : { next: { revalidate: init.revalidate } }),
   });
   const body = ((await res.json()) as Envelope<T>).response;
   if (!res.ok || !body?.success) {
@@ -153,8 +158,14 @@ async function call<T>(
 }
 
 /** 읽기 전용 래퍼. `data`가 비어 있으면 조회가 실패한 것으로 본다. */
-async function get<T>(path: string, what: string, apiKey?: string): Promise<T> {
-  const data = await call<T>(path, what, { apiKey });
+async function get<T>(
+  path: string,
+  what: string,
+  apiKey?: string,
+  /** 초. 주면 그 시간만큼 Next 데이터 캐시에 남는다. */
+  revalidate?: number,
+): Promise<T> {
+  const data = await call<T>(path, what, { apiKey, revalidate });
   if (!data) throw new Error(`${what} 실패 — 응답이 비어 있어요`);
   return data;
 }
@@ -319,9 +330,29 @@ export interface FlowComment {
  * ponytail: 첫 페이지만 본다. `hasNext`·`lastCursor`는 오는데 커서 파라미터 이름이
  * 문서화되지 않았다 — 한 게시글의 댓글이 한 페이지를 넘기면 그때 확인하면 된다.
  */
-export async function listComments(postId: string): Promise<FlowComment[]> {
-  const data = await get<{ comments?: FlowComment[] }>(`/user/comments/${postId}`, "댓글 조회");
+export async function listComments(postId: string, ttl?: number): Promise<FlowComment[]> {
+  const data = await get<{ comments?: FlowComment[] }>(
+    `/user/comments/${postId}`,
+    "댓글 조회",
+    undefined,
+    ttl,
+  );
   return data.comments ?? [];
+}
+
+/**
+ * 목록에서 **사람이 쓴 마지막 댓글**. 업무 한 줄에 붙이는 값이다 (`loadLastComment`).
+ *
+ * 응답은 오래된 것부터 온다 — 뒤에서 찾는다. 시스템 댓글(`담당자를 바꿨어요` 같은 변경
+ * 기록)은 건너뛴다: 실측 15건 중 7건이 그것이라 그냥 최신 한 건을 집으면 대부분의 줄이
+ * 변경 로그로 채워진다.
+ */
+export function lastHumanComment(comments: FlowComment[]): FlowComment | null {
+  for (let i = comments.length - 1; i >= 0; i--) {
+    const comment = comments[i];
+    if (!comment.systemCode) return comment;
+  }
+  return null;
 }
 
 /** `@[서동조](djseo7)` → `@서동조`. 알림은 걷어서 주는데 댓글 API는 안 걷는다. */
@@ -407,7 +438,14 @@ interface FilterTask {
    */
   columns?: {
     defaultColumnType?: string;
-    columnData?: { customColumnData?: string; userName?: string }[];
+    columnData?: {
+      customColumnData?: string;
+      userName?: string;
+      /** 커스텀 상태(`STATUS`)의 라벨. base 상태(`STTS`)는 항상 빈 문자열이다. */
+      optionName?: string;
+      /** 상태 그룹. 두 상태 체계가 **공통으로** 주는 값이라 완료 판정을 이걸로 한다. */
+      optionCategory?: string;
+    }[];
   }[];
 }
 
@@ -613,6 +651,90 @@ export interface StaleTask {
   workers: string[];
 }
 
+/** 내가 담당인 업무 한 건 (PRD §6.5). */
+export interface MyTask {
+  /** raw `TASK_SRNO` — 상태·마감일 바꾸기가 이 값을 요구한다. */
+  taskId: string;
+  /** `colabo_commt_srno` — flow 딥링크를 이걸로 만든다. */
+  postId: string;
+  title: string;
+  /** `YYYYMMDD`. 미설정이면 빈 문자열 — 실측 880건 중 720건이 그렇다. */
+  endDate: string;
+  /** 상태 라벨. 못 풀면 빈 문자열이다. */
+  status: string;
+  /** 완료 상태인가. */
+  done: boolean;
+}
+
+/** 담당자 필터가 걸리는 컬럼 번호. `WORKER_ID`가 기본 1번이다 (api-spec §6.1). */
+const WORKER_COLUMN = "1";
+
+/** 프로젝트당 페이지 상한. 100건 × 3 = 300건. 넘치면 `hasMore`로 알린다. */
+const MY_TASKS_MAX_PAGES = 3;
+
+/** 내 업무 응답을 데이터 캐시에 두는 시간(초). REST 분당 120회 중 이 화면 한 번이 ~60회다. */
+const MY_TASKS_TTL = 60;
+
+/**
+ * 한 프로젝트에서 **내가 담당인** 업무 전부 (PRD §6.5).
+ *
+ * 담당자 필터는 서버가 적용한다 — `filterRecords`에 `WORKER_ID IN <userId>`를 넣으면 내
+ * 업무만 온다. 전량 받아 클라이언트에서 거르는 길도 있지만 한 프로젝트가 600건이라
+ * 페이지가 여섯 장이고, 필터를 걸면 같은 프로젝트가 한 장으로 끝난다.
+ *
+ * `userId`는 **반드시 로그인 세션에서 채운다** (PRD §8.1). 공용 API 키에 남의 ID를 넣으면
+ * 그 사람 업무가 그대로 나온다 — 요청에서 받은 값을 여기 넘기면 그게 유출 경로다.
+ *
+ * 완료 판정은 `optionCategory === "2"`다. 프로젝트가 커스텀 상태(`STATUS`)를 쓰면 라벨이
+ * `optionName`으로 오고 base 상태(`STTS`)는 코드만 오는데, 두 체계가 공통으로 주는 값이
+ * 이 카테고리 하나뿐이다.
+ */
+export async function listMyTasks(
+  projectId: string,
+  userId: string,
+): Promise<{ tasks: MyTask[]; hasMore: boolean }> {
+  const filter = encodeURIComponent(
+    JSON.stringify([{ COLUMN_SRNO: WORKER_COLUMN, OPERATOR_TYPE: "IN", FILTER_DATA: userId }]),
+  );
+
+  const tasks: MyTask[] = [];
+  let hasMore = false;
+  // **`cursor`는 오프셋이 아니라 페이지 번호다** (0, 1, 2…). `cursor=100`을 넣으면 100번째
+  // 페이지를 달라는 뜻이라 빈 배열 + `hasNext: false`가 오고, 그러면 2쪽부터 조용히
+  // 사라진다 — 실측 236건 프로젝트가 100건으로 보였다 (bug-report BUG-030).
+  // 다음 번호는 응답의 `lastCursor`가 준다 (끝이면 `-1`).
+  let cursor = 0;
+
+  for (let page = 0; page < MY_TASKS_MAX_PAGES; page++) {
+    const data = await get<{ tasks?: FilterTask[]; hasNext?: boolean; lastCursor?: number }>(
+      `/user/posts/projects/${projectId}/tasks/filter?pageSize=${SIZE}&cursor=${cursor}&filterRecords=${filter}`,
+      "내 업무 조회",
+      undefined,
+      MY_TASKS_TTL,
+    );
+
+    for (const task of data.tasks ?? []) {
+      // 커스텀 상태를 먼저 본다. base `STTS`는 커스텀 프로젝트에서 `0`으로 평평하게
+      // 와서, 그걸 읽으면 `진행`이 `대기`로 보인다 (BUG-028과 같은 함정).
+      const cell = columnData(task, "STATUS")[0] ?? columnData(task, "STTS")[0];
+      tasks.push({
+        taskId: task.taskId,
+        postId: task.postId,
+        title: columnData(task, "TASK_NM")[0]?.customColumnData ?? "제목 없는 업무",
+        endDate: columnData(task, "END_DT")[0]?.customColumnData ?? "",
+        status: cell?.optionName?.trim() || STTS_LABEL[cell?.customColumnData ?? ""] || "",
+        done: cell?.optionCategory === "2",
+      });
+    }
+
+    if (!data.hasNext || data.lastCursor === undefined || data.lastCursor < 0) break;
+    if (page === MY_TASKS_MAX_PAGES - 1) hasMore = true;
+    cursor = data.lastCursor;
+  }
+
+  return { tasks, hasMore };
+}
+
 /** 방치 업무 스캔 상한. 100건 × 3 = 300건. 넘치면 `hasMore`로 알린다. */
 const STALE_MAX_PAGES = 3;
 
@@ -634,10 +756,12 @@ export async function listStaleTasks(
 
   const tasks: StaleTask[] = [];
   let hasMore = false;
+  // 페이지 번호다 — 오프셋이 아니다 (`listMyTasks` 주석, bug-report BUG-030).
+  let cursor = 0;
 
   for (let page = 0; page < STALE_MAX_PAGES; page++) {
     const data = await get<{ tasks?: FilterTask[]; hasNext?: boolean; lastCursor?: number }>(
-      `/user/posts/projects/${projectId}/tasks/filter?pageSize=${SIZE}&cursor=${page * SIZE}`,
+      `/user/posts/projects/${projectId}/tasks/filter?pageSize=${SIZE}&cursor=${cursor}`,
       "업무 조회",
     );
 
@@ -661,8 +785,9 @@ export async function listStaleTasks(
       });
     }
 
-    if (!data.hasNext) break;
+    if (!data.hasNext || data.lastCursor === undefined || data.lastCursor < 0) break;
     if (page === STALE_MAX_PAGES - 1) hasMore = true;
+    cursor = data.lastCursor;
   }
 
   return { tasks: tasks.sort((a, b) => a.endDate.localeCompare(b.endDate)), hasMore };

@@ -16,6 +16,16 @@ export const STATUS_TONE = {
     dot: 'bg-info',
     text: 'text-info-foreground',
   },
+  /**
+   * `요청`과 같은 상태(`STTS` 코드 0)를 flow가 부르는 다른 이름이다 — 시스템 기록은 `요청`,
+   * MCP 워크리스트는 `대기`다 (api-spec §6.1). 화면은 `대기`를 쓰는데 이 표에 키가 없어서
+   * 그 배지만 회색이었다 (BUG-028의 "남은 것"). 색은 `요청`과 같아야 한다.
+   */
+  대기: {
+    chip: 'bg-info-bg text-info-foreground',
+    dot: 'bg-info',
+    text: 'text-info-foreground',
+  },
   진행: {
     chip: 'bg-success-bg text-success-foreground',
     dot: 'bg-success',

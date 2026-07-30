@@ -8,6 +8,7 @@
  */
 export {
   CalendarCheck as IconToday,
+  Checklist as IconMyTasks,
   AlertTriangle as IconRisk,
   Users as IconTeam,
   Folder as IconProject,

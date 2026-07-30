@@ -27,6 +27,7 @@ import {
 } from "@/components/motion/center-morph-modal";
 import { Input } from "@/components/motion/input";
 import { ThreadView } from "@/components/thread-view";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn, fmtDate } from "@/lib/utils";
 
 /**
@@ -709,7 +710,14 @@ function WorkerField({
           <>
             <span className={FROM}>{current} →</span>
             {asking ? (
-              <span className={FROM}>불러오는 중…</span>
+              /* 올 것은 이름 알약 묶음이다 — 글자 한 줄(`불러오는 중…`)을 두면 참여자가
+                 도착하는 순간 이 줄이 두세 줄로 벌어져 저장 버튼이 손 아래에서 밀렸다.
+                 알약 다섯 개면 실측 참여자 수(4~12명)의 아래쪽만큼은 자리를 잡는다 */
+              <div className={CHIPS} aria-busy="true" aria-label="참여자 불러오는 중">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className={i % 2 ? "h-8 w-16" : "h-8 w-20"} />
+                ))}
+              </div>
             ) : (
               <div role="group" aria-labelledby={labelId} className={CHIPS}>
                 {candidates.map((person) => (

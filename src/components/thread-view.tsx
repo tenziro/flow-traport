@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { loadThread, type ThreadResult } from "@/app/(app)/actions";
 import { IconLastComment, IconOpen } from "@/components/icons";
 import { Button } from "@/components/motion/button/base";
+import { CommentRowsSkeleton } from "@/components/skeletons";
 import { cn, fmtDateTime } from "@/lib/utils";
 
 /**
@@ -52,6 +53,15 @@ export function ThreadView({
           <IconLastComment size={13} />
           {pending ? "가져오는 중…" : "댓글 다 보기"}
         </Button>
+      )}
+
+      {/* 기다리는 동안 올 것과 같은 모양을 세워 둔다 — 댓글이 몇 줄이든 아이콘 + 이름 +
+          본문 두 줄이라, 도착하면 이 자리에 글자만 앉는다 (`CommentRowsSkeleton`).
+          세 줄이다: 실측 평균이 그쯤이고, 더 세우면 짧은 스레드에서 목록이 줄어든다 */}
+      {pending && (
+        <div className="mt-2">
+          <CommentRowsSkeleton count={3} />
+        </div>
       )}
 
       {result && !result.comments && (

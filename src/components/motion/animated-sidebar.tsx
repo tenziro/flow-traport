@@ -258,6 +258,29 @@ export function SidebarButton({
   );
 }
 
+/**
+ * 메뉴 묶음의 이름. 검색 같은 도구 줄과 화면으로 가는 줄을 갈라 놓는다 — 넷을 한 줄기로
+ * 늘어놓으면 검색이 화면 목록의 첫 항목처럼 읽힌다.
+ *
+ * 접히면 `SidebarLabel`과 같은 방식으로 투명해진다. 68px 레일에는 글자가 안 들어가는데,
+ * 자리는 그대로 남아서 그 빈 칸이 묶음의 경계 노릇을 한다 — 선을 하나 더 긋지 않는다.
+ */
+export function SidebarSection({ children }: { children: React.ReactNode }) {
+  const { open, reduce } = useSidebar();
+
+  return (
+    <motion.p
+      initial={false}
+      animate={{ opacity: open ? 1 : 0 }}
+      transition={reduce ? LABEL_REDUCED : open ? LABEL_IN : LABEL_OUT}
+      // 위 `mt-3`이 묶음 사이 간격이다 (판의 `gap-1`에 더해진다). 아래는 첫 줄과 붙여 둔다
+      className="mt-3 shrink-0 truncate px-3 pb-1 text-[11px] font-semibold tracking-wider text-muted-foreground"
+    >
+      {children}
+    </motion.p>
+  );
+}
+
 /** 접히면 사라지는 글자. 투명해지기만 하고 이름은 남는다 (파일 머리 3번). */
 export function SidebarLabel({ children }: { children: React.ReactNode }) {
   const { open, reduce } = useSidebar();

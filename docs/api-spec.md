@@ -381,7 +381,7 @@ https://api.flow.team
 
 | 이름 | 타입 | 필수 | 기본 | 제약 / 설명 |
 |---|---|---|---|---|
-| `cursor` | string | | `0` | 0 이상 숫자. 0-based 페이지 커서 |
+| `cursor` | string | | `0` | 0 이상 숫자. **페이지 번호다 — 오프셋이 아니다.** 다음 페이지는 응답의 `lastCursor`를 그대로 넣는다. `pageSize`를 곱해서 계산하면(`cursor=100`) 빈 응답 + `hasNext: false`가 조용히 온다 — [BUG-030](bug-report.md#bug-030), 실측 236건 프로젝트가 100건으로 보였다 |
 | `pageSize` | string | | `50` | 1~100 |
 | `searchWord` | string | | | ≤1000자. 업무 검색어 |
 | `upTaskId` | string | | | 숫자. 상위 업무 ID로 한정 |
@@ -855,7 +855,7 @@ Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSi
 | `templateType` (업무) | `"1"` / `"2"` | `"92"` | 템플릿 타입으로 업무를 걸러내는 로직이 조용히 0건을 반환한다 |
 | `taskStatus` | `"REQUEST"` | `"901659"` (optionSrno) | 문자열 enum 비교가 전부 실패한다. 5.6으로 해석 필요 |
 | `rangeType` | `"ALL"` | `"A"` | 공개범위 비교 로직 주의 |
-| `cursor` 의미 | 명시 없음 | 오프셋 아님, **페이지 인덱스** | `cursor=pageSize*n` 로 계산하면 데이터가 건너뛰어진다 |
+| `cursor` 의미 | 명시 없음 | 오프셋 아님, **페이지 인덱스** | `cursor=pageSize*n` 로 계산하면 2페이지부터 빈 응답이 온다 — 오류도 경고도 없다 ([BUG-030](bug-report.md#bug-030)) |
 | 미설정 날짜/수치 | 명시 없음 | `null` 이 아니라 `""` | `?? 기본값` 이 동작하지 않는다. falsy 체크 필요 |
 
 ---

@@ -1,5 +1,6 @@
 import { FlowLink } from "@/components/flow-link";
-import { IconCalendar, IconComment, IconLastComment, IconMention } from "@/components/icons";
+import { IconCalendar, IconComment, IconMention } from "@/components/icons";
+import { LastComment } from "@/components/last-comment";
 import { Meter } from "@/components/meter";
 import { StatusPill } from "@/components/status-pill";
 import { TaskActions } from "@/components/task-actions";
@@ -55,7 +56,9 @@ export function TaskItem({
             제목 길이에 따라 달라졌다. 전문은 `flow에서 보기`로 넘어가면 나온다 */}
         <p className="flex items-start gap-2 text-sm font-semibold">
           <span className="min-w-0 flex-1 truncate">{task.title}</span>
-          <DDay days={task.daysLeft} />
+          {/* 마감일이 없으면 남은 일수가 없다. 내 업무 화면의 880건 중 720건이 그런데,
+              무조건 그리면 그 줄이 전부 `D-DAY`로 보인다 */}
+          {task.endDate ? <DDay days={task.daysLeft} /> : null}
         </p>
         <p className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <StatusPill status={task.status} />
@@ -113,21 +116,10 @@ export function TaskItem({
             ))}
           </ul>
         )}
-        {/* 밀리는·방치된 업무에도 뜬다 — 워크리스트에 없는 값이라 포커스 픽에서 빌려 붙인다 (queries.ts) */}
-        {task.lastComment && (
-          // 말풍선 아이콘으로 "남이 남긴 말"임을 표시한다. 위 메타 줄과 안 섞인다.
-          <p className="mt-1.5 flex gap-1.5 text-xs leading-relaxed text-muted-foreground">
-            {/* 아이콘 칸 높이를 글줄 한 줄(`1lh`)로 잡고 그 안에서 중앙에 둔다. `mt-*`로
-                눈대중하면 글자 크기나 leading이 바뀔 때마다 다시 어긋난다 */}
-            <span className="flex h-[1lh] shrink-0 items-center">
-              <IconLastComment size={13} />
-            </span>
-            {/* 폭은 열 끝까지 쓰고 2줄에서 자른다 — 좁혀 두면 같은 2줄에 담기는 말이 줄어든다.
-                `wrap-anywhere` — 댓글에 섞여 오는 링크는 띄어쓰기가 없다. 안 끊으면 그 한
-                덩어리가 통째로 잘려서 뒤에 오는 말까지 안 보인다 (BUG-025) */}
-            <span className="line-clamp-2 wrap-anywhere">{task.lastComment}</span>
-          </p>
-        )}
+        {/* 말풍선 한 줄. 오늘·팀 화면은 포커스 픽에서 빌린 값이 이미 있고(`lastComment`),
+            내 업무 화면은 `postId`만 넘겨 화면에 들어올 때 불러온다 (`LastComment`) */}
+        <LastComment text={task.lastComment} postId={"postId" in task ? task.postId : undefined} />
+
         <FlowLink href={task.link} className="mt-1.5" />
         <TaskActions
           projectId={projectId}

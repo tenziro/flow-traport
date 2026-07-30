@@ -23,7 +23,7 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
 | `/` (오늘) | 임박·밀림·포커스·방치 업무, 나를 부른 사람들, 오늘 일정, 요약 카드 4칸 | 운영 |
 | `/risk` | 프로젝트별 위험도 보드, 프로젝트에 업무 추가 | 운영 |
 | `/team` | 부서 탭, 팀원별 업무 현황, 팀 일정 | 운영 |
-| `/tasks` (내 업무) | PRD §6.5 설계만 있음 | Phase 6 예정 |
+| `/tasks` (내 업무) | 담당 업무 전량(실측 951건)을 프로젝트 아코디언으로. 세 무리를 탭으로 갈랐고 완료는 안에서 다시 접는다 | 운영 |
 
 ### 화면 안 기능
 
@@ -40,6 +40,9 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
   로그아웃이 든 팝오버가 옆으로 열린다. 좁은 화면은 헤더의 로그아웃 단추 하나뿐이다.
 - **화면 밝기** — 밝게·어둡게·기기 설정 세 갈래 라디오. 첫 HTML에 박아서 번쩍임이 없다.
 - **업데이트 로그** — 푸터 버튼 → 모달에서 버전별로 접어 본다.
+- **골격(스켈레톤)** — 화면 넷이 각자 `loading.tsx`를 갖는다. 틀은 실제 클래스를 그대로 쓰고
+  글자 자리만 회색 막대라 내용이 도착할 때 배치가 안 튄다 (PRD §7.4.1). 스레드 댓글·참여자·
+  검색 결과처럼 화면 안에서 기다리는 자리도 같은 규칙이다.
 
 ### 데이터
 
@@ -52,11 +55,164 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
 
 - Next.js 16 App Router · React 19 · Tailwind v4 · Motion · beUI(vendoring) · Reicon.
 - 색은 `globals.css`의 `light-dark()` 토큰 한 벌. 컴포넌트에 raw hex 금지 (PRD §7.1).
-- 유닛 테스트는 `node:test`. 현재 86건.
+- 유닛 테스트는 `node:test`. 현재 106건.
 
 ---
 
 ## 변경 이력
+
+### 2026-07-31 — 멘션 본문 아래 댓글 골격이 눌려 있었다 (v1.2.0)
+
+`수정` 멘션 카드에서 `댓글 다 보기`를 누를 때 세우는 골격이 버튼 너비(약 130px)로 눌려서
+없는 것처럼 보였다. `ThreadView`의 `<form>`이 `flex flex-wrap items-center` 안의 항목이라
+`max-content`로 줄어들었고, 비율 폭(`w-full`)은 그 계산에 0으로 들어가 정작 막대가 형제
+글자 폭에 맞춰졌다. `className="basis-full"`로 그 줄에서 혼자 한 줄을 쓰게 했다 — 읽음
+버튼은 왼쪽에 그대로 있고 골격과 도착한 댓글이 본문 아래 전폭에 앉는다. 같은 컴포넌트를
+쓰는 업무 카드(`task-actions.tsx`)는 세로 블록 안이라 원래부터 정상이었다.
+
+헤드리스 크롬으로 두 배치를 나란히 찍어 실측했다: 눌린 쪽 약 130px, 고친 쪽 약 570px.
+
+- 관련 파일: `src/components/mention-actions.tsx` · `docs/bug-report.md`([BUG-033](bug-report.md#bug-033)) · `docs/PRD.md`(§7.4.1)
+
+### 2026-07-30 — 끝낸 줄에서 댓글을 빼고, 조용한 프로젝트에 길을 냈다 (v1.2.0)
+
+`개선` 내 업무 화면 두 곳. 끝낸 업무 목록에서 마지막 댓글을 걷어내고, 담당 업무가 없는
+프로젝트 줄에 flow 링크를 달았다.
+
+- **끝낸 줄에 댓글을 안 낸다** (`DoneTaskRow`) — 처음엔 "어떻게 끝났는지가 거기 적혀 있다"고
+  넣었는데, 실측 818건이 이 목록이라 펼치는 순간 한 줄이 세 줄이 되고 화면이 댓글 벽이 됐다.
+  댓글 자리 949개 → **131개**(안 끝난 줄만), HTML 4.60MB → 4.48MB. 어떻게 끝났는지는
+  `flow에서 열기`로 본다. 감싸던 `div` 하나가 필요 없어져 한 겹 걷었다.
+- **담당 0건 21개에 flow 링크** — 이 탭에서 할 수 있는 일이 flow로 가서 찾는 것뿐인데 이름만
+  있어서 막다른 칸이었다. 줄마다 `flow에서 열기`를 둔다. 프로젝트에는 짧은 링크가 없어서
+  (상세의 링크성 값은 초대 URL 하나뿐) `flowProjectUrl()`로 `main.act?projectId=`를 만든다.
+  `quiet`가 이름 배열이 아니라 `{ name, link }[]`가 됐다.
+- 검증: tsc · lint 0 error(기존 경고 1) · 106/106 · build 12 라우트. 실화면(프로덕션 + 임시
+  세션 쿠키)에서 조용한 줄 21개에 링크 21개, 탭 건수와 일치.
+- 관련: `src/components/done-task-row.tsx`, `src/app/(app)/tasks/page.tsx`,
+  `src/lib/flow/my-tasks.ts`, `src/lib/flow/queries.ts`, `src/lib/flow/my-tasks.test.ts`,
+  `docs/PRD.md` §6.5
+
+### 2026-07-30 — 업데이트 로그 글자를 한 급 내렸다 (v1.2.0)
+
+`개선` 아코디언 기본 글자가 제목·본문 다 15px이었다. 읽고 나가는 곳이라 앱 본문 치수로
+맞춘다 — 제목 14px(`text-sm`) · 내용 13px. 같은 모달 안 제목(`text-base`)과의 차이도 그만큼
+벌어져 세 층이 갈린다. 아코디언은 모달 안에서만 그려져 SSR HTML에 없으므로 `cn()`에 값을 넣어
+`tailwind-merge`가 벤더 클래스를 실제로 밀어내는지 직접 확인했다.
+
+- 관련: `src/components/site-footer.tsx`
+
+### 2026-07-30 — 화면마다 자기 골격 (v1.2.0)
+
+`개선` 네 화면이 제목 + 카드 3장짜리 골격 하나를 같이 쓰고 있었다. 화면마다 단 수와 칸 폭이
+달라서 실제 화면이 도착할 때마다 배치가 한 번 튀었다 — 골격이 막으려던 그 튐이다. **틀은 진짜
+클래스를 그대로 쓰고 글자 자리만 회색 막대**로 바꿨다 (PRD §7.4.1).
+
+- **나눠 쓰는 부분 일곱 개** (`skeletons.tsx`) — `HeadSkeleton`·`KpiRowSkeleton`·
+  `TabBarSkeleton`·`PanelSkeleton`·`TaskRowsSkeleton`·`SummaryCardsSkeleton`·
+  `CommentRowsSkeleton`. 훅이 없어서 서버·클라이언트 양쪽에서 부른다.
+- **화면 넷이 각자 `loading.tsx`** — 오늘(4단 8:4 격자) · 리스크(탭 + 요약 카드 4장 순위 칸) ·
+  팀(팀원 카드 6장, 펼쳐진 채로 온다) · 내 업무(탭이 KPI **아래**다. 59개를 훑어 가장 오래 기다린다).
+- **오늘 화면을 `(today)` 무리로 옮겼다** — `(app)/loading.tsx`는 자식 경로 셋의 **부모**
+  경계라서 리스크·팀·내 업무를 열면 오늘 골격이 먼저 깜빡였다 (BUG-032, 실측으로 `/risk`
+  응답에 골격 두 벌). 무리 이름은 URL에 안 나온다 — 주소는 그대로 `/`다.
+- **골격 색을 `bg-foreground/8`로** — shadcn 기본값 `bg-muted`가 밝은 화면에서 배경과 명도
+  차이 2%라 안 보였다 (BUG-031). `--muted`와 `--secondary`가 같은 값인 것도 이때 알았다.
+- **화면 안 기다림도 같은 규칙** — 스레드 댓글 3줄 · 참여자 알약 5개 · 검색 결과 3줄. 글자 한
+  줄(`찾고 있어요`·`불러오는 중…`)이던 자리인데, 결과가 오면 레이어 높이가 열 배로 뛰거나
+  저장 버튼이 손 아래에서 밀렸다. 이미 결과가 떠 있으면 골격을 세우지 않는다 — 있던 결과를
+  회색 줄로 바꾸는 건 뒤로 가는 것이다.
+- 골격에 `rise`를 안 붙인다. 진짜 카드가 그걸로 올라오는데 골격도 올라오면 모션이 두 번 돈다.
+  탭 줄은 알약이 아니라 막대 하나다 — 탭 수(부서 수·안 빈 무리 수)는 서버가 답하기 전에는 모른다.
+- 검증: 네 화면 모두 골격 트리 **1개**, 막대 `/` 88 · `/risk` 35 · `/team` 69 · `/tasks` 32,
+  오늘 화면 일정 칸(`w-[76px]`)은 `/`에만.
+- 관련: `src/components/skeletons.tsx`, `src/components/ui/skeleton.tsx`,
+  `src/app/(app)/(today)/loading.tsx`, `src/app/(app)/risk/loading.tsx`,
+  `src/app/(app)/team/loading.tsx`, `src/app/(app)/tasks/loading.tsx`,
+  `src/components/thread-view.tsx`, `src/components/task-actions.tsx`,
+  `src/components/search-palette.tsx`, `docs/PRD.md` §7.4.1
+
+### 2026-07-30 — 내 업무 화면 다듬기: 탭·구분선·마지막 댓글 (v1.2.0)
+
+`개선` 첫 구현을 실화면으로 보고 고친 것들이다.
+
+- **프로젝트 38장을 탭 세 칸으로** — `할 일 있어요 24` / `다 끝냈어요 14` / `내 업무 없어요 21`.
+  한 줄기로 늘어서면 볼 것과 안 볼 것이 섞인다. 빈 무리는 탭에서 뺀다.
+- **목록 줄에 구분선** — 951줄이 여백만으로 갈리면 한 업무가 어디까지인지 안 보인다. 안 끝난
+  목록과 끝낸 목록이 같은 `border-b border-border/60`을 쓴다.
+- **안 끝난 줄에 마지막 댓글** (`LastComment`) — 오늘 화면은 포커스 픽 topN 20에서 빌려 붙이는데
+  여긴 951줄이라 빌릴 데가 없다. 줄마다 REST 한 번이면 분당 상한(120)을 여덟 배 넘긴다.
+  `IntersectionObserver`로 **펼쳐서 눈에 들어온 줄만** 부른다 — 접힌 `<details>` 안의 줄은
+  화면에 없어서 통과하지 않는다. 서버 액션 `loadLastComment` + 5분 캐시, `systemCode`가 붙은
+  변경 로그는 건너뛴다 (`lastHumanComment` — 실측 15건 중 7건이 그것이다).
+- **크기 0인 요소는 화면에 들어왔다고 안 볼 수 있다** — 자리를 미리 비우지 않으려고 지켜볼 점을
+  `h-0`으로 뒀더니 한 번도 안 걸렸다. `h-px` + `-mb-px`로 실제 크기를 주고 자리만 상쇄한다.
+- 관련: `src/app/(app)/tasks/page.tsx`, `src/components/last-comment.tsx`,
+  `src/app/(app)/actions.ts`, `src/lib/flow/rest.ts`, `src/lib/flow/queries.ts`,
+  `src/components/task-item.tsx`, `src/lib/flow/rest.test.ts`
+
+### 2026-07-30 — 내 업무 화면 (`/tasks`) (v1.2.0)
+
+`기능` 오늘 화면이 내 담당 업무 951건 중 16건만 보여 준다는 실측에서 나온 화면이다 (PRD §6.5,
+Phase 6). 참여 프로젝트 59개를 병렬로 훑어 담당 업무 전량을 받고, 프로젝트 아코디언으로 쌓는다.
+
+- **담당자 필터는 서버에서 걸린다** — `tasks/filter`에
+  `filterRecords=[{COLUMN_SRNO:"1"(WORKER_ID), OPERATOR_TYPE:"IN", FILTER_DATA:"<userId>"}]`.
+  전량을 받아 걸러 내는 게 아니라 내 것만 온다. 필터 값은 **요청에서 받지 않고**
+  `loadMyTasks()`가 세션에서 직접 꺼낸다 — 공용 API 키에 남의 ID를 넣어도 그 사람 업무가
+  나오기 때문이다 (실측). 값은 flow 짧은 아이디가 아니라 **이메일**이다.
+- **`cursor`가 페이지 번호였다** — 아래 `수정` 항목. 고치기 전 680건이 951건이 됐다.
+- **상태 두 체계를 `optionCategory`로 통일** — `STTS`(기본)는 `optionName`이 항상 빈 문자열이라
+  코드 표(`0` 대기 … `4` 피드백)로 내려가고, `STATUS`(커스텀)는 `optionName`을 그대로 쓴다.
+  두 체계가 공통으로 주는 건 `optionCategory`뿐이라 **완료 판정은 `=== "2"`** 하나로 한다.
+- **완료 줄은 읽기 전용** (`DoneTaskRow`) — 818건이 완료다. 프로젝트 안에서 다시 접고,
+  펼쳐도 제목·상태·마감일·flow 링크만 낸다. 끝낸 업무에 바꾸기 액션을 달 이유가 없다.
+- **프로젝트마다 상태 칩** (`ProjectTaskFilter`) — 안 끝난 것 40건이 대기 10·진행 5·보류
+  24·피드백 1로 섞인 프로젝트가 있다. 오늘 화면의 `StatusFilter`와 같은 칩인데 **URL 대신
+  `useState`**를 쓴다: 서버가 다시 그리면 프로젝트 59회 훑기(캐시가 식으면 7초) + 3MB
+  재전송이고, 카드마다 쿼리 키가 붙어 URL이 38칸이 된다. 업무 줄은 서버에서 그려 `row`로
+  넘긴다 — `TaskItem`이 서버 컴포넌트라 쓰기 액션이 그대로 따라온다. 칩 겉모양은
+  `statusChipClass`·`StatusDot`으로 두 화면이 나눠 쓴다. 상태가 한 종류인 프로젝트에는
+  칩이 없고, 같은 칩을 다시 누르면 풀린다. 실측 38장 중 9장에 칩이 붙는다.
+- **KPI 세 칸을 색으로 가른다** — `안 끝난 업무`에 준 `primary`가 밝은 화면에서 `#171717`이라
+  세 칸이 다 검게 보였다. `warning`(주의는 맞지만 전부 마감을 넘긴 건 아니다 — `danger`는
+  리스크 화면의 `밀리는 업무`가 쓴다)과 `done`(프로젝트 줄 `Meter`의 보라와 같은 색)으로
+  바꿨다. `Kpi`의 `TONE`에 `done`을 더했다.
+- **`대기` 배지가 회색이던 것** — `STATUS_TONE`에 `요청`은 있고 `대기`가 없었다. 같은 상태
+  (`STTS` 0)를 flow가 두 이름으로 부르는데 화면은 `대기`를 쓴다 (api-spec §6.1). 색 없는
+  칩이 상태 필터에 섞이면 안 되니 `요청`과 같은 `info`로 채웠다 — BUG-028이 "남은 것"으로
+  적어 둔 그 줄이다. 실측 이제 회색으로 떨어지는 상태 0건.
+- **마감일 없는 업무에 D-DAY를 안 그린다** — 951건 중 785건에 마감일이 없다. 무조건 그리면
+  그 줄이 전부 `D-DAY`로 보였다 (`TaskItem`).
+- **딥링크는 조립한다** — 이 응답의 `connectUrl`은 전부 빈 문자열이고 `projectId`·`postId`가
+  있어서 `flowPostUrl()`로 만든다. 오늘 화면이 검색으로 `projectId`를 찾는 그 단계가 없다.
+- 프로젝트 목록은 MCP `flow_list_projects`가 아니라 REST `listProjects()`다 — 그 MCP 도구는
+  서버 런타임에서 죽어 있다 (BUG-007). 담당 0건인 21개는 한 줄로 접고, 3페이지를 넘겨
+  잘린 프로젝트나 실패한 프로젝트가 있으면 화면 아래에 이름을 적는다 (실측 둘 다 0개).
+- 검증: tsc · lint 0 error(기존 경고 1) · 103/103 · build 12 라우트. 실측 59개 프로젝트
+  7.1초 · 951건 · 안 끝난 것 133 · 카드 38장 · 조용한 프로젝트 21개. 60초 캐시가 물리면
+  0.21초(첫 로드 2.8초). **951줄이 전부 DOM에 있어 HTML이 3.3MB다** — `<details>`로 접는
+  방식의 대가고, 지금 건수에서는 감당한다 (PRD §6.5 한계 ⑤).
+- 관련: `src/app/(app)/tasks/page.tsx`, `src/lib/flow/my-tasks.ts`,
+  `src/components/done-task-row.tsx`, `src/components/project-task-filter.tsx`,
+  `src/lib/flow/rest.ts`, `src/components/task-item.tsx`, `src/components/kpi.tsx`,
+  `src/components/status-filter.tsx`, `src/components/status-pill.tsx`,
+  `src/components/icons.tsx`, `src/components/app-shell.tsx`,
+  `src/lib/flow/my-tasks.test.ts`, `src/lib/flow/rest.test.ts`
+
+### 2026-07-30 — 업무 필터 페이징이 첫 100건만 세고 있었다 (v1.2.0)
+
+`수정` `/user/posts/projects/{id}/tasks/filter`의 `cursor`는 **오프셋이 아니라 페이지
+번호**다. `page * pageSize`로 계산해 `cursor=100`을 보내면 서버가 오류 없이
+`tasks: []` + `hasNext: false`를 줘서 "더 없구나"로 읽힌다. 236건인 프로젝트가 딱 100건으로
+보이던 게 이것이었다 (BUG-030).
+
+- 커서 계산을 버리고 응답의 `lastCursor`를 그대로 되돌려 준다. 끝이면 `-1`이다.
+- 같은 계산을 하고 있던 `listStaleTasks`도 함께 고쳤다 — 방치 목록도 첫 100건만 보고 있었다.
+- 페이징 테스트는 나가는 URL을 붙잡아 `cursor=1`이 나가고 `cursor=100`은 안 나가는 것,
+  `lastCursor: -1`에서 멈추는 것, 3페이지 상한에서 `hasMore`가 서는 것을 확인한다.
+- 실측 전량 680건 → **951건**.
+- 관련: `src/lib/flow/rest.ts`, `src/lib/flow/rest.test.ts`, `docs/api-spec.md` §6.1
 
 ### 2026-07-30 — 계정은 레일 발로, 이름은 한 줄로 (v1.1.0)
 

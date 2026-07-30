@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useRef, useState } from 'react';
 import {
   IconChevronRight,
+  IconMyTasks,
   IconRisk,
   IconSearch,
   IconSignOut,
@@ -18,6 +19,7 @@ import {
   SidebarLabel,
   SidebarLink,
   SidebarProvider,
+  SidebarSection,
   SidebarTrigger,
 } from '@/components/motion/animated-sidebar';
 import {
@@ -62,6 +64,7 @@ import { cn } from '@/lib/utils';
  */
 const NAV = [
   { href: '/', label: '오늘', Icon: IconToday },
+  { href: '/tasks', label: '내 업무', Icon: IconMyTasks },
   { href: '/risk', label: '리스크', Icon: IconRisk },
   { href: '/team', label: '팀', Icon: IconTeam },
 ] as const;
@@ -102,6 +105,10 @@ export function AppShell({
             footer={<Account user={user} />}
           >
             <SidebarSearch />
+
+            {/* 검색은 도구고 아래 넷은 갈 곳이다. 라벨로 갈라 둔다 — `WORKSPACES` 자리인데
+                화면에 나오는 글자는 한국어로 쓴다 (docs/TEXT_GUIDE.md) */}
+            <SidebarSection>업무 공간</SidebarSection>
 
             {NAV.map(({ href, label, Icon }) => (
               <SidebarLink
@@ -164,7 +171,7 @@ export function AppShell({
           {/* 모바일 하단 탭 */}
           <nav
             aria-label="주요"
-            className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
+            className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
           >
             {NAV.map(({ href, label, Icon }) => {
               const here = href === active.href;

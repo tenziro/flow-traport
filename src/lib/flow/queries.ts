@@ -36,6 +36,11 @@ export interface WorklistTask {
   link: string;
   /** 워크리스트 응답에는 없다. `flow_suggest_my_focus` 픽에서 빌려 붙인다 (`loadToday`). */
   lastComment?: string;
+  /**
+   * 댓글 API가 요구하는 게시글 ID. 업무 필터 응답에는 있고(`MyTask.postId`) 워크리스트
+   * 응답에는 없다 — 없는 줄은 마지막 댓글을 나중에 불러올 수 없다 (`LastComment`).
+   */
+  postId?: string;
 }
 
 /** 워크리스트가 주는 건 발신자·시각·제목뿐이다. 댓글 본문은 `MentionRow`쪽 — 알림 REST에서 붙인다. */
@@ -96,6 +101,13 @@ export interface TaskNews {
  */
 export const flowPostUrl = (projectId: string, postId: string) =>
   `https://flow.team/main.act?projectId=${encodeURIComponent(projectId)}&postId=${encodeURIComponent(postId)}`;
+
+/**
+ * flow 프로젝트 딥링크. 위 형식에서 `postId`만 뺀 것이다 — 프로젝트에는 짧은 링크가 없고
+ * 상세 응답의 링크성 값은 `INVT_URL`(초대 URL)뿐이다 (PRD §7 실측). MCP도 같은 주소를 준다.
+ */
+export const flowProjectUrl = (projectId: string) =>
+  `https://flow.team/main.act?projectId=${encodeURIComponent(projectId)}`;
 
 export interface TodayData {
   /** 조회 기준 시각. 렌더 중 `Date.now()`를 부르지 않으려고 여기서 찍어 내려보낸다. */

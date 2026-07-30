@@ -8,6 +8,8 @@ const TONE = {
   warning: "text-warning-foreground",
   primary: "text-primary",
   neutral: "text-neutral-foreground",
+  /** 완료. `StatusPill`의 `완료`와 `Meter`의 `bg-done` 조각과 같은 보라다. */
+  done: "text-done-foreground",
 } as const;
 
 /**

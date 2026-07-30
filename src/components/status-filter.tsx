@@ -54,6 +54,30 @@ export function StatusFilter({
   );
 }
 
+/**
+ * 칩 겉모양. 링크 칩(이 파일)과 버튼 칩(`project-task-filter.tsx`)이 같은 모양을 쓴다 —
+ * 클래스를 두 벌 두면 한쪽만 고쳐져서 화면마다 다른 칩이 된다.
+ *
+ * `status`를 안 주면(= "전체" 칩) 켜졌을 때 회색 면이다.
+ */
+export function statusChipClass(active: boolean, status?: string) {
+  const tone = status ? STATUS_TONE[status as keyof typeof STATUS_TONE] : undefined;
+
+  return cn(
+    "tabular inline-flex min-h-6 items-center gap-1.5 rounded-md px-2 text-xs transition-colors duration-300",
+    active ? (tone?.chip ?? "bg-secondary text-foreground") : "text-muted-foreground hover:bg-muted",
+  );
+}
+
+/**
+ * 칩 안 상태 색 점. 모르는 상태면 `null`이다 — 추측해서 칠하지 않는다(`StatusPill`과 같다).
+ * 점은 칩이 꺼져 있을 때도 남긴다 — 어느 칩이 어느 색인지가 눌러 보기 전에 보여야 한다.
+ */
+export function StatusDot({ status }: { status: string }) {
+  const tone = STATUS_TONE[status as keyof typeof STATUS_TONE];
+  return tone ? <span className={cn("size-1.5 shrink-0 rounded-full", tone.dot)} /> : null;
+}
+
 function Chip({
   href,
   active,
@@ -66,21 +90,13 @@ function Chip({
   status?: string;
   children: React.ReactNode;
 }) {
-  const tone = status ? STATUS_TONE[status as keyof typeof STATUS_TONE] : undefined;
-
   return (
     <Link
       href={href}
       aria-current={active ? "true" : undefined}
-      className={cn(
-        "tabular inline-flex min-h-6 items-center gap-1.5 rounded-md px-2 text-xs transition-colors duration-300",
-        active
-          ? (tone?.chip ?? "bg-secondary text-foreground")
-          : "text-muted-foreground hover:bg-muted",
-      )}
+      className={statusChipClass(active, status)}
     >
-      {/* 점은 꺼져 있을 때도 남긴다 — 어느 칩이 어느 색인지가 눌러 보기 전에 보여야 한다 */}
-      {tone && <span className={cn("size-1.5 shrink-0 rounded-full", tone.dot)} />}
+      {status && <StatusDot status={status} />}
       {children}
     </Link>
   );
