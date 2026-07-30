@@ -262,7 +262,9 @@ function RollupCard({
                 <span className={cn('text-xs font-semibold', grade.text)}>
                   {RISK_GRADE_LABEL[rollup.grade]}
                 </span>
-                <span className="min-w-0 flex-1 basis-full font-medium sm:basis-auto">
+                {/* 프로젝트명은 한 줄에서 자른다 — 긴 이름이 두세 줄로 흘러 등급 점과
+                    오른쪽 건수 사이가 벌어졌다 */}
+                <span className="min-w-0 flex-1 basis-full truncate font-medium sm:basis-auto">
                   {rollup.name}
                 </span>
                 {/* 팀 화면 멤버 카드와 같은 줄이다 — 힌트 문구도 같이 맞춘다 */}
@@ -369,8 +371,8 @@ function TaskRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            {/* 굵기는 다른 화면의 업무 제목과 같은 semibold (task-item.tsx) */}
-            <p className="text-sm font-semibold">{task.title}</p>
+            {/* 굵기도, 한 줄에서 자르는 것도 다른 화면의 업무 제목과 같다 (task-item.tsx) */}
+            <p className="truncate text-sm font-semibold">{task.title}</p>
             {/* 상태는 글자 대신 배지로 — 한 줄에 이름·상태·기한이 다 있으면 상태가 안 읽힌다 */}
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
               <StatusPill status={task.status} />

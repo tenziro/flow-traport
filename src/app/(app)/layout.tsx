@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/auth";
 import { loadNews } from "@/lib/flow/queries";
+import { SIDEBAR_COOKIE, toSidebarOpen } from "@/lib/sidebar";
 import { THEME_COOKIE, toTheme } from "@/lib/theme";
 
 /**
@@ -20,9 +21,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <AppShell
-      user={{ fullname: session.fullname, divisionName: session.divisionName }}
+      user={{
+        fullname: session.fullname,
+        divisionName: session.divisionName,
+        email: session.email,
+      }}
       news={news}
       theme={toTheme(cookieStore.get(THEME_COOKIE)?.value)}
+      sidebarOpen={toSidebarOpen(cookieStore.get(SIDEBAR_COOKIE)?.value)}
     >
       {children}
     </AppShell>

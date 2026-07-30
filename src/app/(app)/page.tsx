@@ -391,19 +391,24 @@ export default async function TodayPage({
                       <span className="min-w-0 flex-1">
                         {/* 크기는 다른 카드의 업무 제목(`text-sm`)과 같게. 여기만 15px이라
                             같은 업무 제목인데 카드마다 다르게 보였다. 댓글 본문(13px)보다는
-                            여전히 한 급 크고 진해서 첫 댓글이 제목처럼 읽히지 않는다. */}
-                        <span className="line-clamp-2 text-sm leading-snug font-semibold">
+                            여전히 한 급 크고 진해서 첫 댓글이 제목처럼 읽히지 않는다.
+                            두 줄까지 흘리던 것을 한 줄에서 자른다 — 긴 제목만 두 줄이 되니
+                            줄 높이가 들쭉날쭉했고, 눌러 펼치면 본문에 제목이 다시 나온다 */}
+                        <span className="block truncate text-sm leading-snug font-semibold">
                           {group.title}
                         </span>
                         {/* 다른 카드의 업무 줄과 같은 순서다 — 상태, 프로젝트, 그다음이
                             시각. 상태는 게시글 상세, 프로젝트는 알림에서 각각 풀어 온 값이고
-                            (queries.ts), 조회가 실패하면 그 자리만 빠진다 */}
-                        <span className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                            (queries.ts), 조회가 실패하면 그 자리만 빠진다.
+                            줄을 접지 않는다 (`flex-wrap` 없음) — 접히면 프로젝트명이 제 줄로
+                            내려가 어떤 줄은 2단, 어떤 줄은 3단이 됐다. 대신 프로젝트명만
+                            줄어들며 잘리고 사람·시각은 끝까지 남는다 */}
+                        <span className="tabular mt-1 flex items-center gap-x-2 text-xs text-muted-foreground">
                           {group.status && <StatusPill status={group.status} />}
                           {group.project && (
                             <span className="truncate">{group.project}</span>
                           )}
-                          <span>
+                          <span className="shrink-0">
                             {group.lastFrom} · {fmtDateTime(group.lastAt)}
                           </span>
                         </span>

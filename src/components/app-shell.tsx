@@ -1,18 +1,41 @@
 'use client';
 
-import { motion } from 'motion/react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { IconRisk, IconSignOut, IconTeam, IconToday } from '@/components/icons';
+import { useRef, useState } from 'react';
+import {
+  IconChevronRight,
+  IconRisk,
+  IconSearch,
+  IconSignOut,
+  IconTeam,
+  IconToday,
+} from '@/components/icons';
+import {
+  AnimatedSidebar,
+  SidebarButton,
+  SidebarLabel,
+  SidebarLink,
+  SidebarProvider,
+  SidebarTrigger,
+} from '@/components/motion/animated-sidebar';
 import {
   ChromaticTextReveal,
   SWEEP_CHART,
 } from '@/components/motion/chromatic-text-reveal';
-import { OverflowActions } from '@/components/motion/overflow-actions';
 import { NewsBell } from '@/components/news-bell';
-import { SearchPalette } from '@/components/search-palette';
+import { SearchProvider, useSearchOpen } from '@/components/search-palette';
 import { SiteFooter } from '@/components/site-footer';
-import { ThemeCycle } from '@/components/theme-toggle';
+import { ThemeToggle } from '@/components/theme-toggle';
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import type { TaskNews } from '@/lib/flow/queries';
 import type { Theme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
@@ -20,18 +43,21 @@ import { cn } from '@/lib/utils';
 /**
  * 레이아웃 셸 (PRD §7.3).
  *
- * 주요 내비게이션은 **상단 바**에 둔다. 예전에는 ≥1024px에서 좌측 사이드바
- * (beUI bounce-sidebar)였는데, 화면이 세로로 긴 목록 위주라 좌측 240px을 항상
- * 내주는 게 아까웠다. 상단으로 올리면서 본문 폭이 그만큼 넓어진다.
+ * ≥1024px는 **좌측 레일 + 본문 헤더**다. 레일이 화면을 위에서 아래까지 쓰고 머리에 브랜드,
+ * 가운데 검색·메뉴, 발에 계정을 품는다 (beUI animated-sidebar —
+ * `motion/animated-sidebar.tsx`). 헤더는 본문 칸 위에만 있고 접기 단추와 지금 있는 화면
+ * 이름, 밝기·소식을 든다.
  *
- * 상단 바는 2행이다. 1행은 브랜드·사용자, 2행은 메뉴 탭바(underline).
- * 한 행에 다 넣으면 브랜드와 메뉴가 같은 무게로 보여서 지금 어느 화면인지가
- * 묻힌다 — 행을 나누면 탭바 하나만 훑어도 위치가 읽힌다.
+ * 한동안 메뉴를 상단 2행째 탭바에 뒀다. 좌측 240px을 항상 내주는 게 아까웠기 때문인데,
+ * 접히는 레일이면 그 240px이 필요할 때만 나간다 — 접으면 68px이고 라벨만 사라진다.
+ * 브랜드와 검색까지 레일로 내리면 헤더는 한 줄로 줄고 세로 자리를 한 행(44px) 돌려받는다.
  *
  * 폭은 fluid다 — `max-w-*` 없이 화면을 꽉 쓴다. 카드가 목록 위주라 넓어지면 한 행에
  * 담기는 정보가 늘고, 좌우 여백만 `px-4 → sm:px-6 → lg:px-8`로 벌려 잡아준다.
  *
- * <1024px는 그대로 상단 앱바 + 하단 탭이다 — 엄지가 닿는 곳에 두는 편이 낫다.
+ * <1024px는 상단 앱바 + 하단 탭이다 — 엄지가 닿는 곳에 두는 편이 낫다. 레일은 여기서 아예
+ * 렌더되지 않는다: 원본의 모바일 시트를 들이면 같은 메뉴로 가는 길이 둘이 된다. 레일이
+ * 없는 만큼 검색은 헤더가 대신 들고, 브랜드는 푸터와 탭 제목에 맡긴다.
  * 현재 위치는 색·굵기·인디케이터 3중으로 표시하고, 아이콘과 텍스트 라벨을 항상 함께 낸다.
  */
 const NAV = [
@@ -40,210 +66,340 @@ const NAV = [
   { href: '/team', label: '팀', Icon: IconTeam },
 ] as const;
 
+/** 세션이 준 나 (lib/auth.ts). 레일 발의 계정 줄이 이 셋을 그대로 낸다. */
+type User = { fullname: string; divisionName: string; email: string };
+
 export function AppShell({
   user,
   news,
   theme,
+  sidebarOpen,
   children,
 }: {
-  user: { fullname: string; divisionName: string };
+  user: User;
   /** 담당 업무·내가 올린 글 소식. 못 가져오면 null — 종은 그대로 있고 안이 빈다. */
   news: TaskNews[] | null;
   /** 쿠키에 남아 있는 밝기. 토글의 처음 상태다 (lib/theme.ts). */
   theme: Theme;
+  /** 쿠키에 남아 있는 사이드바 접힘. 레일의 처음 폭이다 (lib/sidebar.ts). */
+  sidebarOpen: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href);
-  const activeHref = NAV.find(({ href }) => isActive(href))?.href ?? '/';
+  const active = NAV.find(({ href }) => isActive(href)) ?? NAV[0];
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      {/* 상단 바 — 1행: 브랜드 · 사용자 / 2행: 메뉴 탭바(≥1024px)
-          배경은 반투명 + 블러. 스크롤하면 본문이 아래로 비쳐서 고정된 바라는 게 읽힌다.
-          블러는 통과하는 색이 있어야 보인다. 이 앱은 배경이 근검정이라 alpha를 55%까지
-          열고 saturate로 색을 끌어올려야 유리판처럼 읽힌다 (70%/blur만으로는 안 보였다). */}
-      <header className="sticky top-0 z-20 border-b border-border bg-card/55 backdrop-blur-2xl backdrop-saturate-200">
-        <div className="flex h-14 w-full items-center gap-4 px-4 sm:px-6 lg:px-8">
-          {/* 이름의 무게 중심은 `Cockpit`이다 — 앞의 `flow`는 올라탄 플랫폼 이름이라
-              한 급 얇게 둔다. 로그인 화면 제목도 같은 대비를 쓴다.
-              색 띠가 10초마다 `Cockpit` 위를 한 번 쓸고 지나간다 — 로그인 제목과 같은 장치라
-              두 화면이 같은 이름을 같은 방식으로 부른다. `startOnView`는 끈다: 헤더는 늘
-              화면에 있어서 뷰포트 진입이라는 사건이 없다 */}
-          <span className="shrink-0 text-base font-medium">
-            <ChromaticTextReveal
-              prefix="flow"
-              words={['Cockpit']}
-              colors={SWEEP_CHART}
-              startOnView={false}
-              duration={0.9}
-              repeatDelay={9.1}
-              className="[&>span:last-child]:font-extrabold"
-            />
-          </span>
-
-          {/* 검색은 레일 밖이다 — 목적지가 아니라 경유지이고, 밝기·소식·계정처럼 상태를
-              보거나 바꾸는 것과 성격이 다르다 */}
-          <div className="ml-auto flex min-w-0 items-center gap-2">
-            <SearchPalette />
-            <AccountRail user={user} news={news} theme={theme} />
-          </div>
-        </div>
-
-        <TopNav activeHref={activeHref} />
-      </header>
-
-      <main className="w-full flex-1 px-4 py-8 pb-20 sm:px-6 md:pb-8 lg:px-8">
-        {children}
-      </main>
-
-      <SiteFooter />
-
-      {/* 모바일 하단 탭 */}
-      <nav
-        aria-label="주요"
-        className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
-      >
-        {NAV.map(({ href, label, Icon }) => {
-          const active = isActive(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              aria-current={active ? 'page' : undefined}
-              className={cn(
-                'relative flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors duration-200 ease-out',
-                active ? 'font-semibold text-primary' : 'text-muted-foreground',
-              )}
-            >
-              {active && (
-                <span className="absolute inset-x-6 top-0 h-0.5 rounded-full bg-primary" />
-              )}
-              <Icon size={20} />
-              {label}
-            </Link>
-          );
-        })}
-      </nav>
-    </div>
-  );
-}
-
-/**
- * 메뉴 탭바 (≥1024px). beUI Tabs(underline)의 layoutId 밑줄 패턴을 `<Link>`에
- * 얹었다 — Tabs 자체는 `<button>`이라 프리페치도 새 탭 열기도 안 된다.
- * 주요 내비게이션에서 그건 포기할 게 아니다.
- */
-function TopNav({ activeHref }: { activeHref: string }) {
-  return (
-    // layoutRoot: 헤더가 sticky다. layoutId는 페이지 좌표로 측정하므로 스코프를
-    // 여기로 좁히지 않으면 스크롤 오프셋이 이동으로 재생된다 (beUI Tabs와 같은 이유).
-    <motion.nav
-      layoutRoot
-      aria-label="주요"
-      className="hidden w-full items-center gap-1 px-4 sm:px-6 lg:flex lg:px-8"
-    >
-      {NAV.map(({ href, label, Icon }) => {
-        const active = href === activeHref;
-        return (
-          <Link
-            key={href}
-            href={href}
-            aria-current={active ? 'page' : undefined}
-            className={cn(
-              // -mb-px: 밑줄을 헤더의 border-b 위에 겹쳐 앉힌다 (선이 두 겹으로 안 보인다)
-              'relative -mb-px inline-flex min-h-11 items-center gap-1.5 px-3 pt-1 pb-2.5 text-sm transition-colors',
-              active
-                ? 'font-semibold text-foreground'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
+    <SearchProvider>
+      <SidebarProvider defaultOpen={sidebarOpen}>
+        <div className="flex min-h-dvh">
+          {/* 메뉴 (≥1024px). 알약은 `layoutId`로 항목 사이를 미끄러진다 — 상단 탭바의
+              밑줄이 하던 일을 그대로 옮겨 왔다 */}
+          <AnimatedSidebar
+            ariaLabel="주요"
+            brand={<Brand />}
+            footer={<Account user={user} />}
           >
-            <Icon size={16} />
-            {label}
-            {active && (
-              <motion.span
-                layoutId="top-nav-active"
-                transition={{
-                  type: 'spring',
-                  stiffness: 170,
-                  damping: 24,
-                  mass: 1.2,
-                }}
-                className="absolute inset-x-0 bottom-0 h-0.5 bg-primary"
-              />
-            )}
-          </Link>
-        );
-      })}
-    </motion.nav>
+            <SidebarSearch />
+
+            {NAV.map(({ href, label, Icon }) => (
+              <SidebarLink
+                key={href}
+                href={href}
+                icon={<Icon size={18} />}
+                active={href === active.href}
+              >
+                {label}
+              </SidebarLink>
+            ))}
+          </AnimatedSidebar>
+
+          <div className="flex min-w-0 flex-1 flex-col">
+            {/* 헤더 — 왼쪽은 접기와 지금 있는 화면, 오른쪽은 내 것들.
+                배경은 반투명 + 블러. 스크롤하면 본문이 아래로 비쳐서 고정된 바라는 게 읽힌다.
+                블러는 통과하는 색이 있어야 보인다. 이 앱은 배경이 근검정이라 alpha를 55%까지
+                열고 saturate로 색을 끌어올려야 유리판처럼 읽힌다 (70%/blur만으로는 안 보였다). */}
+            <header className="sticky top-0 z-20 border-b border-border bg-card/55 backdrop-blur-2xl backdrop-saturate-200">
+              <div className="flex h-14 w-full items-center gap-3 px-4 sm:px-6 lg:px-8">
+                <SidebarTrigger />
+                <span
+                  aria-hidden
+                  className="hidden h-5 w-px shrink-0 bg-border lg:block"
+                />
+                {/* 화면 이름은 제목이 아니다 — 본문에 이미 `h1`이 있어서 여기까지 heading으로
+                    올리면 목차에 같은 말이 두 번 걸린다 */}
+                <p className="min-w-0 truncate text-sm font-semibold">
+                  {active.label}
+                </p>
+
+                {/* 밝기·소식은 세 화면 공통이라 셸에 있다. 한 줄로 늘어놓는 대신 `⋯` 원판
+                    하나로 묶어 봤지만(v0.22.0) 되돌렸다: 여섯 덩어리가 둘로 줄기는 했어도,
+                    늘 쓰는 밝기가 한 번 더 눌러야 나오는 자리로 들어갔다.
+                    세로선 뒤의 로그아웃은 좁은 화면만 든다 — 넓은 화면에서는 레일 발이 맡는다
+                    (`Account`). 종과 로그아웃이 붙어 있어서 종을 누르려다 로그아웃을 누르던
+                    자리도 그래서 넓은 화면에서는 없어졌다.
+                    이니셜 원판은 좁은 화면에서 빼 뒀다. 로그인은 한 계정뿐이라 누구인지 확인할
+                    일이 없고, 컨트롤 다섯 개가 좁은 헤더에 들어가면 종과 로그아웃 사이가 좁다 */}
+                <div className="ml-auto flex min-w-0 items-center gap-2">
+                  <HeaderSearch />
+                  <ThemeToggle theme={theme} />
+                  <NewsBell news={news} />
+                  <span
+                    aria-hidden
+                    className="h-5 w-px shrink-0 bg-border lg:hidden"
+                  />
+                  <SignOut />
+                </div>
+              </div>
+            </header>
+
+            <main className="w-full flex-1 px-4 py-8 pb-20 sm:px-6 md:pb-8 lg:px-8">
+              {children}
+            </main>
+
+            <SiteFooter />
+          </div>
+
+          {/* 모바일 하단 탭 */}
+          <nav
+            aria-label="주요"
+            className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
+          >
+            {NAV.map(({ href, label, Icon }) => {
+              const here = href === active.href;
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-current={here ? 'page' : undefined}
+                  className={cn(
+                    'relative flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs transition-colors duration-200 ease-out',
+                    here ? 'font-semibold text-primary' : 'text-muted-foreground',
+                  )}
+                >
+                  {here && (
+                    <span className="absolute inset-x-6 top-0 h-0.5 rounded-full bg-primary" />
+                  )}
+                  <Icon size={20} />
+                  {label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+      </SidebarProvider>
+    </SearchProvider>
   );
 }
 
 /**
- * 계정 레일 — 소식 · 밝기 · 이름·부서 · 로그아웃.
+ * 레일 머리. 이름의 무게 중심은 `Cockpit`이다 — 앞의 `flow`는 올라탄 플랫폼 이름이라
+ * 한 급 얇게 둔다. 로그인 화면 제목도 같은 대비를 쓴다.
  *
- * 전에는 이 넷이 헤더 오른쪽에 세로선 두 개로 갈린 여섯 덩어리로 늘어서 있었다. 배열에는
- * 이유가 있었지만(정보와 액션의 경계) 덩어리 수 자체가 많아 헤더가 붐볐다. 하나로 묶고
- * 이니셜 원판을 펼치기 토글로 쓴다.
- *
- * 접으면 소식 종과 이니셜만 남는다. **소식은 접히지 않는다** — 안 읽음 배지가 접히면
- * 신호가 죽는다. 로그아웃은 접힘 안 맨 끝이다: 자주 쓰지 않고, 그 자리가 종에서 가장 멀다
- * (전에는 나란히 붙어 있어서 종을 누르려다 로그아웃을 누를 수 있었다).
- *
- * 이름·부서만 배경이 없다. 다른 칸은 `bg-background`라, 세로선이 그려 주던 "여기까지는
- * 정보, 여기부터는 누르는 곳"이라는 경계를 배경 유무가 대신한다.
+ * 색 띠가 10초마다 `Cockpit` 위를 한 번 쓸고 지나간다 — 로그인 제목과 같은 장치라 두 화면이
+ * 같은 이름을 같은 방식으로 부른다. `startOnView`는 끈다: 레일은 늘 화면에 있어서 뷰포트
+ * 진입이라는 사건이 없다.
  */
-function AccountRail({
-  user,
-  news,
-  theme,
-}: {
-  user: { fullname: string; divisionName: string };
-  news: TaskNews[] | null;
-  theme: Theme;
-}) {
+function Brand() {
   return (
-    <OverflowActions
-      label={`내 계정 — ${user.fullname} · ${user.divisionName}`}
-      overflowLabel="내 계정"
-      toggle={user.fullname.slice(0, 1)}
-      overflow={
-        <>
-          <ThemeCycle theme={theme} />
-          <span className="hidden min-w-0 px-1 leading-tight sm:block">
-            <span className="block truncate text-xs font-medium">
-              {user.fullname}
-            </span>
-            <span className="block truncate text-[11px] text-muted-foreground">
+    <>
+      {/* 로고는 메뉴 아이콘과 같은 20px 칸이다 — 그 열의 중심이 접힌 68px 레일의 중심이라
+          접어도 로고가 가운데 남는다. 검은 정사각 이미지라 라운드를 준다 (로그인 화면과 같다) */}
+      <span aria-hidden className="grid size-5 shrink-0 place-items-center">
+        <Image src="/logo.jpg" alt="" width={20} height={20} className="rounded" />
+      </span>
+
+      <SidebarLabel>
+        <span className="text-base font-medium">
+          <ChromaticTextReveal
+            prefix="flow"
+            words={['Cockpit']}
+            colors={SWEEP_CHART}
+            startOnView={false}
+            duration={0.9}
+            repeatDelay={9.1}
+            className="[&>span:last-child]:font-extrabold"
+          />
+        </span>
+      </SidebarLabel>
+    </>
+  );
+}
+
+/**
+ * 레일 발의 계정. 이름·부서·이메일을 그대로 내고, 마우스를 올리면 로그아웃이 딸린 팝오버가
+ * 옆으로 열린다.
+ *
+ * 헤더 오른쪽 끝에 있던 이니셜 원판을 여기로 내렸다. 계정은 화면마다 쓰는 물건이 아니라 늘
+ * 같은 자리에 있으면 되는 것이라, 브랜드와 메뉴가 있는 레일의 반대쪽 끝이 제자리다. 대신
+ * 이름·부서만으로는 어느 계정인지 확실하지 않아서(같은 이름이 둘일 수 있다) 로그인한 이메일을
+ * 함께 낸다.
+ *
+ * 호버로 여는 팝오버지만 라딕스 Popover다 — HoverCard는 키보드로 안을 짚을 수 없어서 그 안에
+ * 로그아웃 같은 단추를 두면 마우스 없는 사람에게는 없는 기능이 된다.
+ */
+function Account({ user }: { user: User }) {
+  const [open, setOpen] = useState(false);
+  /** 초점을 옮길지 가르는 값. 호버로 열렸는데 초점까지 따라가면 글자를 읽던 자리를 잃는다. */
+  const byHover = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const show = () => {
+    if (timer.current) clearTimeout(timer.current);
+    byHover.current = true;
+    setOpen(true);
+  };
+
+  /** 줄과 팝오버 사이에 8px 틈이 있다. 그 틈을 지나는 동안 닫히지 않게 조금 늦춘다. */
+  const hide = () => {
+    timer.current = setTimeout(() => setOpen(false), 120);
+  };
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        byHover.current = false;
+        setOpen(next);
+      }}
+    >
+      <PopoverTrigger
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        title="계정"
+        className="flex min-h-12 w-full cursor-pointer items-center gap-3 overflow-hidden rounded-lg px-3 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {/* 28px 원판. 접히면 이 원판만 남고 중심이 레일 중심에 온다 (animated-sidebar.tsx).
+            성 대신 인사하는 손이다 — 이름은 바로 옆에 그대로 적혀 있어서 첫 글자를 한 번 더
+            낼 이유가 없다. 좁은 화면 헤더에는 이름이 없으니 그쪽은 이니셜을 남긴다 */}
+        <span
+          aria-hidden
+          className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-sm"
+        >
+          👋🏻
+        </span>
+
+        <SidebarLabel>
+          <span className="block truncate text-sm">
+            <span className="font-medium">{user.fullname}</span>
+            <span className="ml-1.5 text-[11px] text-muted-foreground">
               {user.divisionName}
             </span>
           </span>
-          <SignOut />
-        </>
-      }
-    >
-      <NewsBell news={news} />
-    </OverflowActions>
+          <span className="block truncate text-[11px] text-muted-foreground">
+            {user.email}
+          </span>
+        </SidebarLabel>
+
+        {/* 접히면 레일 밖으로 나가 잘린다 — 따로 숨기지 않아도 된다 */}
+        <IconChevronRight
+          size={14}
+          aria-hidden
+          className="shrink-0 text-muted-foreground"
+        />
+      </PopoverTrigger>
+
+      <PopoverContent
+        side="right"
+        align="end"
+        sideOffset={8}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onOpenAutoFocus={(e) => {
+          if (byHover.current) e.preventDefault();
+        }}
+        className="w-60 gap-2 p-2"
+      >
+        {/* 줄에 있는 것과 같은 말이지만 여기서는 잘리지 않는다 — 접힌 레일에서는 이쪽이 유일한
+            확인 자리다 */}
+        <PopoverHeader className="px-1.5 pt-1">
+          <PopoverTitle className="truncate">{user.fullname}</PopoverTitle>
+          <PopoverDescription className="text-xs">
+            {user.divisionName}
+          </PopoverDescription>
+          <PopoverDescription className="text-xs break-all">
+            {user.email}
+          </PopoverDescription>
+        </PopoverHeader>
+
+        <span aria-hidden className="h-px bg-border" />
+
+        {/* POST인 이유는 `SignOut` 주석에 */}
+        <form action="/api/auth/logout" method="post">
+          <button
+            type="submit"
+            className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <IconSignOut size={16} aria-hidden />
+            로그아웃
+          </button>
+        </form>
+      </PopoverContent>
+    </Popover>
   );
 }
 
 /**
- * 로그아웃은 POST로만. GET이면 링크 프리페치가 세션을 날릴 수 있다.
+ * 레일의 검색 줄. `⌘K`로 어디서든 열리지만, 있는 줄 알려면 눌릴 자리가 있어야 한다.
  *
- * 좁은 화면에서는 아이콘만 남긴다 — 헤더 오른쪽 끝의 이 아이콘은 관용어라 글자 없이도
- * 읽히고, 대신 `title`과 `sr-only`로 이름을 남겨둔다.
+ * 조합키를 줄 끝에 적어 둔다 — 팔레트 안의 `esc` 표시와 같은 모양이다
+ * (`search-palette.tsx`). `aria-hidden`인 것은 이 단추의 이름이 "검색"이면 되기 때문이고,
+ * 조합키는 `title`이 이미 읽어 준다.
+ */
+function SidebarSearch() {
+  const open = useSearchOpen();
+
+  return (
+    <SidebarButton icon={<IconSearch size={18} />} title="검색 (⌘K)" onClick={open}>
+      <span className="flex items-center justify-between gap-2">
+        검색
+        <kbd
+          aria-hidden
+          className="rounded border border-border px-1.5 py-0.5 text-[10px] font-medium"
+        >
+          ⌘K
+        </kbd>
+      </span>
+    </SidebarButton>
+  );
+}
+
+/** 좁은 화면의 검색. 레일이 없어서 헤더가 대신 든다 — 넓은 화면에서는 레일 줄이 이 일을 한다. */
+function HeaderSearch() {
+  const open = useSearchOpen();
+
+  return (
+    <button
+      type="button"
+      onClick={open}
+      title="검색"
+      className="flex min-h-9 cursor-pointer items-center rounded-md px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:hidden"
+    >
+      <IconSearch size={18} aria-hidden />
+      <span className="sr-only">검색</span>
+    </button>
+  );
+}
+
+/**
+ * 좁은 화면의 로그아웃. 레일이 없어서 헤더가 대신 든다 — 넓은 화면에서는 레일 발의 팝오버가
+ * 이 일을 한다 (`Account`).
+ *
+ * POST로만 보낸다. GET이면 링크 프리페치가 세션을 날릴 수 있다. 아이콘만 남기는 것은 헤더
+ * 오른쪽 끝의 이 아이콘이 관용어라 글자 없이도 읽히기 때문이고, 이름은 `title`과 `sr-only`로
+ * 남는다.
  */
 function SignOut() {
   return (
-    <form action="/api/auth/logout" method="post" className="shrink-0">
+    <form action="/api/auth/logout" method="post" className="shrink-0 lg:hidden">
       <button
         type="submit"
         title="로그아웃"
-        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-md bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        className="flex min-h-9 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <IconSignOut size={16} />
-        <span className="sr-only lg:not-sr-only">로그아웃</span>
+        <span className="sr-only">로그아웃</span>
       </button>
     </form>
   );

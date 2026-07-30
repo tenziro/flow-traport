@@ -995,8 +995,9 @@ Portal로 `body`에 나가는데(BUG-009에서 그렇게 바꿨다) 모달 래�
 **처리**: 세 곳 다 분기를 없애고 **값으로 껐다**.
 
 - `whileTap={{ scale: reduce ? 1 : 0.96 }}` — prop은 늘 있고 배율만 1이다
-  ([overflow-actions.tsx](../src/components/motion/overflow-actions.tsx),
-  [button/base.tsx](../src/components/motion/button/base.tsx)).
+  ([button/base.tsx](../src/components/motion/button/base.tsx)). 같은 고침이 있던
+  `motion/overflow-actions.tsx`는 v1.0.0에서 지워졌다 — 상단 바가 좌측 레일로 바뀌면서
+  계정 레일 자체가 없어졌다. 교훈은 그대로 남는다.
 - `ChromaticTextReveal`의 `initial`·`style`은 분기를 지우고 시작 값으로 고정했다. 같은 파일
   `transition`이 이미 줄임 모드에서 네 값 모두 `duration: 0`으로 떨어뜨리므로 결과는 같다 —
   분기가 애초에 겹치는 일을 하고 있었다 ([chromatic-text-reveal.tsx](../src/components/motion/chromatic-text-reveal.tsx)).

@@ -50,9 +50,11 @@ export function TaskItem({
       )}
       <div className="min-w-0 flex-1">
         {/* 제목 굵기는 `나를 부른 사람들`과 같은 semibold. medium이던 때는 바로 아래
-            메타 줄과 굵기 차이가 얇아서 제목이 덜 걸렸다 */}
+            메타 줄과 굵기 차이가 얇아서 제목이 덜 걸렸다.
+            한 줄에서 자르는 것도 그 카드와 같다 — 긴 제목이 두세 줄로 흘러 줄 높이가
+            제목 길이에 따라 달라졌다. 전문은 `flow에서 보기`로 넘어가면 나온다 */}
         <p className="flex items-start gap-2 text-sm font-semibold">
-          <span className="min-w-0 flex-1">{task.title}</span>
+          <span className="min-w-0 flex-1 truncate">{task.title}</span>
           <DDay days={task.daysLeft} />
         </p>
         <p className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">

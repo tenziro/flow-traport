@@ -17,20 +17,3 @@ export const THEME_COOKIE = "theme";
 export function toTheme(value: string | undefined): Theme {
   return value === "light" || value === "dark" ? value : "system";
 }
-
-/**
- * 다음 갈래. 헤더 레일의 밝기 버튼이 이걸로 세 갈래를 돈다 — 레일 항목은 버튼 하나라서
- * 라디오 세 개가 들어갈 자리가 없다 (`theme-toggle.tsx`의 `ThemeCycle`).
- *
- * `Record<Theme, Theme>`라 갈래를 하나 늘리면 여기가 컴파일 에러로 잡힌다. 모르는 값에
- * 대한 대비는 두지 않는다 — 쿠키에서 오는 값은 이미 `toTheme`을 거친다.
- */
-const CYCLE: Record<Theme, Theme> = {
-  light: "dark",
-  dark: "system",
-  system: "light",
-};
-
-export function nextTheme(theme: Theme): Theme {
-  return CYCLE[theme];
-}

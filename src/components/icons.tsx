@@ -40,6 +40,7 @@ export {
   Sun as IconLight,
   Moon as IconDark,
   Monitor as IconSystem,
+  SidebarLeft as IconSidebar,
 } from "reicon-react";
 
 export type { IconProps } from "reicon-react";
