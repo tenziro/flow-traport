@@ -917,6 +917,11 @@ export interface FlowSearchEmployee {
   email: string;
   /** 예 `"1"`. 값 의미 미문서화 (@추정 재직/휴직 등) */
   status: string;
+  /**
+   * 본인이 적은 한 줄. **스펙에 없는데 응답에 온다** (2026-07-31 실측, 13명 중 2명).
+   * 구성원 화면이 쓴다 (PRD §6.6) — 그 두 줄이 연락 방법에 대한 본인 말이라 주소록에 맞는다.
+   */
+  slogan?: string;
   bookmarkYn: YN;
   loginYn: YN;
   dayoffName: string;

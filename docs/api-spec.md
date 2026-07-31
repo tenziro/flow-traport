@@ -789,7 +789,8 @@ Path: `eventSrno` (숫자). Query: `eventStartDateTime`, `eventFinishDateTime` (
 
 ## 9. Search API
 
-> 9.1·9.2는 **검색 팔레트(⌘K)가 실제로 쓰는 두 호출**이다 (PRD §6.4, v0.19). 9.3·9.4는 참고용이다.
+> 9.1·9.2는 **검색 팔레트(⌘K)가 실제로 쓰는 두 호출**이다 (PRD §6.4, v0.19).
+> 9.3은 **구성원 화면이 쓴다** (PRD §6.6, v1.5.0). 9.4는 참고용이다.
 
 ### 9.1 `GET /user/search/posts` — 게시글 검색 ⭐
 
@@ -838,6 +839,15 @@ Query: `searchWord`*, `startDateTime`, `endDateTime`, `orderType`, `size`, `scor
 
 Query: `searchWord`(≤100), `divisionCode`, `cursor`, `pageSize`(1~100), `roomId`, `keyword`(`type:value` 공백 구분, 예 `user_nm:홍길동 dvsn_nm:개발`), `groupCode`, `employeeType`, `projectId`
 응답 `data`: `{ hasNext, lastCursor, employees[] }` — `flowUserYn`, `portalId`, `channelId`, `institutionId`, `userId`, `profileImagePath`, `fullname`, `responsibility`, `responsibilityName`, `companyName`, `divisionName`, `phoneNumber`, `phoneCountryCode`, `companyPhoneNumber`, `email`, `status`, `bookmarkYn`, `loginYn`, `dayoffName`, `chargeJobName`, `employeeNumber`, `divisionCode`, `groupCode`
+
+> **`slogan`이 더 온다 `(관측)`.** 스펙 목록에 없는데 응답에 있다 (2026-07-31, 13명 중 2명이 채움).
+> 본인이 적은 한 줄이고 구성원 화면이 쓴다. 스펙에 없으니 선택 필드로 다룬다.
+>
+> **`profileImagePath`의 호스트가 셋이다 `(관측)`** — `lh3.googleusercontent.com`(구글 로그인
+> 아바타) · `flow.team` · 회사 서브도메인 `traport.flow.team`. `next/image`로 그리려면 셋 다
+> 허용해야 한다.
+>
+> §3.2 `/user/employees`와 다른 응답이다: 사진은 여기에만 있고, 회사전화는 그쪽이 더 많이 준다.
 
 ### 9.4 `GET /user/search/events`
 

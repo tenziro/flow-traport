@@ -24,6 +24,7 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
 | `/risk` | 프로젝트별 위험도 보드, 프로젝트에 업무 추가 | 운영 |
 | `/team` | 부서 탭, 팀원별 업무 현황, 팀 일정 | 운영 |
 | `/tasks` (내 업무) | 담당 업무 전량(실측 951건)을 프로젝트 아코디언으로. 세 무리를 탭으로 갈랐고 완료는 안에서 다시 접는다. 하위 업무는 상위 업무 아래로 들여쓴다 | 운영 |
+| `/members` (구성원) | 전 직원 주소록. 부서 탭 + 직책 순 한 줄 목록, 이메일·번호 복사. 업무 정보는 넣지 않는다 | 운영 |
 
 ### 화면 안 기능
 
@@ -61,6 +62,37 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
 ---
 
 ## 변경 이력
+
+### 2026-07-31 — 구성원 화면 (v1.5.0)
+
+`기능` 전 직원 주소록 `/members`를 붙였다 (PRD §6.6, Phase 7). REST `GET /user/search/employees`
+**한 번**이면 전량이 손에 들어와서 화면은 줄 세우기와 부서 묶기만 한다 — 부서 탭도 서버에 다시
+묻지 않고 `Tabs`가 칸만 바꾼다. 정렬은 부서(flow의 `divisionCode` 순) → 직책 서열(대표이사 · 이사 ·
+상무 · 부장 · 차장 · 과장 · 대리 · 사원, 없는 직책은 맨 뒤) → 이름이다. 왼쪽 레일 다섯 번째이고
+좁은 화면 하단 탭은 4칸 → 5칸이 됐다 (375px에서 한 칸 75px, 실측).
+
+업무 정보는 한 칸도 넣지 않았다. 임박·밀림은 팀 화면(§6.3)이 이미 세고 있어서 같은 숫자를 두
+화면에서 그리면 어느 쪽이 맞는지 묻게 된다. 조직도도 안 그린다 — 부서 3개의 `upperDivisionCode`가
+전부 빈 문자열이라 세울 계층이 없다.
+
+**설계와 다른 곳이 둘 있었다.** ① PRD는 사진 호스트를 `lh3.googleusercontent.com` 하나로 적었는데
+실측은 **셋**이다 (`flow.team` · `traport.flow.team`이 더 있다). `next.config.ts`의 `remotePatterns`에
+셋을 다 넣지 않으면 9명 중 4명의 사진이 통째로 막힌다. 경로까지 좁혔다 — 호스트만 열면 그 도메인의
+아무 이미지나 우리 최적화기를 태울 수 있다. ② 응답에 스펙에 없는 `slogan`이 온다 (13명 중 2명).
+`FlowSearchEmployee`에 선택 필드로 더했다.
+
+개인정보: 명단·번호는 로그에 남기지 않고, 응답을 디스크에 캐시하지 않는다. 이 화면은 세션 `userId`
+필터가 없는 유일한 목록인데 — 요청에서 받는 값이 하나도 없어서 남의 것을 지목할 표면 자체가 없다.
+`userId`는 화면에 내지 않는다 (이메일과 나란히 두면 멘션·담당자 필터에 잘못 넣게 된다).
+
+검증: 브라우저 실측으로 13명 · 3부서 8·3·2가 탭 숫자와 일치하고, 사진 요청 10건이 전부 200,
+1280px·375px 모두 가로 넘침 없음, 하단 탭 5칸 75px. `buildMembers` 단위 테스트 5개 추가
+(118/118 통과). tsc·eslint·build 통과.
+
+관련 파일: `src/app/(app)/members/page.tsx`, `src/app/(app)/members/loading.tsx`,
+`src/lib/flow/members.ts`, `src/lib/flow/members.test.ts`, `src/lib/flow/rest.ts`,
+`src/lib/flow/types.ts`, `src/components/skeletons.tsx`, `src/components/app-shell.tsx`,
+`next.config.ts`, `src/lib/changelog.ts`, `package.json`
 
 ### 2026-07-31 — 못 가져온 값은 다시 물어본다 (v1.4.2)
 

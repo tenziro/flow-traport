@@ -34,6 +34,7 @@
 
 import { DAY_MS, kstYmd } from "@/lib/aggregate/date";
 import { getApiKey } from "@/lib/auth";
+import type { FlowSearchEmployeesData } from "@/lib/flow/types";
 import type { TaskPriority } from "@/lib/task-priority";
 
 const BASE = process.env.FLOW_API_BASE ?? "https://api.flow.team";
@@ -305,6 +306,19 @@ export async function listEmployeeIds(divisionName: string): Promise<Map<string,
 
   return ids;
 }
+
+/**
+ * 전사 구성원 명단 (api-spec §9.3). 구성원 화면(PRD §6.6)이 이 한 번으로 선다.
+ *
+ * 위의 `/user/employees`(§3.2)가 아니라 §9.3인 이유는 **사진**이다 — `profileImagePath`가
+ * §9.3에만 있다. 요청에서 받는 값은 하나도 없다. 검색어도 부서도 넘기지 않으니 남의 것을
+ * 지목할 손잡이 자체가 없다 (PRD §6.6 개인정보).
+ *
+ * ponytail: 100명에서 끊는다. 지금 13명이라 남는다 — 넘치면 `hasNext`가 참으로 오고,
+ * 그때 `listEmployeeIds`처럼 커서를 돌면 된다.
+ */
+export const searchEmployees = () =>
+  get<FlowSearchEmployeesData>(`/user/search/employees?pageSize=${SIZE}`, "구성원 명단 조회");
 
 /* ── 댓글 (api-spec §13, PRD §13 A1·B4) ───────────────────────────────── */
 

@@ -12,6 +12,7 @@ import {
   IconSignOut,
   IconTeam,
   IconToday,
+  IconWorker,
 } from '@/components/icons';
 import {
   AnimatedSidebar,
@@ -67,6 +68,7 @@ const NAV = [
   { href: '/tasks', label: '내 업무', Icon: IconMyTasks },
   { href: '/risk', label: '리스크', Icon: IconRisk },
   { href: '/team', label: '팀', Icon: IconTeam },
+  { href: '/members', label: '구성원', Icon: IconWorker },
 ] as const;
 
 /** 세션이 준 나 (lib/auth.ts). 레일 발의 계정 줄이 이 셋을 그대로 낸다. */
@@ -171,7 +173,7 @@ export function AppShell({
           {/* 모바일 하단 탭 */}
           <nav
             aria-label="주요"
-            className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
+            className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
           >
             {NAV.map(({ href, label, Icon }) => {
               const here = href === active.href;

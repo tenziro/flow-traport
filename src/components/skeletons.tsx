@@ -159,6 +159,34 @@ export function SummaryCardsSkeleton({
 }
 
 /**
+ * 부서 카드 + 사람 줄들 (구성원 화면 `MemberRow`). 소제목 한 줄 아래로 줄이 쌓인다.
+ *
+ * 원판은 실제와 같은 36px이다 — 사람 줄의 높이를 정하는 게 이 원판이라, 여기를 작게 그리면
+ * 명단이 도착할 때 카드가 통째로 늘어난다.
+ */
+export function MemberRowsSkeleton({ count }: { count: number }) {
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <div className="border-b border-border px-4 py-2.5">
+          <Skeleton className="h-4 w-28" />
+        </div>
+        {Array.from({ length: count }, (_, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-0"
+          >
+            <Skeleton className="size-9 shrink-0 rounded-full" />
+            <Skeleton className="h-4 w-24 shrink-0" />
+            <Skeleton className={cn("h-4", i % 2 ? "w-40" : "w-56")} />
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
  * 댓글 줄들 (`ThreadView`의 한 줄). 아이콘 + 이름·시각 줄 + 본문 두 줄이다.
  *
  * 본문 두 번째 줄은 짧게 준다 — 댓글은 마지막 줄이 덜 차는 게 보통이라 그게 글로 읽힌다.
