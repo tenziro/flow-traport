@@ -38,8 +38,9 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
 - **좌측 레일** — 브랜드·검색·메뉴·계정을 화면 왼쪽 한 줄에 세운다. 접기 단추(또는 ⌘B)로
   68px 아이콘 띠가 되고, 접어 둔 상태는 쿠키(`sidebar`)에 남는다. 좁은 화면에는 레일이
   없다 — 하단 탭 세 개가 대신한다.
-- **계정** — 레일 발에 이름·부서·로그인한 이메일을 낸다. 마우스를 올리면(또는 Enter)
-  로그아웃이 든 팝오버가 옆으로 열린다. 좁은 화면은 헤더의 로그아웃 단추 하나뿐이다.
+- **계정** — 레일 발에 flow 프로필 사진(없으면 `👋🏻`)과 이름·부서·로그인한 이메일을 낸다.
+  마우스를 올리면(또는 Enter) 상태 메시지와 로그아웃이 든 팝오버가 옆으로 열린다. 좁은 화면은
+  헤더의 로그아웃 단추 하나뿐이다.
 - **화면 밝기** — 밝게·어둡게·기기 설정 세 갈래 라디오. 첫 HTML에 박아서 번쩍임이 없다.
 - **업데이트 로그** — 푸터 버튼 → 모달에서 버전별로 접어 본다.
 - **골격(스켈레톤)** — 화면 넷이 각자 `loading.tsx`를 갖는다. 틀은 실제 클래스를 그대로 쓰고
@@ -63,7 +64,7 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
 
 ## 변경 이력
 
-### 2026-07-31 — 구성원 명단을 카드 격자로 (v1.5.1)
+### 2026-07-31 — 구성원 카드 격자 + 계정 사진·상태 메시지 (v1.5.1)
 
 `개선` 한 사람 = 한 줄이던 `/members` 명단을 한 사람 = 한 장 카드로 바꿨다 (PRD §6.6 결정 표
 갱신). 원래 이유였던 "이름이 한 열에 모여야 훑기 빠르다"는 13명에서 성립하지 않았다 — 어느
@@ -75,14 +76,32 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
 생기고, 그 빈 칸이 "정보가 빠진 사람"처럼 보인다 — 이니셜 원을 쓴 것과 같은 이유다. 부서도
 카드로 싸지 않는다(테두리 두 겹). 소제목 + 건수 한 줄이다.
 
-값: 데스크톱 1280px 카드 3열 · 높이 138px(`slogan` 있으면 175px) · 375px 1열, 세로 스크롤이
-1,500px → 1,900px로 늘었다(카드로 바꾼 유일한 손해). 사진 10/10 `200`, 가로 넘침 없음,
-다크 모드 정상. `npm test` 118/118, `npm run build` 14 라우트.
+연락처 줄은 `이메일 / 휴대폰` 이름표를 앞에 달았다. 앞서는 형태로만 구분했는데(@ 있으면
+이메일) 둘이 나란히 있을 때 그건 읽는 사람이 하는 일이다. 이름표 폭을 `w-11`로 고정해서 값들이
+한 열에서 시작한다(실측 좌변 336/336). 복사 단추는 **아이콘만 남긴 `ghost`**다 — 카드마다 둘이라
+`복사` 두 글자가 값보다 먼저 눈에 들었다. 글자가 사라진 만큼 그림이 뜻을 다 져야 해서
+`IconComment`(말풍선) → `IconCopy`로 바꾸고, 성공·실패 문구는 `aria-label`·`title`로 옮겼다
+(누른 뒤 둘 다 "복사했어요", 클립보드 25자 확인).
 
-관련 파일: `src/app/(app)/members/page.tsx`(`DivisionList`·`MemberCard`) ·
+계정 블록(레일 발)의 `👋🏻`도 같은 사진으로 바꿨다. 세션에 사진이 없어서 — MCP
+`flow_get_my_profile`은 이름·부서·직책·이메일만 준다(실측) — §9.3에 한 번 더 묻는다. 검색어는
+**세션 이름**이고, 받은 줄에서 **이메일로** 고른다: 검색어에 이메일을 넣으면 0명이고(실측)
+이름으로는 동명이인이 같이 오기 때문이다. 실패하면 빈 문자열이라 셸은 넘어지지 않고 손 그림으로
+돌아간다. 같은 호출에 `slogan`이 실려 오니 계정 팝오버에 **상태 메시지** 줄도 붙였다 —
+구성원 카드의 한마디와 같은 모양(위에 선)이다.
+
+값: 데스크톱 1280px 카드 3열 · 높이 136px(`slogan` 있으면 173px) · 375px 1열, 세로 스크롤이
+1,500px → 1,900px로 늘었다(카드로 바꾼 유일한 손해). 복사 단추 32×32 · 이름은 `이메일 복사` /
+`휴대폰 복사`. 계정 원판 28×28 `object-cover`, 접힌 레일·다크 모드 모두 정상, `/_next/image`
+전부 `200`. `npm test` 118/118, `npm run build` 14 라우트.
+
+관련 파일: `src/app/(app)/members/page.tsx`(`DivisionList`·`MemberCard`·`ContactRow`) ·
 `src/components/skeletons.tsx`(`MemberRowsSkeleton` → `MemberCardsSkeleton`) ·
-`src/app/(app)/members/loading.tsx` · `src/components/copy-button.tsx`(`className` 선택 인자) ·
-`docs/PRD.md` §6.6 · `src/lib/changelog.ts` · `package.json`
+`src/app/(app)/members/loading.tsx` · `src/components/copy-button.tsx`(`iconOnly`·`className`) ·
+`src/components/icons.tsx`(`IconCopy`) · `src/lib/flow/rest.ts`(`searchEmployees` 검색어) ·
+`src/lib/flow/members.ts`(`loadMyAccount`) · `src/app/(app)/layout.tsx` ·
+`src/components/app-shell.tsx`(`Account`) · `docs/PRD.md` §6.6 · `docs/api-spec.md` §9.3 ·
+`src/lib/changelog.ts` · `package.json`
 
 ### 2026-07-31 — 구성원 화면 (v1.5.0)
 

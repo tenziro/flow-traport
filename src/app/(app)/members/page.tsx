@@ -3,6 +3,7 @@ import { CopyButton } from "@/components/copy-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadMembers, type Member, type MemberDivision } from "@/lib/flow/members";
+import { cn } from "@/lib/utils";
 
 export const metadata = { title: "구성원 · flow Cockpit" };
 
@@ -111,27 +112,11 @@ function MemberCard({ member }: { member: Member }) {
 
         {/* `mailto:`·`tel:`은 모바일에서 바로 연결되지만 데스크톱에서는 아무 일도 안 하는
             경우가 있다. 그래서 값 자체를 링크로 두고 오른쪽에 복사 단추를 붙인다 */}
-        <CardContent className="space-y-1">
-          <div className="flex items-center gap-2">
-            <a
-              href={`mailto:${email}`}
-              className="truncate text-xs text-muted-foreground underline-offset-2 hover:underline"
-            >
-              {email}
-            </a>
-            <CopyButton text={email} label="복사" className="ml-auto shrink-0" />
-          </div>
+        <CardContent className="space-y-0.5">
+          <ContactRow label="이메일" href={`mailto:${email}`} value={email} />
           {/* 번호가 없는 사람이 있다 (13명 중 1명) — 빈 줄을 남기지 않는다 */}
           {phone && (
-            <div className="flex items-center gap-2">
-              <a
-                href={`tel:${phone}`}
-                className="tabular truncate text-xs text-muted-foreground underline-offset-2 hover:underline"
-              >
-                {phone}
-              </a>
-              <CopyButton text={phone} label="복사" className="ml-auto shrink-0" />
-            </div>
+            <ContactRow label="휴대폰" href={`tel:${phone}`} value={phone} tabular />
           )}
         </CardContent>
 
@@ -143,6 +128,42 @@ function MemberCard({ member }: { member: Member }) {
         )}
       </Card>
     </li>
+  );
+}
+
+/**
+ * 연락처 한 줄 — `이메일  값  [복사]`.
+ *
+ * 이름표를 붙인 건 이메일과 번호가 나란히 있을 때 어느 쪽이 무엇인지 형태로만 구분했기
+ * 때문이다(@ 있으면 이메일). 이름표 폭을 고정해서 값들이 한 열에서 시작한다.
+ *
+ * 복사 단추는 아이콘만이다 — 카드마다 둘이라 `복사` 두 글자가 값보다 먼저 눈에 들었다.
+ */
+function ContactRow({
+  label,
+  href,
+  value,
+  tabular = false,
+}: {
+  label: string;
+  href: string;
+  value: string;
+  tabular?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-11 shrink-0 text-xs text-muted-foreground">{label}</span>
+      <a
+        href={href}
+        className={cn(
+          "truncate text-xs underline-offset-2 hover:underline",
+          tabular && "tabular",
+        )}
+      >
+        {value}
+      </a>
+      <CopyButton text={value} label={`${label} 복사`} iconOnly className="ml-auto shrink-0" />
+    </div>
   );
 }
 

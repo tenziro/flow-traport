@@ -178,9 +178,15 @@ export function MemberCardsSkeleton({ count }: { count: number }) {
                 <Skeleton className="h-3 w-10" />
               </div>
             </CardContent>
-            <CardContent className="space-y-1">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-2/3" />
+            {/* 연락처 두 줄. 이름표 폭(`w-11`)과 오른쪽 아이콘 단추(32px)까지 실제와 같다 */}
+            <CardContent className="space-y-0.5">
+              {[0, 1].map((r) => (
+                <div key={r} className="flex h-8 items-center gap-2">
+                  <Skeleton className="h-3 w-11 shrink-0" />
+                  <Skeleton className={cn("h-3", r ? "w-24" : "flex-1")} />
+                  <Skeleton className="ml-auto size-8 shrink-0 rounded-md" />
+                </div>
+              ))}
             </CardContent>
           </Card>
         ))}

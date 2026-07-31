@@ -69,6 +69,36 @@ export async function loadMembers(): Promise<MembersData> {
   return buildMembers((await searchEmployees()).employees);
 }
 
+/** 세션에 없어서 flow에 한 번 더 물어야 하는 내 정보. 둘 다 없을 수 있다. */
+export interface MyAccount {
+  photo: string;
+  slogan: string;
+}
+
+/**
+ * 로그인한 사람의 사진과 한마디. 왼쪽 레일 발의 계정 블록(§7.3)이 쓴다.
+ *
+ * 세션에는 둘 다 없다 — MCP `flow_get_my_profile`이 이름·부서·직책·이메일만 준다(실측).
+ * 사진과 한마디는 §9.3에만 있어서 여기로 한 번 더 묻는다. 검색어가 **세션 이름**이라 한두 줄만
+ * 온다 — 사진 한 장 때문에 전사 명단을 받아 오지 않는다.
+ *
+ * 찾을 때는 이름이 아니라 **이메일**로 고른다. 검색어가 이름이라 동명이인이 같이 오는데,
+ * 그때 먼저 온 줄을 쓰면 남의 얼굴이 내 계정에 붙는다. (검색어에 이메일을 넣으면 0명이다 —
+ * §9.3 검색은 이름만 본다.)
+ *
+ * 실패하면 둘 다 빈 문자열이다. 이 호출은 셸에서 일어나므로 던지면 모든 화면이 같이 넘어진다 —
+ * 사진 한 장이 그럴 값은 아니다. 계정 블록은 비면 인사하는 손을 그대로 쓰고 한마디 줄을 뺀다.
+ */
+export async function loadMyAccount(fullname: string, email: string): Promise<MyAccount> {
+  try {
+    const { employees } = await searchEmployees(fullname);
+    const me = employees.find((e) => e.email === email);
+    return { photo: me?.profileImagePath ?? "", slogan: me?.slogan ?? "" };
+  } catch {
+    return { photo: "", slogan: "" };
+  }
+}
+
 /** 줄 세우고 부서로 묶는다. 호출과 갈라 둔 건 이 규칙만 따로 시험하려고다. */
 export function buildMembers(employees: EmployeeRow[]): MembersData {
   const sorted = [...employees].sort(

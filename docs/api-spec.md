@@ -841,7 +841,15 @@ Query: `searchWord`(≤100), `divisionCode`, `cursor`, `pageSize`(1~100), `roomI
 응답 `data`: `{ hasNext, lastCursor, employees[] }` — `flowUserYn`, `portalId`, `channelId`, `institutionId`, `userId`, `profileImagePath`, `fullname`, `responsibility`, `responsibilityName`, `companyName`, `divisionName`, `phoneNumber`, `phoneCountryCode`, `companyPhoneNumber`, `email`, `status`, `bookmarkYn`, `loginYn`, `dayoffName`, `chargeJobName`, `employeeNumber`, `divisionCode`, `groupCode`
 
 > **`slogan`이 더 온다 `(관측)`.** 스펙 목록에 없는데 응답에 있다 (2026-07-31, 13명 중 2명이 채움).
-> 본인이 적은 한 줄이고 구성원 화면이 쓴다. 스펙에 없으니 선택 필드로 다룬다.
+> 본인이 적은 한 줄이고 구성원 화면과 계정 팝오버(PRD §7.3)가 쓴다. 스펙에 없으니 선택 필드로
+> 다룬다.
+>
+> **`searchWord`는 이름만 본다 `(관측)`.** 이메일을 넣으면 **0명**이 온다 (2026-07-31, 오류도
+> 경고도 없이 빈 배열이다). `이종석` → 1명. 그래서 자기 한 줄만 받을 때도 검색어는 이름을 넣고,
+> 받은 줄에서 `email`로 고른다 — 동명이인이 섞여 올 수 있다 (`loadMyAccount`).
+>
+> **검색어에 요청 값을 넣지 않는다.** 공용 API 키로 부르는 전 직원 검색이라 남의 이름을 넣어도
+> 통한다. `searchEmployees(sessionSearchWord?)`의 인자는 **세션 값만** 받는다 (PRD §6.6·§8.1).
 >
 > **`profileImagePath`의 호스트가 셋이다 `(관측)`** — `lh3.googleusercontent.com`(구글 로그인
 > 아바타) · `flow.team` · 회사 서브도메인 `traport.flow.team`. `next/image`로 그리려면 셋 다

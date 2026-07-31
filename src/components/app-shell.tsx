@@ -71,8 +71,16 @@ const NAV = [
   { href: '/members', label: '구성원', Icon: IconWorker },
 ] as const;
 
-/** 세션이 준 나 (lib/auth.ts). 레일 발의 계정 줄이 이 셋을 그대로 낸다. */
-type User = { fullname: string; divisionName: string; email: string };
+/** 세션이 준 나 (lib/auth.ts). 레일 발의 계정 줄이 그대로 낸다. */
+type User = {
+  fullname: string;
+  divisionName: string;
+  email: string;
+  /** flow 프로필 사진. 세션에 없어서 따로 받아 온다 (lib/flow/members.ts). 없으면 빈 문자열. */
+  photo: string;
+  /** flow에 적어 둔 상태 메시지. 없으면 빈 문자열 — 팝오버에서 그 줄이 사라진다. */
+  slogan: string;
+};
 
 export function AppShell({
   user,
@@ -280,14 +288,24 @@ function Account({ user }: { user: User }) {
         className="flex min-h-12 w-full cursor-pointer items-center gap-3 overflow-hidden rounded-lg px-3 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
       >
         {/* 28px 원판. 접히면 이 원판만 남고 중심이 레일 중심에 온다 (animated-sidebar.tsx).
-            성 대신 인사하는 손이다 — 이름은 바로 옆에 그대로 적혀 있어서 첫 글자를 한 번 더
-            낼 이유가 없다. 좁은 화면 헤더에는 이름이 없으니 그쪽은 이니셜을 남긴다 */}
-        <span
-          aria-hidden
-          className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-sm"
-        >
-          👋🏻
-        </span>
+            구성원 화면과 같은 flow 프로필 사진이다 — 접힌 레일에서는 이 원판이 유일한 표시라
+            얼굴이 인사하는 손보다 알아보기 쉽다. 사진이 없는 사람은 손을 그대로 쓴다 */}
+        {user.photo ? (
+          <Image
+            src={user.photo}
+            alt=""
+            width={28}
+            height={28}
+            className="size-7 shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <span
+            aria-hidden
+            className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-sm"
+          >
+            👋🏻
+          </span>
+        )}
 
         <SidebarLabel>
           <span className="block truncate text-sm">
@@ -329,6 +347,20 @@ function Account({ user }: { user: User }) {
           </PopoverDescription>
           <PopoverDescription className="text-xs break-all">
             {user.email}
+          </PopoverDescription>
+
+          {/* flow에 적어 둔 상태 메시지. 위 세 줄은 "어느 계정인지"고 이 줄은 내가 쓴 말이라
+              선으로 끊는다 — 구성원 카드의 한마디도 같은 모양이다 (members/page.tsx).
+              비어 있어도 줄은 남긴다. 여기가 자기 계정을 보는 유일한 자리라, 없다고 적어 두는
+              편이 자리가 아예 사라지는 것보다 낫다 — 적을 수 있는 칸이라는 것도 알게 된다.
+              구성원 카드에서는 반대로 빼는데, 남 카드 열한 장에 같은 말이 깔리면 잡음이다 */}
+          <PopoverDescription
+            className={cn(
+              'mt-1 border-t border-border pt-1.5 text-xs',
+              !user.slogan && 'text-muted-foreground/60',
+            )}
+          >
+            {user.slogan || '상태가 없어요.'}
           </PopoverDescription>
         </PopoverHeader>
 

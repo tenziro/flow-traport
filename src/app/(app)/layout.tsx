@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/auth";
+import { loadMyAccount } from "@/lib/flow/members";
 import { loadNews } from "@/lib/flow/queries";
 import { SIDEBAR_COOKIE, toSidebarOpen } from "@/lib/sidebar";
 import { THEME_COOKIE, toTheme } from "@/lib/theme";
@@ -17,7 +18,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const [news, cookieStore] = await Promise.all([loadNews(session.userId), cookies()]);
+  // 사진·한마디는 세션에 없다 (§9.3에만 있다). 소식과 나란히 부르니 기다림이 더 늘지 않는다 —
+  // 실패해도 빈 문자열이라 계정 블록만 손 그림으로 돌아간다.
+  const [news, me, cookieStore] = await Promise.all([
+    loadNews(session.userId),
+    loadMyAccount(session.fullname, session.email),
+    cookies(),
+  ]);
 
   return (
     <AppShell
@@ -25,6 +32,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         fullname: session.fullname,
         divisionName: session.divisionName,
         email: session.email,
+        photo: me.photo,
+        slogan: me.slogan,
       }}
       news={news}
       theme={toTheme(cookieStore.get(THEME_COOKIE)?.value)}

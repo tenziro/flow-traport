@@ -311,14 +311,24 @@ export async function listEmployeeIds(divisionName: string): Promise<Map<string,
  * 전사 구성원 명단 (api-spec §9.3). 구성원 화면(PRD §6.6)이 이 한 번으로 선다.
  *
  * 위의 `/user/employees`(§3.2)가 아니라 §9.3인 이유는 **사진**이다 — `profileImagePath`가
- * §9.3에만 있다. 요청에서 받는 값은 하나도 없다. 검색어도 부서도 넘기지 않으니 남의 것을
- * 지목할 손잡이 자체가 없다 (PRD §6.6 개인정보).
+ * §9.3에만 있다.
+ *
+ * `searchWord`는 **세션 값만** 넘긴다 (계정 블록이 자기 사진 한 장을 받을 때). 요청에서 받은
+ * 문자열을 그대로 흘리면 남의 이름으로 명단을 훑는 손잡이가 된다 — 공용 API 키라 검색은 통한다
+ * (PRD §8.1, §6.6 개인정보). 구성원 화면은 인자 없이 부르고 전량을 받는다.
+ *
+ * 검색어는 **이름**만 걸린다 — 이메일을 넣으면 0명이 온다 (실측). 그래서 이름으로 찾고 받은
+ * 줄에서 이메일로 고른다 (`loadMyPhoto`).
  *
  * ponytail: 100명에서 끊는다. 지금 13명이라 남는다 — 넘치면 `hasNext`가 참으로 오고,
  * 그때 `listEmployeeIds`처럼 커서를 돌면 된다.
  */
-export const searchEmployees = () =>
-  get<FlowSearchEmployeesData>(`/user/search/employees?pageSize=${SIZE}`, "구성원 명단 조회");
+export const searchEmployees = (sessionSearchWord?: string) =>
+  get<FlowSearchEmployeesData>(
+    `/user/search/employees?pageSize=${SIZE}` +
+      (sessionSearchWord ? `&searchWord=${encodeURIComponent(sessionSearchWord)}` : ""),
+    "구성원 명단 조회",
+  );
 
 /* ── 댓글 (api-spec §13, PRD §13 A1·B4) ───────────────────────────────── */
 

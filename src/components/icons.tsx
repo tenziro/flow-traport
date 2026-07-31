@@ -21,6 +21,7 @@ export {
   RecordCircle as IconDot,
   Target as IconFocus,
   Comment as IconComment,
+  Copy as IconCopy,
   ChatLine as IconLastComment,
   ArrowUpRight as IconOpen,
   InfoCircle as IconInfo,
