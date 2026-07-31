@@ -1,13 +1,19 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { markMentionsRead } from "@/app/(app)/actions";
 import { IconCheck, IconInbox, IconNews } from "@/components/icons";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { TaskNews } from "@/lib/flow/queries";
 import { cn, fmtDateTime } from "@/lib/utils";
+
+/**
+ * 소식을 다시 당기는 간격(ms). 1분이면 "받자마자"로 읽히고, 폴링 한 번은 REST 두 번이다
+ * (제목·링크는 캐시에 있다 — `NEWS_BRIEF_TTL`). 분당 상한 120번 중 2번이다.
+ */
+const NEWS_POLL_MS = 60_000;
 
 /**
  * 헤더 알림 종 (PRD §13 B1·B2).
@@ -28,9 +34,34 @@ import { cn, fmtDateTime } from "@/lib/utils";
  * 업무 목록의 한 줄도 업무명이 제목이라, 같은 대상을 두 화면에서 다른 이름으로 부르지 않는다.
  * 둘 다 알림에 없어서 `loadNews`가 풀어 붙인 값이고, 업무명을 못 풀면 프로젝트명이 제목
  * 자리로 올라온다 — 없는 걸 지어내지 않고, 제목 없는 카드도 만들지 않는다.
+ *
+ * **1분마다 스스로 당겨 온다** (`/api/news`) — flow가 알림을 밀어 주지 않아서 폴링이
+ * 유일한 방법이다. 화면을 새로 고치지 않아도 새 소식이 오면 배지가 그때 켜진다.
  */
 export function NewsBell({ news }: { news: TaskNews[] | null }) {
-  const unread = news?.filter((n) => n.unread).length ?? 0;
+  // 서버가 그려 준 값으로 시작해서, 폴링이 가져온 값으로 갈아탄다. 폴링이 한 번이라도
+  // 성공하면 그 뒤로는 이쪽이 진실이다 — 읽음 처리는 아래에서 이 목록을 같이 고친다.
+  const [live, setLive] = useState(news);
+  const items = live ?? news;
+  const unread = items?.filter((n) => n.unread).length ?? 0;
+
+  useEffect(() => {
+    const pull = async () => {
+      if (document.hidden) return;
+      const fresh = await fetch("/api/news")
+        .then((r) => (r.ok ? (r.json() as Promise<TaskNews[] | null>) : null))
+        .catch(() => null);
+      // 실패는 조용히 넘긴다 — 다음 분에 다시 부른다.
+      if (fresh) setLive(fresh);
+    };
+    const timer = setInterval(pull, NEWS_POLL_MS);
+    // 탭을 다시 보면 그 자리에서 한 번 당긴다 — 숨어 있던 동안 건너뛴 몫이다.
+    document.addEventListener("visibilitychange", pull);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", pull);
+    };
+  }, []);
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const [tab, setTab] = useState<"all" | "unread" | "read">("all");
@@ -40,6 +71,9 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
   // 이름은 멘션에서 왔지만 하는 일은 `alarmId` 읽음 처리라 그대로 쓴다 (actions.ts).
   const markRead = (...ids: string[]) => {
     if (!ids.length) return;
+    // 배지와 점은 그 자리에서 끈다 — 서버 액션이 다시 그려 주는 값은 우리가 들고 있는
+    // 목록(`live`)에 안 덮이고, 다음 폴링까지 최대 1분 동안 점이 남아 있었다.
+    setLive((rows) => rows?.map((n) => (ids.includes(n.id) ? { ...n, unread: false } : n)) ?? null);
     const form = new FormData();
     form.set("alarmIds", ids.join(","));
     form.set("path", pathname);
@@ -48,7 +82,7 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
     });
   };
 
-  const shown = (news ?? []).filter(
+  const shown = (items ?? []).filter(
     (n) => tab === "all" || (tab === "unread" ? n.unread : !n.unread),
   );
 
@@ -93,7 +127,7 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
           <button
             type="button"
             disabled={pending || unread === 0}
-            onClick={() => markRead(...(news ?? []).filter((n) => n.unread).map((n) => n.id))}
+            onClick={() => markRead(...(items ?? []).filter((n) => n.unread).map((n) => n.id))}
             className="flex min-h-8 shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
           >
             <IconCheck size={14} aria-hidden />
@@ -105,11 +139,11 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
           <p
             className={cn(
               "flex items-center justify-center gap-2 p-8 text-sm font-medium text-muted-foreground",
-              news === null && "text-danger-foreground",
+              items === null && "text-danger-foreground",
             )}
           >
             <IconInbox size={16} aria-hidden />
-            {news === null
+            {items === null
               ? "소식을 못 가져왔어요"
               : tab === "unread"
                 ? "안 읽은 소식이 없어요"
@@ -169,9 +203,9 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
         {/* 목록이 스크롤돼도 이 줄은 아래에 붙어 있다. 숫자는 탭과 무관하게 전체 기준이다 —
             "안 읽음" 탭에서 세 건만 보일 때 그게 전체 중 몇 건인지가 여기서 읽힌다.
             소식이 아예 없거나 못 가져왔으면 `0건`을 적지 않는다 — 위 빈 화면이 이미 말한다. */}
-        {!!news?.length && (
+        {!!items?.length && (
           <p className="tabular border-t border-border px-3 py-2 text-xs text-muted-foreground">
-            전체 {news.length}건{unread > 0 && ` · 안 읽음 ${unread}건`}
+            전체 {items.length}건{unread > 0 && ` · 안 읽음 ${unread}건`}
           </p>
         )}
       </PopoverContent>

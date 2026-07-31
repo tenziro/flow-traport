@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import {
   getPostBrief,
+  isChangeLog,
   lastHumanComment,
   listMyTasks,
   mergeMentionComments,
@@ -396,14 +397,34 @@ describe('업무 줄에 붙는 마지막 댓글', () => {
   it('뒤에 붙은 변경 로그는 건너뛴다 — 실측 15건 중 7건이 그것이다', () => {
     const got = lastHumanComment([
       comment('마지막 말'),
-      comment('S48', 'S48'),
-      comment('S41', 'S41'),
+      comment('마감일을 바꿨습니다', 'S48^^2026-07-16@$%'),
+      comment('담당자를 추가하였습니다', "S41^^'이종석'@$%"),
     ]);
     assert.equal(got?.contents, '마지막 말');
   });
 
   it('사람 댓글이 없으면 null이다 — 변경 로그를 대신 내지 않는다', () => {
-    assert.equal(lastHumanComment([comment('S48', 'S48')]), null);
+    assert.equal(lastHumanComment([comment('로그', 'S48^^2026-07-16')]), null);
     assert.equal(lastHumanComment([]), null);
+  });
+
+  // BUG-035. 실측 148건 중 56건이 `S14`·`S13`·`S20`이었다 — truthy로 걸러 내면 사람 말 38%가 사라진다.
+  it('값 없이 코드만 오는 S14·S13·S20은 사람 댓글이다', () => {
+    assert.equal(isChangeLog('S14'), false);
+    assert.equal(isChangeLog('S13'), false);
+    assert.equal(isChangeLog('S20'), false);
+    const got = lastHumanComment([
+      comment('먼저 한 말'),
+      comment('업데이트해서 전달드립니다.', 'S14'),
+    ]);
+    assert.equal(got?.contents, '업데이트해서 전달드립니다.');
+  });
+
+  it('값이 붙은 코드는 변경 로그다', () => {
+    assert.equal(isChangeLog('S45^^0^^1'), true);
+    assert.equal(isChangeLog('S83^^이성우'), true);
+    assert.equal(isChangeLog(''), false);
+    assert.equal(isChangeLog(null), false);
+    assert.equal(isChangeLog(undefined), false);
   });
 });

@@ -313,7 +313,10 @@ export interface FlowComment {
   commentId: string;
   /** 본문. `@[이름](id)` 마크업이 그대로 온다 — `stripMentions`로 벗긴다. */
   contents: string;
-  /** truthy면 사람이 쓴 게 아니라 업무 변경 로그다. `describeSystemComment`로 읽는다. */
+  /**
+   * 변경 로그 표시. **truthy 여부로 판정하면 안 된다** — `isChangeLog`를 쓴다 (BUG-035).
+   * 변경 로그면 `describeSystemComment`로 읽는다.
+   */
   systemCode?: string | null;
   registerId: string;
   registerName: string;
@@ -341,16 +344,24 @@ export async function listComments(postId: string, ttl?: number): Promise<FlowCo
 }
 
 /**
+ * `systemCode`가 **업무 변경 로그**인지 (BUG-035).
+ *
+ * 변경 로그는 항상 `코드^^값` 꼴이다 (`S45^^대기^^진행`, `S41^^'이종석'`, 항목 구분자 `@$%`).
+ * 값 없이 코드만 오는 `S13`·`S14`·`S20`은 **사람이 쓴 댓글**이다 — 실측 148건 중 56건이
+ * 그것이라, truthy로 걸러 내면 사람 말 38%가 조용히 사라진다.
+ */
+export const isChangeLog = (systemCode?: string | null) => Boolean(systemCode?.includes("^^"));
+
+/**
  * 목록에서 **사람이 쓴 마지막 댓글**. 업무 한 줄에 붙이는 값이다 (`loadLastComment`).
  *
- * 응답은 오래된 것부터 온다 — 뒤에서 찾는다. 시스템 댓글(`담당자를 바꿨어요` 같은 변경
- * 기록)은 건너뛴다: 실측 15건 중 7건이 그것이라 그냥 최신 한 건을 집으면 대부분의 줄이
- * 변경 로그로 채워진다.
+ * 응답은 오래된 것부터 온다 — 뒤에서 찾는다. 변경 로그(`담당자를 바꿨어요` 같은 기록)는
+ * 건너뛴다: 실측 15건 중 7건이 그것이라 그냥 최신 한 건을 집으면 대부분의 줄이 로그로 채워진다.
  */
 export function lastHumanComment(comments: FlowComment[]): FlowComment | null {
   for (let i = comments.length - 1; i >= 0; i--) {
     const comment = comments[i];
-    if (!comment.systemCode) return comment;
+    if (!isChangeLog(comment.systemCode)) return comment;
   }
   return null;
 }
@@ -571,12 +582,19 @@ function taskStatus(task?: PostTask): string | null {
  *
  * ponytail: 세 줄 때문에 게시글 상세를 통째로 받는다 — 본문·HTML·댓글 원본까지 딸려 온다.
  * 제목만 주는 엔드포인트가 없다. 부르는 쪽에서 `postId`를 중복 제거하고 병렬로 부르는 게
- * 지금의 상한이고, 무거워지면 응답을 캐시하는 게 다음 수다.
+ * 지금의 상한이다.
+ *
+ * `ttl`을 주면 그만큼 데이터 캐시에 남는다 — **제목·링크만 쓰는 쪽**이 준다 (`loadNews`).
+ * 상태 배지를 쓰는 쪽은 주지 않는다: 남이 상태를 바꾼 게 늦게 보이면 안 된다.
+ * 캐시 한 칸을 여러 사람이 나눠 쓰지만 `postId`는 **자기 알림에서 나온 것뿐이라**
+ * (`taskNews`가 `receiverId`로 걸러 낸다) 남의 글 제목이 새지 않는다.
  */
-export async function getPostBrief(postId: string) {
+export async function getPostBrief(postId: string, ttl?: number) {
   const d = await get<{ title?: string; connectUrl?: string; tasks?: PostTask[] }>(
     `/user/posts/${postId}`,
     "게시글 조회",
+    undefined,
+    ttl,
   );
   return {
     title: d.title?.trim() || null,

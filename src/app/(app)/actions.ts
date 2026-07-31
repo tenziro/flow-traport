@@ -25,6 +25,7 @@ import {
   describeSystemComment,
   FlowRestError,
   getTaskFields,
+  isChangeLog,
   lastHumanComment,
   listComments,
   listParticipants,
@@ -262,14 +263,18 @@ export async function loadThread(
       ok: true,
       message: `댓글 ${comments.length}건을 가져왔어요.`,
       comments: comments
-        .map((c) => ({
-          id: c.commentId,
-          from: c.registerName || c.registerId,
-          at: c.registeredDateTime,
-          // 시스템 댓글이 사람 댓글보다 많다 (실측 14건 중 10건). 버리지 않고 업무 이력으로 읽는다.
-          body: c.systemCode ? describeSystemComment(c.systemCode) : stripMentions(c.contents),
-          system: Boolean(c.systemCode),
-        }))
+        .map((c) => {
+          // 변경 로그가 사람 댓글보다 많다 (실측 14건 중 10건). 버리지 않고 업무 이력으로 읽는다.
+          // 판정은 `isChangeLog`다 — `systemCode`가 truthy여도 사람 댓글인 코드가 있다 (BUG-035).
+          const log = isChangeLog(c.systemCode);
+          return {
+            id: c.commentId,
+            from: c.registerName || c.registerId,
+            at: c.registeredDateTime,
+            body: log ? describeSystemComment(c.systemCode ?? "") : stripMentions(c.contents),
+            system: log,
+          };
+        })
         // 위에서 아래로 읽는 대화다 — 오래된 것부터 쌓는다.
         .sort((a, b) => a.at.localeCompare(b.at)),
     };

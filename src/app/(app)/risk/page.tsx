@@ -27,6 +27,13 @@ import { cn } from '@/lib/utils';
 export const metadata = { title: '리스크 · flow Cockpit' };
 
 /**
+ * 쓰기 액션이 다시 그릴 경로. **쿼리스트링은 붙이지 않는다** — `revalidatePath`는 받은
+ * 문자열을 경로로만 보고 `?dept=…`가 붙으면 맞는 항목이 없어서 캐시를 하나도 안 비운다
+ * (BUG-036). 부서는 URL에 그대로 있어서 다시 그려도 보고 있던 부서가 유지된다.
+ */
+const PATH = '/risk';
+
+/**
  * 위험도는 카드 테두리에 싣는다. `Card`가 이미 `ring-1`로 테두리를 그리므로
  * ring 색만 갈아끼운다 — 전에는 여기서 `border`를 덧대서 1px 간격으로 선이
  * 두 겹 보였다 (`cn`의 tailwind-merge가 ring 색 충돌을 정리해준다).
@@ -176,7 +183,6 @@ export default async function RiskPage({
               rollup={rollup}
               rank={i + 1}
               top={top}
-              dept={dept}
               i={6 + i}
             />
           ))}
@@ -200,7 +206,6 @@ export default async function RiskPage({
                     rollup={rollup}
                     rank={risky.length + i + 1}
                     top={top}
-                    dept={dept}
                   />
                 ))}
               </div>
@@ -223,14 +228,12 @@ function RollupCard({
   rollup,
   rank,
   top,
-  dept,
   i,
 }: {
   rollup: ProjectRollup;
   rank: number;
   /** 1위 점수. 점수 절대값은 의미가 없어서 1위 대비 길이로만 쓴다. */
   top: number;
-  dept: string;
   i?: number;
 }) {
   const grade = GRADE[rollup.grade];
@@ -315,7 +318,7 @@ function RollupCard({
           <ul className="mt-3 space-y-3 border-t border-border pt-3">
             {rollup.tasks.map((task) => (
               <li key={task.taskSrno}>
-                <TaskRow task={task} projectId={rollup.projectId} dept={dept} />
+                <TaskRow task={task} projectId={rollup.projectId} />
               </li>
             ))}
           </ul>
@@ -333,7 +336,7 @@ function RollupCard({
               <NewTaskForm
                 projectId={rollup.projectId}
                 project={rollup.name}
-                path={`/risk?dept=${encodeURIComponent(dept)}`}
+                path={PATH}
               />
             </>
           )}
@@ -346,11 +349,9 @@ function RollupCard({
 function TaskRow({
   task,
   projectId,
-  dept,
 }: {
   task: RiskTask;
   projectId: string | null;
-  dept: string;
 }) {
   const late = task.daysLeft < 0;
 
@@ -391,7 +392,7 @@ function TaskRow({
           taskId={task.taskSrno}
           title={task.title}
           status={task.status}
-          path={`/risk?dept=${encodeURIComponent(dept)}`}
+          path={PATH}
         />
       </div>
     </div>

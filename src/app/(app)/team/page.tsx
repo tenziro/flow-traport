@@ -33,8 +33,12 @@ export default async function TeamPage({
   const { counts, members } = standup;
   /** 스탠드업은 projectId를 안 준다 — 프로젝트 이름으로 해소한다 (queries.ts). */
   const idOf = (project: string) => projectIds.get(project) ?? null;
-  /** 쓰기 액션 후 지금 보고 있는 부서로 되돌아와야 한다. */
-  const path = `/team?dept=${encodeURIComponent(dept)}`;
+  /**
+   * 쓰기 액션이 다시 그릴 경로. **쿼리스트링은 붙이지 않는다** — `revalidatePath`는 받은
+   * 문자열을 경로로만 보고 `?dept=…`가 붙으면 맞는 항목이 없어서 캐시를 하나도 안 비운다
+   * (BUG-036). 부서는 URL에 그대로 있어서 다시 그려도 보고 있던 부서가 유지된다.
+   */
+  const path = "/team";
 
   /**
    * 많이 물고 있는 사람부터. flow가 주는 순서는 조직도 순이라 "누가 막혀 있나"를

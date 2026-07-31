@@ -12,12 +12,15 @@ import { getSession } from "@/lib/auth";
 import { createFlowMcp, type FlowMcp } from "./mcp";
 import {
   getPostBrief,
+  lastHumanComment,
+  listComments,
   listEmployeeIds,
   listEvents,
   listMentionAlarms,
   listProjects,
   listTaskAlarms,
   mergeMentionComments,
+  resolvePostId,
   type FlowEvent,
   type MentionAlarm,
   type MentionRow,
@@ -157,14 +160,17 @@ export async function loadToday(): Promise<TodayData> {
     listEvents(`${today}000000`, `${today}235959`).catch(() => null),
   ]);
 
-  const focus = picks?.slice(0, 5) ?? null;
   const stale = staleTasks(worklist, wide, picks);
 
-  // 포커스·방치 목록이 정해진 다음이라 이름을 다 모은 뒤에 부른다.
+  // 포커스를 고르기 전에 부른다 — `pickFocus`가 픽마다 `projectId`로 게시글을 찾아야 한다.
+  // 포커스 5개가 아니라 픽 20개 이름이 들어오지만 이름 검색은 병렬 한 왕복이고(`searchProjectIds`)
+  // MCP는 분당 상한이 없다. REST는 프로젝트 전량 목록 한 번으로 개수가 그대로다.
   const projectIds = await projectIdMap(
     mcp,
-    projectNames([...worklist.overdueActive, ...(focus ?? []), ...(stale ?? [])]),
+    projectNames([...worklist.overdueActive, ...(picks ?? []), ...(stale ?? [])]),
   );
+
+  const focus = picks ? await pickFocus(picks, projectIds, worklist.user.id) : null;
 
   // 알림 수신자가 지금 로그인한 사람과 같은 것만 붙는다 (rest.ts). 워크리스트가 주는
   // `user.id`가 알림의 `receiverId`와 같은 공간이다 — 둘 다 flow user_id다.
@@ -197,7 +203,11 @@ export async function loadToday(): Promise<TodayData> {
  *
  * ponytail: 게시글 상세는 소식 줄 수(`NEWS_LIMIT`)만큼 붙는다. `postId`가 겹치는 알림은
  * 한 번만 부르고(같은 업무에 댓글이 여러 개 달리는 게 흔해서 실측 12건이 게시글 3~4개였다)
- * 나머지는 병렬이라 왕복 한 번 값이다. 더 무거워지면 응답을 캐시하는 게 다음 수다.
+ * 나머지는 병렬이라 왕복 한 번 값이다.
+ *
+ * **종이 1분마다 이걸 다시 부른다** (`/api/news`). 제목·링크는 안 바뀌는 값이라 캐시에
+ * 올려서(`NEWS_BRIEF_TTL`) 폴링 한 번이 알림 목록 + 프로젝트 목록 두 번으로 끝난다 —
+ * 캐시가 없으면 매분 최대 14번이고 REST 상한이 분당 120번이다.
  */
 export async function loadNews(me: string): Promise<TaskNews[] | null> {
   const [alarms, projects] = await Promise.all([
@@ -211,7 +221,7 @@ export async function loadNews(me: string): Promise<TaskNews[] | null> {
   const briefs = new Map(
     await Promise.all(
       [...new Set(news.map((n) => n.postId))].map(
-        async (postId) => [postId, await getPostBrief(postId).catch(() => null)] as const,
+        async (postId) => [postId, await getPostBrief(postId, NEWS_BRIEF_TTL).catch(() => null)] as const,
       ),
     ),
   );
@@ -235,6 +245,12 @@ export async function loadNews(me: string): Promise<TaskNews[] | null> {
  * 줄 수만큼 게시글 상세가 붙어서(`loadNews`) 여기가 곧 호출 수의 상한이다.
  */
 const NEWS_LIMIT = 12;
+
+/**
+ * 소식 줄의 **제목·링크**를 데이터 캐시에 두는 시간(초). 게시글 제목과 flow 짧은 링크는
+ * 안 바뀌는 값이라 종이 1분마다 폴링해도 5분에 한 번만 게시글 상세를 부른다.
+ */
+const NEWS_BRIEF_TTL = 300;
 
 /**
  * 담당 업무·내가 올린 글 알림을 카드용 한 줄로 (PRD §13 B1·B2).
@@ -261,6 +277,64 @@ export function taskNews(alarms: readonly MentionAlarm[], me: string): TaskNews[
     }))
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, NEWS_LIMIT);
+}
+
+/** 오늘의 포커스에 올리는 줄 수. */
+const FOCUS_LIMIT = 5;
+
+/**
+ * 5줄을 채우려고 확인해 보는 픽 수. 여기까지만 댓글을 본다 — 픽 20개를 다 확인하면
+ * 피드백 업무마다 REST 2회라 왕복이 최대 40번이다(분당 상한 120회).
+ */
+const FOCUS_CHECK = 8;
+
+/** 마지막 댓글 응답을 데이터 캐시에 두는 시간(초). 같은 화면을 다시 열어도 안 부른다. */
+const FOCUS_COMMENT_TTL = 300;
+
+/**
+ * 포커스 5줄. **피드백 상태인데 마지막 댓글을 내가 쓴 업무는 내린다.**
+ *
+ * 피드백은 "상대 답을 기다리는 중"이라 내가 답을 남긴 뒤에는 내가 할 일이 없는데, 날짜가
+ * 바뀌어도 점수가 높아서(마감 지남 + 댓글 열기) 오늘의 포커스에 계속 남아 있었다. 상태가
+ * 완료로 넘어가지 않는 업무가 자리를 잡고 앉으면 정작 오늘 할 일이 밀려난다.
+ *
+ * 댓글 작성자는 픽에 없다 — 게시글을 찾고(REST 1회) 댓글을 받아(REST 1회) 봐야 안다.
+ * 그래서 **피드백 픽만**, 앞에서 `FOCUS_CHECK`개까지만 확인한다. 실측으로 픽 8개 중
+ * 피드백이 3~5개라 왕복 6~10번이다.
+ */
+async function pickFocus(
+  picks: FocusPick[],
+  projectIds: Map<string, string>,
+  me: string,
+): Promise<FocusPick[]> {
+  const head = picks.slice(0, FOCUS_CHECK);
+  const answered = await Promise.all(head.map((pick) => answeredByMe(pick, projectIds, me)));
+  return head.filter((_, i) => !answered[i]).slice(0, FOCUS_LIMIT);
+}
+
+/**
+ * 피드백 업무의 마지막 사람 댓글을 내가 썼는지.
+ *
+ * 못 알아내면 `false`다 — 안 보이게 하는 쪽으로 틀리면 일을 놓친다. 게시글을 못 찾는 경우
+ * (같은 이름 100건 초과, 이름을 못 푼 프로젝트)도 그대로 남긴다.
+ */
+async function answeredByMe(
+  pick: FocusPick,
+  projectIds: Map<string, string>,
+  me: string,
+): Promise<boolean> {
+  if (pick.status !== "피드백") return false;
+  const projectId = projectIds.get(pick.project);
+  if (!projectId) return false;
+
+  try {
+    const postId = await resolvePostId(projectId, String(pick.taskSrno), pick.title);
+    if (!postId) return false;
+    const last = lastHumanComment(await listComments(postId, FOCUS_COMMENT_TTL));
+    return last?.registerId.toLowerCase() === me.toLowerCase();
+  } catch {
+    return false;
+  }
 }
 
 /**
