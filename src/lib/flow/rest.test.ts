@@ -326,8 +326,16 @@ describe('내 업무 조회', () => {
         endDate: '20260731',
         status: '완료',
         done: true,
+        // 픽스처에 `upTaskId`가 없다 — 필드가 안 오면 최상위로 둔다.
+        upTaskId: '-1',
       },
     ]);
+  });
+
+  it('부모 업무 ID를 그대로 넘긴다 (columns 밖 최상위 필드다 — BUG-034)', async () => {
+    stub([page([{ ...filterTask([NAME_COL]), upTaskId: '41200005' }])]);
+    const { tasks } = await listMyTasks('2709879', 'me');
+    assert.equal(tasks[0].upTaskId, '41200005');
   });
 
   it('마감일·상태 컬럼이 없으면 빈 값으로 둔다 (실측 880건 중 720건이 마감일이 없다)', async () => {

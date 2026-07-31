@@ -240,6 +240,7 @@ function ProjectCard({ project, i }: { project: MyTasksProject; i: number }) {
               items={project.open.map((task) => ({
                 key: task.taskSrno,
                 status: task.status,
+                depth: task.depth,
                 row: <TaskItem task={task} projectId={project.projectId} path={PATH} />,
               }))}
             />

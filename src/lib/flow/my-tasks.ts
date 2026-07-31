@@ -19,12 +19,19 @@ import { getSession } from "@/lib/auth";
 import { flowPostUrl, flowProjectUrl, type WorklistTask } from "@/lib/flow/queries";
 import { listMyTasks, listProjects, type MyTask } from "@/lib/flow/rest";
 
+/**
+ * 화면 한 줄. `depth`가 0보다 크면 하위 업무고, 그만큼 들여쓴다 (PRD §13 D1).
+ *
+ * `WorklistTask`에 넣지 않는 이유: 그 타입은 오늘·팀 화면이 같이 쓰는데 계층은 이 화면만 그린다.
+ */
+export type MyTaskRow = WorklistTask & { depth: number };
+
 /** 프로젝트 한 개의 내 업무. */
 export interface MyTasksProject {
   projectId: string;
   name: string;
-  /** 안 끝난 업무. 마감 지난 것 → 임박한 것 → 마감일 없는 것 순. */
-  open: WorklistTask[];
+  /** 안 끝난 업무. 부모 바로 아래에 자식이 붙고, 형제끼리는 마감 지난 것 → 임박한 것 → 마감일 없는 것 순. */
+  open: MyTaskRow[];
   /** 끝난 업무. 최근 마감 순. 화면에서 접어 두고 읽기만 한다. */
   done: WorklistTask[];
 }
@@ -87,6 +94,56 @@ function toRow(row: ProjectTasks, task: MyTask, now: number): WorklistTask {
   };
 }
 
+/** 들여쓰기 단계 상한. flow는 3단까지 만들 수 있고, 그 이상은 같은 칸에 둔다. */
+const MAX_DEPTH = 2;
+
+/**
+ * 안 끝난 업무를 부모 → 자식 순으로 늘어놓는다 (PRD §13 D1).
+ *
+ * 부모는 **같은 목록에 있는 것만** 인정한다. 실측 226건 중 하위 업무가 191건인데 부모까지 내
+ * 담당인 건 26건뿐이다 — 없는 부모를 받으려면 건당 조회 165회고 REST 분당 상한이 120회다.
+ * 부모를 못 찾은 하위 업무는 최상위 줄로 그린다.
+ *
+ * 형제 순서는 먼저 걸어 둔 마감 순(`byUrgency`)이 그대로 남는다 — 정렬한 배열을 순서대로 훑기
+ * 때문이다. 부모가 자기 자식보다 급하지 않아도 부모가 위에 온다. 계층이 그런 것이다.
+ */
+function nest(tasks: MyTask[], row: ProjectTasks, now: number): MyTaskRow[] {
+  const rows = tasks
+    .map((task) => ({ task, row: { ...toRow(row, task, now), depth: 0 } }))
+    .sort((a, b) => byUrgency(a.row, b.row));
+
+  const ids = new Set(rows.map((r) => r.task.taskId));
+  const kids = new Map<string, typeof rows>();
+  const roots: typeof rows = [];
+  for (const r of rows) {
+    // 자기 자신이 부모로 오는 응답은 못 봤지만, 그게 오면 무한 재귀다.
+    const parent = r.task.upTaskId;
+    if (parent !== r.task.taskId && ids.has(parent)) {
+      const siblings = kids.get(parent);
+      if (siblings) siblings.push(r);
+      else kids.set(parent, [r]);
+    } else {
+      roots.push(r);
+    }
+  }
+
+  const out: MyTaskRow[] = [];
+  const walk = (r: (typeof rows)[number], depth: number) => {
+    r.row.depth = depth;
+    out.push(r.row);
+    for (const kid of kids.get(r.task.taskId) ?? []) walk(kid, Math.min(depth + 1, MAX_DEPTH));
+  };
+  for (const r of roots) walk(r, 0);
+
+  // 부모 사슬이 고리를 이루면 뿌리가 하나도 없어서 그 무리가 통째로 빠진다. **건수가 실제보다
+  // 적게 보이는 게 제일 나쁘다** — 못 걸은 줄은 평평하게 뒤에 붙인다.
+  if (out.length < rows.length) {
+    const drawn = new Set(out);
+    for (const r of rows) if (!drawn.has(r.row)) out.push(r.row);
+  }
+  return out;
+}
+
 /** 조회 결과 → 화면 묶음. 순수 함수다 (테스트가 이걸 부른다). */
 export function buildMyTasks(
   rows: ProjectTasks[],
@@ -100,16 +157,19 @@ export function buildMyTasks(
       quiet.push({ name: row.name, link: flowProjectUrl(row.projectId) });
       continue;
     }
-    const open: WorklistTask[] = [];
-    const done: WorklistTask[] = [];
-    for (const task of row.tasks) {
-      (task.done ? done : open).push(toRow(row, task, now));
-    }
+    // 끝난 업무는 계층을 안 그린다 — 접어 둔 목록이라 들여쓰기가 정보가 아니라 잡음이다.
     projects.push({
       projectId: row.projectId,
       name: row.name,
-      open: open.sort(byUrgency),
-      done: done.sort(byRecent),
+      open: nest(
+        row.tasks.filter((t) => !t.done),
+        row,
+        now,
+      ),
+      done: row.tasks
+        .filter((t) => t.done)
+        .map((t) => toRow(row, t, now))
+        .sort(byRecent),
     });
   }
 

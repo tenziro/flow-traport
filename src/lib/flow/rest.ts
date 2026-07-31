@@ -433,6 +433,14 @@ interface FilterTask {
   /** `colabo_commt_srno` — 댓글 도구가 요구하는 ID다. */
   postId: string;
   /**
+   * 부모 업무의 `taskId`. **최상위면 `-1`이다** (빈 문자열이 아니다).
+   *
+   * `columns` 밖 최상위에 있어서 오래 못 보고 지나갔다 — `upTaskName`이 전부 비어 있는 것만
+   * 보고 "계층 정보가 없다"로 닫았다 (bug-report BUG-034). `mode=TREE`는 아무 효과가 없고
+   * 계층은 이 필드로 만든다. 실측 226건 채움률 100%.
+   */
+  upTaskId?: string;
+  /**
    * 업무명·마감일·상태·담당자가 **여기 배열로** 들어온다. 평평한 필드가 아니다 —
    * 의미는 `defaultColumnType`이 정한다 (api-spec §2.1).
    */
@@ -664,6 +672,13 @@ export interface MyTask {
   status: string;
   /** 완료 상태인가. */
   done: boolean;
+  /**
+   * 부모 업무의 `taskId`. 최상위면 `-1`이다.
+   *
+   * 부모가 같은 목록에 없으면 최상위처럼 그린다 — 실측 하위 191건 중 부모까지 내 담당인 건
+   * 26건뿐이고, 없는 부모를 받으려면 건당 조회 165회다 (PRD §13 D1).
+   */
+  upTaskId: string;
 }
 
 /** 담당자 필터가 걸리는 컬럼 번호. `WORKER_ID`가 기본 1번이다 (api-spec §6.1). */
@@ -724,6 +739,7 @@ export async function listMyTasks(
         endDate: columnData(task, "END_DT")[0]?.customColumnData ?? "",
         status: cell?.optionName?.trim() || STTS_LABEL[cell?.customColumnData ?? ""] || "",
         done: cell?.optionCategory === "2",
+        upTaskId: task.upTaskId || "-1",
       });
     }
 

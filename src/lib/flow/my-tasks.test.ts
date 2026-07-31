@@ -15,6 +15,7 @@ const task = (over: Partial<MyTask> = {}): MyTask => ({
   endDate: '',
   status: '진행',
   done: false,
+  upTaskId: '-1',
   ...over,
 });
 
@@ -127,6 +128,82 @@ describe('내 업무 묶기', () => {
     ]);
     assert.equal(projects.length, 1);
     assert.equal(total, 1);
+  });
+
+  it('하위 업무는 부모 바로 아래로 들어간다 — 부모가 급하지 않아도 위에 온다', () => {
+    const parent = task({ title: '부모', endDate: '20260801' });
+    const { projects } = buildMyTasks(
+      [
+        project('Q020', [
+          task({ title: '남', endDate: '20260731' }),
+          task({ title: '자식2', endDate: '20260630', upTaskId: parent.taskId }),
+          parent,
+          task({ title: '자식1', endDate: '20260601', upTaskId: parent.taskId }),
+        ]),
+      ],
+      NOW,
+    );
+    assert.deepEqual(
+      projects[0].open.map((t) => [t.title, t.depth]),
+      [
+        // 마감만 보면 자식1(6/1)이 제일 급하지만 부모가 먼저다. 형제끼리는 마감 순이다.
+        ['남', 0],
+        ['부모', 0],
+        ['자식1', 1],
+        ['자식2', 1],
+      ],
+    );
+  });
+
+  it('부모가 내 담당이 아니면 하위 업무도 최상위 줄이다 (실측 191건 중 165건)', () => {
+    const { projects } = buildMyTasks(
+      [project('Q020', [task({ title: '고아', upTaskId: '99999999' })])],
+      NOW,
+    );
+    assert.deepEqual(
+      projects[0].open.map((t) => t.depth),
+      [0],
+    );
+  });
+
+  it('손자는 한 칸 더 들어가고, 끝난 업무는 계층을 안 그린다', () => {
+    const a = task({ title: 'A' });
+    const b = task({ title: 'B', upTaskId: a.taskId });
+    const { projects } = buildMyTasks(
+      [
+        project('Q020', [
+          a,
+          b,
+          task({ title: 'C', upTaskId: b.taskId }),
+          task({ title: '끝난 자식', upTaskId: a.taskId, done: true }),
+        ]),
+      ],
+      NOW,
+    );
+    assert.deepEqual(
+      projects[0].open.map((t) => [t.title, t.depth]),
+      [
+        ['A', 0],
+        ['B', 1],
+        ['C', 2],
+      ],
+    );
+    assert.equal(projects[0].done.length, 1);
+  });
+
+  it('부모 사슬이 고리를 이뤄도 줄이 사라지지 않는다 — 건수가 적게 보이는 게 제일 나쁘다', () => {
+    const x = task({ title: 'X' });
+    const y = task({ title: 'Y', upTaskId: x.taskId });
+    x.upTaskId = y.taskId;
+    const { projects, open } = buildMyTasks([project('Q020', [x, y])], NOW);
+    assert.equal(open, 2);
+    assert.deepEqual(
+      projects[0].open.map((t) => [t.title, t.depth]).sort(),
+      [
+        ['X', 0],
+        ['Y', 0],
+      ],
+    );
   });
 
   it('업무 줄은 프로젝트명과 flow 딥링크를 붙여 내려간다 (필터 응답의 connectUrl은 비어 있다)', () => {

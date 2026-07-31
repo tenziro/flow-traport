@@ -9,7 +9,17 @@ export interface FilterableTask {
   key: number;
   status: string;
   row: React.ReactNode;
+  /** 하위 업무 깊이. 0이면 최상위다 (PRD §13 D1). */
+  depth?: number;
 }
+
+/**
+ * 깊이별 들여쓰기. 세로 실선이 부모와 자식을 잇는다.
+ *
+ * `border-b`는 `li`에 그대로 두고 안쪽만 밀어 넣는다 — 구분선은 줄 전체를 끊어야 오늘·팀
+ * 화면 목록과 같은 모양이 된다.
+ */
+const INDENT = ["", "ml-3 border-l border-border pl-3", "ml-6 border-l border-border pl-3"];
 
 /**
  * 프로젝트 카드 안 목록을 상태로 거른다 (PRD §6.5).
@@ -27,9 +37,9 @@ export function ProjectTaskFilter({ items }: { items: FilterableTask[] }) {
 
   const counts = countStatuses(items);
   // 없는 상태가 골라져 있으면(= 방금 상태를 바꿨다) 거르지 않는다. 빈 목록보다 낫다.
-  const shown = counts.some((c) => c.status === picked)
-    ? items.filter((item) => item.status === picked)
-    : items;
+  const filtering = counts.some((c) => c.status === picked);
+  const shown = filtering ? items.filter((item) => item.status === picked) : items;
+  const indent = !filtering;
 
   return (
     <div className="mt-3 border-t border-border pt-3">
@@ -67,7 +77,13 @@ export function ProjectTaskFilter({ items }: { items: FilterableTask[] }) {
       <ul className="space-y-0.5">
         {shown.map((item) => (
           <li key={item.key} className="border-b border-border/60 last:border-0">
-            {item.row}
+            {/* 거르는 중에는 계층을 푼다. 부모가 걸러져 나가면 들여쓴 줄이 누구 밑인지
+                가리키는 데가 없어진다 — 그때는 평평한 목록이 정직하다 */}
+            {indent && item.depth ? (
+              <div className={INDENT[Math.min(item.depth, INDENT.length - 1)]}>{item.row}</div>
+            ) : (
+              item.row
+            )}
           </li>
         ))}
       </ul>
