@@ -318,7 +318,7 @@ export async function listEmployeeIds(divisionName: string): Promise<Map<string,
  * (PRD §8.1, §6.6 개인정보). 구성원 화면은 인자 없이 부르고 전량을 받는다.
  *
  * 검색어는 **이름**만 걸린다 — 이메일을 넣으면 0명이 온다 (실측). 그래서 이름으로 찾고 받은
- * 줄에서 이메일로 고른다 (`loadMyPhoto`).
+ * 줄에서 이메일로 고른다 (`loadMyAccount`).
  *
  * ponytail: 100명에서 끊는다. 지금 13명이라 남는다 — 넘치면 `hasNext`가 참으로 오고,
  * 그때 `listEmployeeIds`처럼 커서를 돌면 된다.

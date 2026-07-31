@@ -161,8 +161,8 @@ export function SummaryCardsSkeleton({
 /**
  * 부서 소제목 + 사람 카드 격자 (구성원 화면 `MemberCard`). 실제와 같은 `size="sm"` 카드다.
  *
- * 원판은 실제와 같은 36px이고 연락처는 두 줄이다 — 카드 높이를 정하는 게 이 둘이라, 여기를
- * 작게 그리면 명단이 도착할 때 격자가 통째로 늘어난다.
+ * 원판은 실제와 같은 36px이고 연락처는 두 줄, 그 아래 한마디 칸까지 셋이다 — 카드 높이를 정하는
+ * 게 이들이라, 하나라도 빠뜨리면 명단이 도착할 때 격자가 통째로 늘어난다.
  */
 export function MemberCardsSkeleton({ count }: { count: number }) {
   return (
@@ -187,6 +187,12 @@ export function MemberCardsSkeleton({ count }: { count: number }) {
                   <Skeleton className="ml-auto size-8 shrink-0 rounded-md" />
                 </div>
               ))}
+            </CardContent>
+            {/* 한마디 칸. 이제 없는 사람도 한 줄을 가져서 모든 카드에 있다. 앞의 말풍선 자리까지
+                실제와 같다 */}
+            <CardContent className="flex items-start gap-1.5 border-t border-border pt-2.5">
+              <Skeleton className="mt-0.5 size-3 shrink-0 rounded-sm" />
+              <Skeleton className={cn("h-3", i % 3 ? "w-32" : "w-20")} />
             </CardContent>
           </Card>
         ))}

@@ -87,7 +87,8 @@ export interface MyAccount {
  * §9.3 검색은 이름만 본다.)
  *
  * 실패하면 둘 다 빈 문자열이다. 이 호출은 셸에서 일어나므로 던지면 모든 화면이 같이 넘어진다 —
- * 사진 한 장이 그럴 값은 아니다. 계정 블록은 비면 인사하는 손을 그대로 쓰고 한마디 줄을 뺀다.
+ * 사진 한 장이 그럴 값은 아니다. 계정 블록은 비면 인사하는 손을 그대로 쓰고, 한마디 줄에는
+ * 없다고 적어 둔다 (app-shell.tsx).
  */
 export async function loadMyAccount(fullname: string, email: string): Promise<MyAccount> {
   try {

@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { CopyButton } from "@/components/copy-button";
+import { IconComment } from "@/components/icons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadMembers, type Member, type MemberDivision } from "@/lib/flow/members";
@@ -93,8 +94,9 @@ function DivisionList({ divisions }: { divisions: MemberDivision[] }) {
  * 연락처는 값 하나에 복사 단추 하나로 줄을 나눈다. 한 줄에 이메일·번호·단추 둘을 몰아넣으면
  * 어느 단추가 어느 값을 집는지 자리로만 알 수 있는데, 여기서는 같은 줄에 있는 게 그 값이다.
  *
- * 높이는 내용에 맡긴다. 한 행을 같은 높이로 늘리면 한마디가 없는 카드에 빈 칸이 생기고,
- * 그 빈 칸이 "정보가 빠진 사람"처럼 보인다 — 카드가 짧게 끝나는 건 그렇게 안 읽힌다.
+ * 높이는 여전히 내용에 맡긴다(`h-full`이 없다). 한마디 칸을 모두가 갖게 돼서 높이가 대개
+ * 같아졌지만, 그건 내용이 같아진 결과다 — 늘려서 맞추면 번호 없는 사람 아래에 빈 칸이 생기고
+ * 그 빈 칸이 "정보가 빠진 사람"처럼 보인다.
  */
 function MemberCard({ member }: { member: Member }) {
   const { name, title, email, phone, photo, slogan } = member;
@@ -120,12 +122,21 @@ function MemberCard({ member }: { member: Member }) {
           )}
         </CardContent>
 
-        {/* 본인이 적은 한 줄. 두 명뿐인데 그 두 줄이 연락 방법에 대한 본인 말이라 주소록에 맞는다 */}
-        {slogan && (
-          <CardContent className="border-t border-border pt-2.5 text-xs text-muted-foreground">
-            {slogan}
-          </CardContent>
-        )}
+        {/* 본인이 적은 한 줄. 두 명뿐인데 그 두 줄이 연락 방법에 대한 본인 말이라 주소록에 맞는다.
+            없는 사람에게도 칸을 남긴다 — 카드마다 높이가 같아져서 격자 아래끝이 들쭉날쭉하지 않고,
+            빈 칸이 아니라 `상태 메시지가 없어요.`라고 적혀 있으면 "정보가 빠진 사람"으로 읽히지
+            않는다. 계정 팝오버(app-shell.tsx)와 같은 말·같은 흐림이다 */}
+        <CardContent
+          className={cn(
+            "flex items-start gap-1.5 border-t border-border pt-2.5 text-xs",
+            slogan ? "text-muted-foreground" : "text-muted-foreground/60",
+          )}
+        >
+          {/* 말풍선. 위 칸들은 연락처인데 이 줄만 본인이 쓴 말이다 (app-shell.tsx 계정 팝오버와
+              같은 모양) */}
+          <IconComment size={12} aria-hidden className="mt-0.5 shrink-0" />
+          <span>{slogan || "상태 메시지가 없어요."}</span>
+        </CardContent>
       </Card>
     </li>
   );

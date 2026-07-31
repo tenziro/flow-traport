@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useRef, useState } from 'react';
 import {
   IconChevronRight,
+  IconComment,
   IconMyTasks,
   IconRisk,
   IconSearch,
@@ -78,7 +79,7 @@ type User = {
   email: string;
   /** flow 프로필 사진. 세션에 없어서 따로 받아 온다 (lib/flow/members.ts). 없으면 빈 문자열. */
   photo: string;
-  /** flow에 적어 둔 상태 메시지. 없으면 빈 문자열 — 팝오버에서 그 줄이 사라진다. */
+  /** flow에 적어 둔 상태 메시지. 없으면 빈 문자열 — 팝오버가 그 자리에 없다고 적는다. */
   slogan: string;
 };
 
@@ -350,17 +351,21 @@ function Account({ user }: { user: User }) {
           </PopoverDescription>
 
           {/* flow에 적어 둔 상태 메시지. 위 세 줄은 "어느 계정인지"고 이 줄은 내가 쓴 말이라
-              선으로 끊는다 — 구성원 카드의 한마디도 같은 모양이다 (members/page.tsx).
-              비어 있어도 줄은 남긴다. 여기가 자기 계정을 보는 유일한 자리라, 없다고 적어 두는
-              편이 자리가 아예 사라지는 것보다 낫다 — 적을 수 있는 칸이라는 것도 알게 된다.
-              구성원 카드에서는 반대로 빼는데, 남 카드 열한 장에 같은 말이 깔리면 잡음이다 */}
+              선으로 끊는다 — 구성원 카드의 한마디도 선·말풍선·빈 문구까지 같은 모양이다
+              (members/page.tsx). 비어 있어도 줄은 남긴다. 여기가 자기 계정을 보는 유일한
+              자리라, 없다고 적어 두는 편이 자리가 아예 사라지는 것보다 낫다 — 적을 수 있는
+              칸이라는 것도 알게 된다 */}
           <PopoverDescription
             className={cn(
-              'mt-1 border-t border-border pt-1.5 text-xs',
+              'mt-1 flex items-start gap-1.5 border-t border-border pt-1.5 text-xs',
               !user.slogan && 'text-muted-foreground/60',
             )}
           >
-            {user.slogan || '상태가 없어요.'}
+            {/* 말풍선. 위 세 줄과 달리 이 줄만 "본인이 쓴 말"이라는 표시다 — 선 하나로는
+                무엇이 달라졌는지 말해 주지 않는다. `aria-hidden`인 것은 줄에 붙는 이름표가
+                아니라 성격 표시라서다 */}
+            <IconComment size={12} aria-hidden className="mt-0.5 shrink-0" />
+            <span>{user.slogan || '상태 메시지가 없어요.'}</span>
           </PopoverDescription>
         </PopoverHeader>
 
