@@ -211,8 +211,16 @@ function EditDialog({
     if (!open || asked) return;
     setAsked(true);
     startLoad(async () => {
-      const result = await loadTaskFields(projectId, taskId, title);
-      setFields(result.fields ?? null);
+      // `catch`가 필요한 이유는 액션 **요청 자체가 끊길 때**다 (네트워크 끊김·서버 재시작·
+      // 세션 만료). 그때 거부가 트랜지션을 뚫고 나가 오류 경계가 화면을 통째로 가져간다 —
+      // 아래 "지금 값을 못 가져왔어요"는 쓰이지도 못한다. 이 조회는 곁가지라 화면을 죽일
+      // 자격이 없다. 서버 안에서 난 오류는 액션이 이미 `ok:false`로 싸서 준다 (BUG-038).
+      const result = await loadTaskFields(projectId, taskId, title).catch(() => null);
+      setFields(result?.fields ?? null);
+      // 못 가져온 건 물어본 것으로 치지 않는다 — 안 그러면 그 화면이 살아 있는 동안 계속
+      // "못 가져왔어요"고 새로고침만이 탈출구다. 조회 중에는 `asked`가 참이라 다시 열어도
+      // 두 번 부르지 않는다.
+      if (!result?.fields) setAsked(false);
     });
   }
 
