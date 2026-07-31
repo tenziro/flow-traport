@@ -205,7 +205,12 @@ function ProjectCard({ project, i }: { project: MyTasksProject; i: number }) {
                   <span>전체 {total}건</span>
                 </span>
               </span>
-              {/* 다 끝난 프로젝트를 펼치지 않고도 알아보려면 비율이 필요하다 */}
+              {/*
+               * 다 끝난 프로젝트를 펼치지 않고도 알아보려면 비율이 필요하다. 두 칸을 다 칠해서
+               * 막대 전체가 이 프로젝트의 업무 전량이 된다 — 끝낸 쪽만 칠하면 남은 회색이
+               * "안 끝난 40건"인지 "아직 안 센 것"인지 구별이 안 됐다. 안 끝난 칸은 위
+               * `⚠ 40건`과 같은 계열 색이라 숫자와 막대가 한 쌍으로 읽힌다.
+               */}
               <Meter
                 total={total}
                 className="mt-1.5"
@@ -214,6 +219,11 @@ function ProjectCard({ project, i }: { project: MyTasksProject; i: number }) {
                     value: project.done.length,
                     label: `끝낸 업무 ${project.done.length}건`,
                     className: "bg-done",
+                  },
+                  {
+                    value: project.open.length,
+                    label: `안 끝난 업무 ${project.open.length}건`,
+                    className: "bg-warning",
                   },
                 ]}
               />
