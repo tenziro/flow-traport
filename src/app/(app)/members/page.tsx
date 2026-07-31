@@ -58,84 +58,90 @@ export default async function MembersPage() {
   );
 }
 
-/** 부서 묶음. 한 부서만 넘어와도 소제목은 남긴다 — 그게 그 목록의 이름이다. */
+/**
+ * 부서 묶음. 한 부서만 넘어와도 소제목은 남긴다 — 그게 그 목록의 이름이다.
+ *
+ * 부서를 카드로 싸지 않는다. 사람이 카드라서 부서까지 카드면 테두리가 두 겹으로 겹친다 —
+ * 소제목 한 줄이면 무리를 나누는 데 충분하다.
+ */
 function DivisionList({ divisions }: { divisions: MemberDivision[] }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {divisions.map(({ name, members }, i) => (
-        <Card key={name} className="rise" style={{ "--i": i } as React.CSSProperties}>
-          <CardContent className="p-0">
-            <h2 className="border-b border-border px-4 py-2.5 text-sm font-semibold">{name}</h2>
-            <ul>
-              {members.map((member) => (
-                <MemberRow key={member.email} member={member} />
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+        <section key={name} className="rise" style={{ "--i": i } as React.CSSProperties}>
+          <h2 className="mb-2 text-sm font-semibold">
+            {name}
+            <span className="tabular ml-1.5 font-normal text-muted-foreground">
+              {members.length}
+            </span>
+          </h2>
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {members.map((member) => (
+              <MemberCard key={member.email} member={member} />
+            ))}
+          </ul>
+        </section>
       ))}
     </div>
   );
 }
 
 /**
- * 한 사람 = 한 줄. 이름이 한 열에 세로로 모여야 훑는 눈이 한 방향으로만 움직인다 —
- * 카드 그리드로 깔면 이름이 지그재그로 흩어진다.
+ * 한 사람 = 한 장.
  *
- * 좁은 화면에서는 연락처가 이름 아래로 내려간다. 375px에 이름·직책·이메일·번호와 복사 단추
- * 둘까지 한 줄로 넣을 자리가 없다.
+ * 연락처는 값 하나에 복사 단추 하나로 줄을 나눈다. 한 줄에 이메일·번호·단추 둘을 몰아넣으면
+ * 어느 단추가 어느 값을 집는지 자리로만 알 수 있는데, 여기서는 같은 줄에 있는 게 그 값이다.
+ *
+ * 높이는 내용에 맡긴다. 한 행을 같은 높이로 늘리면 한마디가 없는 카드에 빈 칸이 생기고,
+ * 그 빈 칸이 "정보가 빠진 사람"처럼 보인다 — 카드가 짧게 끝나는 건 그렇게 안 읽힌다.
  */
-function MemberRow({ member }: { member: Member }) {
+function MemberCard({ member }: { member: Member }) {
   const { name, title, email, phone, photo, slogan } = member;
 
   return (
-    <li className="flex items-start gap-3 border-b border-border px-4 py-2.5 last:border-0">
-      <Avatar name={name} photo={photo} />
-
-      <div className="min-w-0 flex-1">
-        <div className="sm:flex sm:items-center sm:gap-3">
-          <div className="flex items-baseline gap-2 sm:w-36 sm:shrink-0">
-            <span className="truncate text-sm font-medium">{name}</span>
-            <span className="shrink-0 text-xs text-muted-foreground">{title}</span>
+    <li>
+      <Card size="sm" className="gap-2.5">
+        <CardContent className="flex items-center gap-2.5">
+          <Avatar name={name} photo={photo} />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{name}</p>
+            <p className="truncate text-xs text-muted-foreground">{title}</p>
           </div>
+        </CardContent>
 
-          {/* `mailto:`·`tel:`은 모바일에서 바로 연결되지만 데스크톱에서는 아무 일도 안 하는
-              경우가 있다. 그래서 값 자체를 링크로 두고 옆에 복사 단추를 나란히 붙인다 */}
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:mt-0">
-            {/* 넓은 화면에서만 최소 폭을 준다 — 주소 길이가 제각각이라 그냥 두면 뒤따르는
-                번호가 줄마다 다른 자리에 선다. `min-`이라 더 긴 주소는 잘리지 않고 밀어낸다 */}
+        {/* `mailto:`·`tel:`은 모바일에서 바로 연결되지만 데스크톱에서는 아무 일도 안 하는
+            경우가 있다. 그래서 값 자체를 링크로 두고 오른쪽에 복사 단추를 붙인다 */}
+        <CardContent className="space-y-1">
+          <div className="flex items-center gap-2">
             <a
               href={`mailto:${email}`}
-              className="text-xs text-muted-foreground underline-offset-2 hover:underline sm:min-w-40"
+              className="truncate text-xs text-muted-foreground underline-offset-2 hover:underline"
             >
               {email}
             </a>
-            <CopyButton text={email} label="복사" />
-            {/* 번호가 없는 사람이 있다 (13명 중 1명) — 빈 자리를 남기지 않는다 */}
-            {phone && (
-              <>
-                <a
-                  href={`tel:${phone}`}
-                  className="tabular text-xs text-muted-foreground underline-offset-2 hover:underline"
-                >
-                  {phone}
-                </a>
-                <CopyButton text={phone} label="복사" />
-              </>
-            )}
+            <CopyButton text={email} label="복사" className="ml-auto shrink-0" />
           </div>
-        </div>
+          {/* 번호가 없는 사람이 있다 (13명 중 1명) — 빈 줄을 남기지 않는다 */}
+          {phone && (
+            <div className="flex items-center gap-2">
+              <a
+                href={`tel:${phone}`}
+                className="tabular truncate text-xs text-muted-foreground underline-offset-2 hover:underline"
+              >
+                {phone}
+              </a>
+              <CopyButton text={phone} label="복사" className="ml-auto shrink-0" />
+            </div>
+          )}
+        </CardContent>
 
         {/* 본인이 적은 한 줄. 두 명뿐인데 그 두 줄이 연락 방법에 대한 본인 말이라 주소록에 맞는다 */}
         {slogan && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            <span aria-hidden className="mr-1 opacity-60">
-              └
-            </span>
+          <CardContent className="border-t border-border pt-2.5 text-xs text-muted-foreground">
             {slogan}
-          </p>
+          </CardContent>
         )}
-      </div>
+      </Card>
     </li>
   );
 }

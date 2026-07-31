@@ -10,7 +10,15 @@ import { Button } from "@/components/motion/button/base";
  * ponytail: `navigator.clipboard`가 없거나 거부되면 실패 문구만 낸다.
  * textarea + execCommand 폴백은 만들지 않는다 — 사내에서 https + 최신 브라우저만 쓴다.
  */
-export function CopyButton({ text, label }: { text: string; label: string }) {
+export function CopyButton({
+  text,
+  label,
+  className,
+}: {
+  text: string;
+  label: string;
+  className?: string;
+}) {
   const [state, setState] = useState<"idle" | "done" | "failed">("idle");
 
   return (
@@ -18,6 +26,7 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
       type="button"
       size="sm"
       variant="secondary"
+      className={className}
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text);

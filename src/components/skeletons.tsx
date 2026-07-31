@@ -159,30 +159,33 @@ export function SummaryCardsSkeleton({
 }
 
 /**
- * 부서 카드 + 사람 줄들 (구성원 화면 `MemberRow`). 소제목 한 줄 아래로 줄이 쌓인다.
+ * 부서 소제목 + 사람 카드 격자 (구성원 화면 `MemberCard`). 실제와 같은 `size="sm"` 카드다.
  *
- * 원판은 실제와 같은 36px이다 — 사람 줄의 높이를 정하는 게 이 원판이라, 여기를 작게 그리면
- * 명단이 도착할 때 카드가 통째로 늘어난다.
+ * 원판은 실제와 같은 36px이고 연락처는 두 줄이다 — 카드 높이를 정하는 게 이 둘이라, 여기를
+ * 작게 그리면 명단이 도착할 때 격자가 통째로 늘어난다.
  */
-export function MemberRowsSkeleton({ count }: { count: number }) {
+export function MemberCardsSkeleton({ count }: { count: number }) {
   return (
-    <Card>
-      <CardContent className="p-0">
-        <div className="border-b border-border px-4 py-2.5">
-          <Skeleton className="h-4 w-28" />
-        </div>
+    <>
+      <Skeleton className="mb-2 h-4 w-28" />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: count }, (_, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-0"
-          >
-            <Skeleton className="size-9 shrink-0 rounded-full" />
-            <Skeleton className="h-4 w-24 shrink-0" />
-            <Skeleton className={cn("h-4", i % 2 ? "w-40" : "w-56")} />
-          </div>
+          <Card key={i} size="sm" className="gap-2.5">
+            <CardContent className="flex items-center gap-2.5">
+              <Skeleton className="size-9 shrink-0 rounded-full" />
+              <div className="space-y-1.5">
+                <Skeleton className={cn("h-3.5", i % 2 ? "w-16" : "w-20")} />
+                <Skeleton className="h-3 w-10" />
+              </div>
+            </CardContent>
+            <CardContent className="space-y-1">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </CardContent>
+          </Card>
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </>
   );
 }
 
