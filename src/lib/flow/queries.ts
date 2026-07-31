@@ -348,14 +348,6 @@ export interface Standup {
   members: StandupMember[];
 }
 
-export interface Profile {
-  userId: string;
-  fullname: string;
-  divisionName: string;
-  responsibility: string;
-  email: string;
-}
-
 export interface TeamData {
   now: number;
   /** 실제 조회한 부서. 쿼리 없이 들어오면 내 부서. */
@@ -381,13 +373,19 @@ export interface RiskData extends TeamData {
  * 통째로 주기 때문이다. 프로젝트 59개를 개별 조회하지 않는다 (`rollupProjects` 주석).
  */
 export async function loadTeam(dept?: string): Promise<TeamData> {
-  const mcp = await flowMcp();
+  const session = await getSession();
+  if (!session) throw new Error("세션 없음");
+  const mcp = createFlowMcp(session.accessToken);
   const now = Date.now();
 
   const divisionsP = mcp
     .call<{ divisions: Division[] }>("flow_list_divisions")
     .then((r) => r.divisions);
-  const target = dept ?? (await mcp.call<Profile>("flow_get_my_profile")).divisionName;
+  // 내 부서는 세션에 이미 있다 — 로그인할 때 `flow_get_my_profile`로 받아 둔 값이다
+  // (`api/auth/callback/flow`). 여기서 다시 부르면 스탠드업 **앞에** MCP 왕복이 하나
+  // 직렬로 붙는다. 대가: 부서가 바뀐 사람은 세션이 만료될 때까지(7일) 옛 부서로 열린다 —
+  // 부서 탭으로 바꿔 볼 수 있고, 다시 로그인하면 갱신된다.
+  const target = dept ?? session.divisionName;
 
   const [divisions, standup] = await Promise.all([
     divisionsP,
