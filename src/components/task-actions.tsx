@@ -93,6 +93,12 @@ export function TaskActions(props: {
   endDate?: string;
   /** 성공 후 다시 불러올 경로. */
   path: string;
+  /**
+   * 저장이 성공한 값을 행에 알린다 (BUG-037). `revalidatePath`는 되지만 페이지 재렌더가
+   * 실측 6.5초라, 그 사이 행이 옛 값을 들고 있으면 사용자는 저장이 안 된 줄 안다.
+   * 행에 보이는 두 값만 넘긴다 — 우선순위·담당자는 행에 없다.
+   */
+  onSaved?: (patch: { status?: string; endDate?: string }) => void;
 }) {
   if (!props.projectId) {
     return (
@@ -111,6 +117,7 @@ function Panels({
   status,
   endDate = "",
   path,
+  onSaved,
 }: {
   projectId: string;
   taskId: number;
@@ -118,6 +125,7 @@ function Panels({
   status: string;
   endDate?: string;
   path: string;
+  onSaved?: (patch: { status?: string; endDate?: string }) => void;
 }) {
   return (
     <div className="mt-1">
@@ -128,6 +136,7 @@ function Panels({
         status={status}
         endDate={endDate}
         path={path}
+        onSaved={onSaved}
       />
 
       {/* 댓글은 행 안에서 펼친다. 남긴 말이 이 업무 아래에 그대로 쌓여 있어야 읽는 일과
@@ -184,6 +193,7 @@ function EditDialog({
   status,
   endDate,
   path,
+  onSaved,
 }: {
   projectId: string;
   taskId: number;
@@ -191,6 +201,7 @@ function EditDialog({
   status: string;
   endDate: string;
   path: string;
+  onSaved?: (patch: { status?: string; endDate?: string }) => void;
 }) {
   const [fields, setFields] = useState<TaskFields | null>(null);
   const [loading, startLoad] = useTransition();
@@ -247,12 +258,20 @@ function EditDialog({
             줄이 위아래 줄까지 한 덩어리로 읽혔다 — 특히 결과 문구가 값 열 아래로
             접히면 그게 다음 줄의 값처럼 보였다 */}
         <div className="divide-y divide-border/60 px-5 py-1">
-          <StatusField projectId={projectId} taskId={taskId} now={status} path={path} />
+          <StatusField
+            projectId={projectId}
+            taskId={taskId}
+            now={status}
+            path={path}
+            onSaved={(shown) => onSaved?.({ status: shown })}
+          />
           <EndDateField
             projectId={projectId}
             taskId={taskId}
             now={dueDate ? fmtDate(dueDate) : "아직 없어요"}
             path={path}
+            /* 고른 값은 `YYYY-MM-DD`고 행은 flow 형식(`YYYYMMDD`)을 쓴다 */
+            onSaved={(shown) => onSaved?.({ endDate: shown.replaceAll("-", "") })}
           />
           <PriorityField
             projectId={projectId}
@@ -306,6 +325,8 @@ function useSave(
   serverAction: (prev: ActionResult | null, form: FormData) => Promise<ActionResult>,
   /** 고른 값을 비운다. 줄마다 타입이 달라서 훅이 쥐지 못하고 밖에서 받는다. */
   reset: () => void,
+  /** 저장한 값을 행에도 알린다 (BUG-037). 행에 없는 줄(우선순위·담당자)은 안 넘긴다. */
+  onSaved?: (shown: string) => void,
 ) {
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState("");
@@ -313,8 +334,10 @@ function useSave(
     async (prev, form) => {
       const next = await serverAction(prev, form);
       if (next.ok) {
-        setSaved(String(form.get("shown") ?? ""));
+        const shown = String(form.get("shown") ?? "");
+        setSaved(shown);
         setEditing(false);
+        onSaved?.(shown);
       }
       return next;
     },
@@ -451,15 +474,19 @@ function StatusField({
   taskId,
   now,
   path,
+  onSaved,
 }: {
   projectId: string;
   taskId: number;
   now: string;
   path: string;
+  onSaved: (shown: string) => void;
 }) {
   const [picked, setPicked] = useState<TaskStatus | "">("");
-  const { editing, saved, result, action, pending, edit, cancel } = useSave(updateTaskStatus, () =>
-    setPicked(""),
+  const { editing, saved, result, action, pending, edit, cancel } = useSave(
+    updateTaskStatus,
+    () => setPicked(""),
+    onSaved,
   );
   const labelId = `status-label-${taskId}`;
   /** 저장한 뒤에는 방금 저장한 값이 지금 값이다 — 부모가 준 `now`는 아직 옛것이다. */
@@ -513,15 +540,19 @@ function EndDateField({
   taskId,
   now,
   path,
+  onSaved,
 }: {
   projectId: string;
   taskId: number;
   now: string;
   path: string;
+  onSaved: (shown: string) => void;
 }) {
   const [picked, setPicked] = useState("");
-  const { editing, saved, result, action, pending, edit, cancel } = useSave(updateTaskEndDate, () =>
-    setPicked(""),
+  const { editing, saved, result, action, pending, edit, cancel } = useSave(
+    updateTaskEndDate,
+    () => setPicked(""),
+    onSaved,
   );
   const labelId = `end-date-label-${taskId}`;
   const current = saved || now;
