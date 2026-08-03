@@ -2,7 +2,6 @@
 
 import { FlowLink } from "@/components/flow-link";
 import { IconComment, IconMention } from "@/components/icons";
-import { LastComment } from "@/components/last-comment";
 import { Meter } from "@/components/meter";
 import { Button } from "@/components/motion/button/base";
 import {
@@ -10,8 +9,8 @@ import {
   CenterMorphModalContent,
 } from "@/components/motion/center-morph-modal";
 import { StatusPill } from "@/components/status-pill";
-import { CommentForm, TaskEditFields } from "@/components/task-actions";
-import { ThreadView } from "@/components/thread-view";
+import { TaskEditFields } from "@/components/task-actions";
+import { TaskThread } from "@/components/task-thread";
 import type { FocusPick, WorklistTask } from "@/lib/flow/queries";
 import { DDay } from "@/components/d-day";
 
@@ -19,7 +18,11 @@ import { DDay } from "@/components/d-day";
  * 업무 상세 모달 (PRD §6.1.4). 표에서 업무명을 누르면 이게 열린다.
  *
  * flow의 업무 상세와 같은 순서로 덩어리를 나눈다: 어느 업무인지(머리) → 지금 값(다섯 줄) →
- * 왜 골랐는지(포커스만) → 댓글. 표가 프로젝트·상태·마감일만 보여주니 나머지는 다 여기 있다.
+ * 왜 골랐는지(포커스만) → 본문 → 댓글. 표가 업무명·프로젝트·상태·마감일만 보여주니 나머지는
+ * 다 여기 있다.
+ *
+ * 본문·댓글이 맨 아래인 이유는 그 둘만 열고 나서 도착한다는 것이다 (`TaskThread`) —
+ * 위에 두면 값과 이유가 도착하는 순간 아래로 밀린다.
  *
  * 열려 있는 동안만 붙는다 — 우선순위·담당자 REST 조회가 `TaskEditFields`에 있어서,
  * 이 덩어리를 행마다 미리 그리면 표 열 줄에 REST 열 번이다.
@@ -147,25 +150,15 @@ export function TaskDetailModal({
         </div>
       )}
 
-      {/* 댓글 — 남긴 말이 이 업무 아래에 그대로 쌓여 있어야 읽는 일과 이어진다.
-          모달 안이라 접지 않는다: 여기까지 들어온 사람은 이 업무를 보러 온 것이다 */}
+      {/* 본문 + 댓글 — 열 때 부른다. 두 덩어리가 한 왕복에서 나와서 한 컴포넌트다 */}
       {projectId && (
-        <div className="space-y-2 border-b border-border px-5 py-4">
-          <p className="text-xs font-semibold text-muted-foreground">댓글</p>
-          <LastComment
-            text={task.lastComment}
-            postId={"postId" in task ? task.postId : undefined}
-          />
-          <CommentForm
-            projectId={projectId}
-            taskId={task.taskSrno}
-            title={task.title}
-            path={path}
-          />
-          {/* 전체 스레드는 눌러야 부른다 (PRD §13 A1). 시스템 댓글까지 같이 와서
-              이 업무의 활동 이력이 된다 (§13 B4) */}
-          <ThreadView projectId={projectId} taskId={task.taskSrno} title={task.title} />
-        </div>
+        <TaskThread
+          projectId={projectId}
+          taskId={task.taskSrno}
+          title={task.title}
+          postId={"postId" in task ? task.postId : undefined}
+          path={path}
+        />
       )}
 
       <div className="flex items-center justify-between px-5 py-3">

@@ -1,9 +1,16 @@
 "use client";
 // beui.dev/components/motion/table
 //
-// beUI 원본에서 고친 곳은 아이콘 하나뿐이다: lucide → Reicon(`components/icons.tsx`).
-// `table-header.tsx`와 `row-handle.tsx` 두 파일이 해당하고, reicon에 같은 그림이 없는
-// 짝은 뜻이 같은 것으로 바꿨다 (`GripVertical`→`Menu`, `Arrow*ToLine`→방향 화살표).
+// beUI 원본에서 고친 곳은 둘이다.
+//
+// 1. 아이콘: lucide → Reicon(`components/icons.tsx`). `table-header.tsx`와
+//    `row-handle.tsx` 두 파일이 해당하고, reicon에 같은 그림이 없는 짝은 뜻이 같은
+//    것으로 바꿨다 (`GripVertical`→`Menu`, `Arrow*ToLine`→방향 화살표).
+// 2. 면색: 겉테두리 `bg-background` → `bg-transparent`, 머리 줄 `bg-muted` →
+//    `bg-card`. 이 표는 늘 `Card`(`--card`) 안에 들어서 원본 색이 카드보다 한 톤
+//    어두운 판으로 읽혔다. 머리 줄만 투명이 아닌 이유는 `sticky`라 — 진짜 투명이면
+//    아래로 지나가는 줄이 머리 줄을 통과해 겹쳐 보인다.
+//
 // 나머지 동작·구조는 원본 그대로다.
 
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -179,7 +186,7 @@ export function Table<T>({
   return (
     <div
       className={cn(
-        "w-full overflow-hidden border border-border bg-background text-sm",
+        "w-full overflow-hidden border border-border bg-transparent text-sm",
         className,
       )}
     >

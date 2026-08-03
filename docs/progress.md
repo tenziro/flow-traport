@@ -1,6 +1,6 @@
 # 개발 진행 상황
 
-버전 2.0.0 · 2026-08-03 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
+버전 2.1.0 · 2026-08-03 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
 
 ## 요약
 
@@ -1391,6 +1391,32 @@ Tailwind `dark:` 변인은 블록 형태(`@custom-variant dark { … @slot }`)�
 **업무명·프로젝트명은 한 줄에서 자른다** (v1.1.0). 나를 부른 사람들은 제목이 두 줄까지
 흐르고 메타 줄이 접혀서 어떤 줄은 2단, 어떤 줄은 3단이었다. 제목은 `truncate`, 메타 줄은
 `flex-wrap`을 떼고 프로젝트명만 줄어들게 했다. 업무 줄·리스크 보드·방치 업무 스캔도 같다.
+
+### 상세 모달 본문·댓글, 표 손질 (v2.1.0)
+
+표로 바꾼 다음 남은 두 가지를 붙였다 — 모달이 **마지막 댓글 한 줄**만 들고 있었고, 표는
+칸 순서·면색·폭이 v2.0.0 그대로였다.
+
+| 파일 | 무엇 |
+|---|---|
+| `src/components/task-thread.tsx` (신규) | 모달 아래 본문 + 댓글. 열 때 한 번 부르고, 최신 3개만 펼친다. 입력칸은 제일 아래 |
+| `src/app/(app)/actions.ts` | `loadTaskPost` — `flow_get_post`(본문)와 `listComments`(댓글)를 `Promise.all`로. `loadThread`와 겹치는 매핑은 `toThread`로 뽑았다 |
+| `src/components/thread-view.tsx` | 댓글 줄을 `CommentRows`로 내보낸다 — 멘션 패널과 모달이 같이 쓴다 |
+| `src/components/task-actions.tsx` | `CommentForm.onSaved` — 남긴 뒤 목록을 다시 부르는 신호 |
+| `src/components/task-table.tsx`·`mention-table.tsx` | 업무명이 첫 칸. 프로젝트는 한 톤 흐리게, 번호 배지는 `flex items-center`, `resizable` 켜기 |
+| `src/components/motion/table/` | 겉테두리 `bg-transparent`, 머리 줄 `bg-card` (벤더 파일 두 번째 수정 — 첫 번째는 아이콘) |
+
+| 결정 | 이유 |
+|---|---|
+| 본문은 `outContent` | 실측(postId 81211887) `content`는 `contentJsonYn: "Y"`면 JSON, `htmlContent`는 태그가 붙는다. `outContent`만 손댈 것 없는 평문이다 |
+| 댓글은 별도 호출 | 게시글 상세의 `remarks`는 14건 중 2건만 준다 (api-spec §6.3). 본문 실패는 삼켜서 댓글은 뜨게 한다 |
+| 댓글 3개 + `댓글 다 보기` | 14건 중 10건이 사람 댓글이 아니라 상태·마감일 변경 기록이다. 다 펼치면 모달이 기록 목록이 된다. 감춰지는 쪽이 위(오래된 것)라 단추도 목록 위다 |
+| 표에 면색 없음 | 표는 늘 `Card`(#ffffff) 안이라 `bg-background`(#fafafa)·`bg-muted`(#f5f5f5)가 한 톤 어두운 판으로 읽혔다. 머리 줄만 `bg-card`인 건 `sticky`라서다 — 투명이면 지나가는 줄이 겹친다 |
+| 폭 조절은 벤더 것 그대로 | `useColumnResize`가 이미 있었다. `resizable` 한 줄이면 켜진다. 손잡이가 `tabIndex={-1}`이라 키보드로는 못 끈다 — 벤더 한계로 두고 폭도 안 저장한다(새로 고치면 비율로) |
+| 번호는 `flex items-center` | `align-[-2px]`로 기준선에 매달려 있었는데 한글 글자가 줄 안에서 낮게 앉아 배지가 늘 위로 떴다. 픽셀을 세는 대신 같은 축에 세운다 |
+
+**미검증**: 브라우저 확인을 못 했다 — Playwright MCP가 세션 내내 `Browser is already in use`로
+막혔다. `tsc`·eslint(0 errors)·`npm test`(124/124)·`npm run build`(15/15)까지는 통과했다.
 
 ### 업무 아이템을 표로 (v2.0.0)
 

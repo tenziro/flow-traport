@@ -52,13 +52,6 @@ export function MentionTable({
   const columns = useMemo<TableColumn<MentionTableRow>[]>(
     () => [
       {
-        key: "project",
-        header: "프로젝트",
-        sortable: true,
-        width: "16%",
-        cell: (row) => row.project ?? <span className="text-muted-foreground">—</span>,
-      },
-      {
         key: "title",
         header: "업무명",
         sortable: true,
@@ -71,7 +64,8 @@ export function MentionTable({
               setOpened(row);
               setOpen(true);
             }}
-            className="block w-full cursor-pointer truncate text-left font-medium transition-colors hover:text-primary"
+            // 번호와 업무명 묶는 방식은 업무 표와 같다 (`TaskTable`)
+            className="flex w-full cursor-pointer items-center gap-1.5 text-left font-medium transition-colors hover:text-primary"
             title={
               row.unread > 0
                 ? `알림 ${row.count}개 · 안 읽은 게 ${row.unread}개`
@@ -82,7 +76,7 @@ export function MentionTable({
                 놓였을 때 눈이 먼저 가는 쪽이 아직 답 안 한 쪽이다 */}
             <span
               className={cn(
-                "tabular mr-1.5 inline-block min-w-5 rounded-md px-1 text-center align-[-2px] text-xs leading-5 font-semibold",
+                "tabular inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-xs font-semibold",
                 row.unread > 0
                   ? "bg-primary text-primary-foreground"
                   : "bg-primary/15 text-primary",
@@ -90,9 +84,17 @@ export function MentionTable({
             >
               {row.count}
             </span>
-            {row.title}
+            <span className="min-w-0 truncate">{row.title}</span>
           </button>
         ),
+      },
+      {
+        key: "project",
+        header: "프로젝트",
+        sortable: true,
+        width: "16%",
+        // 업무 표와 같이 업무명보다 한 톤 흐리다 (`TaskTable`)
+        cell: (row) => <span className="text-muted-foreground">{row.project ?? "—"}</span>,
       },
       { key: "lastFrom", header: "부른 사람", sortable: true, width: "14%" },
       {
@@ -122,6 +124,8 @@ export function MentionTable({
         columns={columns}
         getRowId={(row) => row.taskId}
         rowHeight={ROW_HEIGHT}
+        // 업무 표와 같이 칸 폭을 끌어 바꿀 수 있다 (`TaskTable`)
+        resizable
         // 머리 줄이 스크롤 칸 안에 있어서(sticky) 높이에 한 줄 더 얹어야 한다.
         height={
           rows.length === 0

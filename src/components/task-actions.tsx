@@ -675,16 +675,27 @@ export function CommentForm({
   taskId,
   title,
   path,
+  onSaved,
 }: {
   projectId: string;
   taskId: number;
   title: string;
   path: string;
+  /**
+   * 남기기가 성공한 뒤. 바로 위 목록을 다시 부르는 데 쓴다 (`TaskThread`) — `revalidatePath`가
+   * 도착하는 데 실측 6.5초라, 그동안 방금 남긴 말이 목록에 없으면 남았는지 알 수 없다.
+   */
+  onSaved?: () => void;
 }) {
   const [result, action, pending] = useActionState<ActionResult | null, FormData>(
     createComment,
     null,
   );
+
+  // `useActionState` 결과는 다음 제출까지 같은 객체다 — 한 번 남기면 한 번만 부른다.
+  useEffect(() => {
+    if (result?.ok) onSaved?.();
+  }, [result, onSaved]);
 
   return (
     <form action={action} className="flex flex-wrap items-center gap-2">

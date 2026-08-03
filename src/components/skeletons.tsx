@@ -105,8 +105,8 @@ export function PanelSkeleton({
 
 /**
  * 업무 표 (`TaskTable`·`MentionTable`). 머리 줄 하나 + 줄 `count`개고, 줄 높이 44px와
- * 테두리·머리 줄 면색까지 실제와 같다 — 표는 높이가 `44 × (1 + 줄 수)`로 딱 정해져 있어서
- * 골격이 그 계산을 그대로 따라가면 내용이 도착할 때 한 픽셀도 안 튄다.
+ * 테두리까지 실제와 같다 — 표는 높이가 `44 × (1 + 줄 수)`로 딱 정해져 있어서 골격이 그
+ * 계산을 그대로 따라가면 내용이 도착할 때 한 픽셀도 안 튄다.
  *
  * 줄마다 폭을 번갈아 주지 않는다. 표는 칸 폭이 고정 비율이라 폭이 흔들리면 표로 안 읽힌다 —
  * 업무 목록이 줄이었을 때(`TaskItem`)와 반대다.
@@ -120,7 +120,7 @@ export function TaskRowsSkeleton({
   chips = false,
 }: {
   count: number;
-  /** 칸 수. 오늘·팀은 넷(프로젝트·업무명·진행상태·마감일), 멘션 표만 다섯이다. */
+  /** 칸 수. 오늘·팀은 넷(업무명·프로젝트·진행상태·마감일), 멘션 표만 다섯이다. */
   cols?: 4 | 5;
   chips?: boolean;
 }) {
@@ -134,8 +134,8 @@ export function TaskRowsSkeleton({
         </div>
       )}
       <div className="overflow-hidden rounded-lg border border-border">
-        {/* 머리 줄. 실제와 같이 `bg-muted`에 아래 테두리 하나다 */}
-        <Cells cols={cols} className="border-border bg-muted" barClassName="h-3" />
+        {/* 머리 줄. 실제와 같이 면색 없이 아래 테두리 하나다 */}
+        <Cells cols={cols} className="border-border" barClassName="h-3" />
         {Array.from({ length: count }, (_, i) => (
           <Cells key={i} cols={cols} className="border-border/60" barClassName="h-3.5" />
         ))}
@@ -144,7 +144,7 @@ export function TaskRowsSkeleton({
   );
 }
 
-/** 표 한 줄. 둘째 칸(업무명)이 남는 폭을 다 먹는 것까지 실제와 같다 (`titleWidth`). */
+/** 표 한 줄. 첫 칸(업무명)이 남는 폭을 다 먹는 것까지 실제와 같다 (`titleWidth`). */
 function Cells({
   cols,
   className,
@@ -157,7 +157,7 @@ function Cells({
   return (
     <div className={cn("flex h-11 items-center gap-4 border-b px-4", className)}>
       {Array.from({ length: cols }, (_, i) => (
-        <Skeleton key={i} className={cn(barClassName, i === 1 ? "flex-[3]" : "flex-1")} />
+        <Skeleton key={i} className={cn(barClassName, i === 0 ? "flex-[3]" : "flex-1")} />
       ))}
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { loadThread, type ThreadResult } from "@/app/(app)/actions";
+import { loadThread, type ThreadComment, type ThreadResult } from "@/app/(app)/actions";
 import { IconLastComment, IconOpen } from "@/components/icons";
 import { Button } from "@/components/motion/button/base";
 import { CommentRowsSkeleton } from "@/components/skeletons";
@@ -79,46 +79,56 @@ export function ThreadView({
       {result?.comments && (
         <>
           <p className="tabular mb-2 text-xs text-muted-foreground">{result.message}</p>
-          <ul className="space-y-2.5">
-            {result.comments.map((comment) => (
-              <li key={comment.id} className="flex gap-2">
-                {/* 시스템 기록은 화살표, 사람 댓글은 말풍선. 색까지 다르게 둔다 —
-                    아이콘만으로는 촘촘한 목록에서 둘이 섞여 보였다 */}
-                {comment.system ? (
-                  <IconOpen size={13} className="mt-0.5 shrink-0 text-muted-foreground/60" />
-                ) : (
-                  <IconLastComment size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="tabular flex flex-wrap items-baseline gap-x-1.5 text-xs">
-                    <span
-                      className={cn(
-                        "font-medium",
-                        comment.system ? "text-muted-foreground" : "text-foreground",
-                      )}
-                    >
-                      {comment.from}
-                    </span>
-                    {comment.system && <span className="text-muted-foreground/70">기록</span>}
-                    <span className="text-muted-foreground">{fmtDateTime(comment.at)}</span>
-                  </p>
-                  {/* 줄바꿈은 살린다 — 댓글이 목록 형태로 오는 경우가 많다.
-                      `wrap-anywhere` — 링크는 띄어쓰기가 없어서 안 끊으면 그 한 덩어리가
-                      카드 최소폭이 되고 좁은 화면에서 카드가 화면을 넘는다 (BUG-025) */}
-                  <p
-                    className={cn(
-                      "mt-0.5 text-[13px] leading-relaxed whitespace-pre-line wrap-anywhere",
-                      comment.system && "text-muted-foreground",
-                    )}
-                  >
-                    {comment.body}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <CommentRows comments={result.comments} />
         </>
       )}
     </form>
+  );
+}
+
+/**
+ * 댓글 줄들. 멘션 패널(`ThreadView`)과 업무 상세 모달(`TaskThread`)이 같이 쓴다 —
+ * 같은 댓글이 자리마다 다르게 생기면 같은 것인지 알아보는 데 시간이 든다.
+ */
+export function CommentRows({ comments }: { comments: ThreadComment[] }) {
+  return (
+    <ul className="space-y-2.5">
+      {comments.map((comment) => (
+        <li key={comment.id} className="flex gap-2">
+          {/* 시스템 기록은 화살표, 사람 댓글은 말풍선. 색까지 다르게 둔다 —
+              아이콘만으로는 촘촘한 목록에서 둘이 섞여 보였다 */}
+          {comment.system ? (
+            <IconOpen size={13} className="mt-0.5 shrink-0 text-muted-foreground/60" />
+          ) : (
+            <IconLastComment size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="tabular flex flex-wrap items-baseline gap-x-1.5 text-xs">
+              <span
+                className={cn(
+                  "font-medium",
+                  comment.system ? "text-muted-foreground" : "text-foreground",
+                )}
+              >
+                {comment.from}
+              </span>
+              {comment.system && <span className="text-muted-foreground/70">기록</span>}
+              <span className="text-muted-foreground">{fmtDateTime(comment.at)}</span>
+            </p>
+            {/* 줄바꿈은 살린다 — 댓글이 목록 형태로 오는 경우가 많다.
+                `wrap-anywhere` — 링크는 띄어쓰기가 없어서 안 끊으면 그 한 덩어리가
+                카드 최소폭이 되고 좁은 화면에서 카드가 화면을 넘는다 (BUG-025) */}
+            <p
+              className={cn(
+                "mt-0.5 text-[13px] leading-relaxed whitespace-pre-line wrap-anywhere",
+                comment.system && "text-muted-foreground",
+              )}
+            >
+              {comment.body}
+            </p>
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }

@@ -39,6 +39,7 @@ import {
   setTaskPriority,
   setTaskWorkers,
   stripMentions,
+  type FlowComment,
   type Participant,
   type SearchPost,
   type SearchProject,
@@ -262,24 +263,81 @@ export async function loadThread(
     return {
       ok: true,
       message: `댓글 ${comments.length}건을 가져왔어요.`,
-      comments: comments
-        .map((c) => {
-          // 변경 로그가 사람 댓글보다 많다 (실측 14건 중 10건). 버리지 않고 업무 이력으로 읽는다.
-          // 판정은 `isChangeLog`다 — `systemCode`가 truthy여도 사람 댓글인 코드가 있다 (BUG-035).
-          const log = isChangeLog(c.systemCode);
-          return {
-            id: c.commentId,
-            from: c.registerName || c.registerId,
-            at: c.registeredDateTime,
-            body: log ? describeSystemComment(c.systemCode ?? "") : stripMentions(c.contents),
-            system: log,
-          };
-        })
-        // 위에서 아래로 읽는 대화다 — 오래된 것부터 쌓는다.
-        .sort((a, b) => a.at.localeCompare(b.at)),
+      comments: toThread(comments),
     };
   } catch (error) {
     return { ok: false, message: reasonOf(error) };
+  }
+}
+
+/** 댓글 원본 → 화면에 낼 줄. `loadThread`·`loadTaskPost`가 같이 쓴다. */
+function toThread(comments: FlowComment[]): ThreadComment[] {
+  return (
+    comments
+      .map((c) => {
+        // 변경 로그가 사람 댓글보다 많다 (실측 14건 중 10건). 버리지 않고 업무 이력으로 읽는다.
+        // 판정은 `isChangeLog`다 — `systemCode`가 truthy여도 사람 댓글인 코드가 있다 (BUG-035).
+        const log = isChangeLog(c.systemCode);
+        return {
+          id: c.commentId,
+          from: c.registerName || c.registerId,
+          at: c.registeredDateTime,
+          body: log ? describeSystemComment(c.systemCode ?? "") : stripMentions(c.contents),
+          system: log,
+        };
+      })
+      // 위에서 아래로 읽는 대화다 — 오래된 것부터 쌓는다.
+      .sort((a, b) => a.at.localeCompare(b.at))
+  );
+}
+
+export interface TaskPostResult extends ActionResult {
+  /** 게시글 본문. 업무 글은 비어 있는 경우가 흔하다 (api-spec §6.2) — 그때는 빈 문자열이다. */
+  body: string;
+  comments?: ThreadComment[];
+}
+
+/**
+ * 상세 모달의 본문 + 댓글 전량 (PRD §6.1.4). **모달을 열 때 한 번** 부른다.
+ *
+ * 본문은 `flow_get_post`의 `outContent`다 — 읽기용 평문이라 그대로 화면에 낼 수 있다.
+ * 평면 `content`는 본문이 표를 담으면 JSON으로 오고(`contentJsonYn: "Y"`), `htmlContent`는
+ * 태그째로 온다. 셋 중 벗길 것이 없는 건 `outContent` 하나다 (2026-08-03 실측).
+ *
+ * 댓글은 `outContent`와 같은 왕복에 못 담는다 — 게시글 상세의 `remarks`는 14건 중 2건만
+ * 준다 (api-spec §6.3). 전량은 `GET /user/comments/{postId}`에만 있어서 둘을 나란히 부른다.
+ *
+ * ponytail: `postId`를 모르는 줄(오늘·팀 화면)은 `resolvePostId`가 한 번 더 나간다 —
+ * 같은 모달의 `loadTaskFields`가 이미 부른 조회와 겹친다. 모달을 여는 건 사람 손이라
+ * 분당 상한(120)에 닿지 않고, 겹침을 없애려면 두 덩어리의 로딩을 한 줄로 엮어야 한다.
+ */
+export async function loadTaskPost(input: {
+  /** 아는 경우 (내 업무 화면). 없으면 업무 ID·업무명으로 해소한다. */
+  postId?: string;
+  projectId: string;
+  taskId: string;
+  title: string;
+}): Promise<TaskPostResult> {
+  try {
+    const postId =
+      input.postId || (await resolvePostId(input.projectId, input.taskId, input.title));
+    if (!postId) return { ok: false, body: "", message: "이 업무는 flow에서 볼 수 있어요." };
+
+    const mcp = await flowMcp();
+    const [post, comments] = await Promise.all([
+      // 본문은 곁가지다. 못 가져오면 댓글만 뜬다.
+      mcp.call<{ outContent?: string }>("flow_get_post", { postId }).catch(() => null),
+      listComments(postId),
+    ]);
+
+    return {
+      ok: true,
+      body: post?.outContent?.trim() ?? "",
+      message: comments.length ? `댓글 ${comments.length}개예요.` : "아직 댓글이 없어요.",
+      comments: comments.length ? toThread(comments) : undefined,
+    };
+  } catch (error) {
+    return { ok: false, body: "", message: reasonOf(error) };
   }
 }
 

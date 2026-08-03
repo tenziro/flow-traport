@@ -37,8 +37,11 @@ const ROW_HEIGHT = 44;
 const INDENT = ["", "pl-3", "pl-6"];
 
 /**
- * 업무 표 (PRD §6.1). 프로젝트 · 업무명 · 진행상태 · 등록일 · 마감일 다섯 칸이고,
+ * 업무 표 (PRD §6.1). 업무명 · 프로젝트 · 진행상태 · 등록일 · 마감일 다섯 칸이고,
  * 업무명을 누르면 상세 모달이 열린다.
+ *
+ * 업무명이 첫 칸이다. 프로젝트를 앞에 두면 같은 프로젝트 이름이 줄마다 반복되는 칸을 먼저
+ * 읽고 나서야 업무명에 닿는다 — 찾는 것은 업무이고, 프로젝트는 그 업무가 어디 것인지다.
  *
  * 칸 폭을 %로 준다. beUI 표는 `table-layout: fixed` + `min-w-full`이라 px 합이 컨테이너보다
  * 넓으면 가로 스크롤 대신 비율대로 눌린다 — 어차피 눌릴 값이면 처음부터 비율로 적는 게 맞고,
@@ -126,14 +129,6 @@ export function TaskTable({
 
   const columns = useMemo<TableColumn<TaskTableRow>[]>(() => {
     const list: TableColumn<TaskTableRow>[] = [];
-    if (showProject) {
-      list.push({
-        key: "project",
-        header: "프로젝트",
-        sortable: true,
-        width: showRegDate ? "18%" : "20%",
-      });
-    }
     list.push({
       key: "title",
       header: "업무명",
@@ -149,7 +144,9 @@ export function TaskTable({
             setOpen(true);
           }}
           className={cn(
-            "block w-full cursor-pointer truncate text-left font-medium transition-colors hover:text-primary",
+            // 번호와 업무명을 `flex … items-center`로 묶는다. 글자 기준선에 맞추면(`align-*`)
+            // 한글 글자가 자기 줄 안에서 조금 낮게 앉아 번호가 늘 위로 뜬다.
+            "flex w-full cursor-pointer items-center gap-1.5 text-left font-medium transition-colors hover:text-primary",
             INDENT[row.depth ?? 0],
           )}
         >
@@ -157,7 +154,7 @@ export function TaskTable({
           {row.rank !== undefined && (
             <span
               className={cn(
-                "tabular mr-1.5 inline-block size-5 rounded-md text-center align-[-2px] text-xs leading-5 font-semibold",
+                "tabular inline-flex size-5 shrink-0 items-center justify-center rounded-md text-xs font-semibold",
                 row.rank === 1
                   ? "bg-primary text-primary-foreground"
                   : "bg-secondary text-muted-foreground",
@@ -166,10 +163,21 @@ export function TaskTable({
               {row.rank}
             </span>
           )}
-          {row.title}
+          <span className="min-w-0 truncate">{row.title}</span>
         </button>
       ),
     });
+    if (showProject) {
+      list.push({
+        key: "project",
+        header: "프로젝트",
+        sortable: true,
+        width: showRegDate ? "18%" : "20%",
+        // 업무명보다 한 톤 흐리다. 같은 프로젝트 이름이 줄마다 반복되는 칸이라 본문색이면
+        // 업무명과 같은 무게로 서서 눈이 먼저 그쪽에 걸린다.
+        cell: (row) => <span className="text-muted-foreground">{row.project}</span>,
+      });
+    }
     list.push({
       key: "status",
       header: "진행상태",
@@ -248,6 +256,9 @@ export function TaskTable({
         columns={columns}
         getRowId={(row) => String(row.taskSrno)}
         rowHeight={ROW_HEIGHT}
+        // 칸 경계를 끌어 폭을 바꾼다. 업무명이 사람마다 다르게 길어서 기본 비율로는
+        // 누군가는 늘 잘린다 — 한 번 끌면 나머지 칸도 픽셀로 굳고 표가 가로로 넘친다.
+        resizable
         // 머리 줄이 스크롤 칸 안에 있어서(sticky) 높이에 한 줄 더 얹어야 한다.
         height={
           shownRows.length === 0
