@@ -43,11 +43,9 @@ export interface WorklistTask {
   /** 음수면 지남 */
   daysLeft: number;
   link: string;
-  /** 워크리스트 응답에는 없다. `flow_suggest_my_focus` 픽에서 빌려 붙인다 (`loadToday`). */
-  lastComment?: string;
   /**
    * 댓글 API가 요구하는 게시글 ID. 업무 필터 응답에는 있고(`MyTask.postId`) 워크리스트
-   * 응답에는 없다 — 없는 줄은 마지막 댓글을 나중에 불러올 수 없다 (`LastComment`).
+   * 응답에는 없다 — 없는 줄은 댓글을 나중에 불러올 수 없다 (`TaskThread`).
    */
   postId?: string;
 }
@@ -77,7 +75,6 @@ export interface FocusPick {
   reasons: string[];
   comments: number;
   mentions: number;
-  lastComment?: string;
   link: string;
 }
 
@@ -159,11 +156,13 @@ export async function loadToday(): Promise<TodayData> {
   // 오류로 죽는 걸 이미 봤다(docs/bug-report.md) — 한 도구 때문에 화면 전체를 날리지 않는다.
   const [worklist, picks, wide, alarms] = await Promise.all([
     mcp.call<Worklist>("flow_get_my_worklist", { format: "structured" }),
-    // 화면에 뿌리는 포커스는 5개인데 20개를 받는다. 나머지 15개는 **마지막 댓글**용이다 —
-    // 워크리스트가 댓글 본문을 안 줘서, 밀리는 업무가 포커스 후보에 있으면 거기서 빌려 온다.
-    // 호출을 하나 더 붙이는 것보다 이미 부르는 도구의 topN을 올리는 게 싸다.
+    // 화면에 뿌리는 포커스는 5개지만 `FOCUS_CHECK`개를 받는다 — 내가 이미 답한 피드백 업무를
+    // 걸러내면서 5개를 채우려면 여유분이 필요하다 (`pickFocus`).
     mcp
-      .call<{ picks: FocusPick[] }>("flow_suggest_my_focus", { format: "structured", topN: 20 })
+      .call<{ picks: FocusPick[] }>("flow_suggest_my_focus", {
+        format: "structured",
+        topN: FOCUS_CHECK,
+      })
       .then((r) => r.picks)
       .catch(() => null),
     // 같은 워크리스트를 활동 창만 넓혀서 한 번 더 부른다 — 방치된 업무 목록용 (`staleTasks`).
@@ -174,7 +173,7 @@ export async function loadToday(): Promise<TodayData> {
     listMentionAlarms().catch(() => null),
   ]);
 
-  const stale = staleTasks(worklist, wide, picks);
+  const stale = staleTasks(worklist, wide);
 
   // 포커스를 고르기 전에 부른다 — `pickFocus`가 픽마다 `projectId`로 게시글을 찾아야 한다.
   // 포커스 5개가 아니라 픽 20개 이름이 들어오지만 이름 검색은 병렬 한 왕복이고(`searchProjectIds`)
@@ -197,7 +196,6 @@ export async function loadToday(): Promise<TodayData> {
     worklist: {
       ...worklist,
       mentions,
-      overdueActive: withLastComment(worklist.overdueActive, picks),
     },
     focus,
     stale,
@@ -355,40 +353,15 @@ async function answeredByMe(
  * 활동 창(`overdueActiveDays`, 기본 30일)을 상한인 180일로 넓혀 한 번 더 부르고,
  * 기본 창의 "밀리는 업무"에 없는 것만 골라낸다. 30일은 넘었지만 180일 안에 손댄 업무다.
  *
- * 마지막 댓글은 밀리는 업무와 같은 방식으로 붙인다 (`withLastComment`) — 방치된 업무일수록
- * "왜 멈췄는지"가 마지막 댓글에 적혀 있다.
- *
  * ponytail: 180일까지가 이 도구의 상한이라 그보다 오래 방치된 건 여전히 목록으로 못 온다.
  * 화면에서 `counts.overdueStale`와 목록 수를 비교해 못 가져온 건수를 그대로 밝힌다.
  */
-function staleTasks(
-  worklist: Worklist,
-  wide: Worklist | null,
-  picks: FocusPick[] | null,
-): WorklistTask[] | null {
+function staleTasks(worklist: Worklist, wide: Worklist | null): WorklistTask[] | null {
   if (!wide) return null;
   const active = new Set(worklist.overdueActive.map((t) => t.taskSrno));
-  const stale = wide.overdueActive
+  return wide.overdueActive
     .filter((t) => !active.has(t.taskSrno))
     .sort((a, b) => a.daysLeft - b.daysLeft); // 많이 지난 것부터 (daysLeft는 음수)
-  return withLastComment(stale, picks);
-}
-
-/**
- * 밀리는 업무·방치된 업무에 마지막 댓글을 붙인다. `taskSrno`로 포커스 픽과 맞춘다.
- *
- * ponytail: 포커스 후보(topN 20) 밖으로 밀린 업무는 댓글 없이 나온다. `resolvePostId`
- * (rest.ts)로 업무마다 `postId`를 얻어 `flow_get_post`를 부를 수는 있지만, 업무 한 줄에
- * REST 1회 + MCP 1회다 — 댓글 하나 더 보려고 화면 열 때마다 수십 번 왕복할 일은 아니다.
- */
-function withLastComment(tasks: WorklistTask[], picks: FocusPick[] | null): WorklistTask[] {
-  if (!picks) return tasks;
-  const byTask = new Map(
-    picks.filter((p) => p.lastComment).map((p) => [p.taskSrno, p.lastComment]),
-  );
-  return tasks.map((t) =>
-    byTask.has(t.taskSrno) ? { ...t, lastComment: byTask.get(t.taskSrno) } : t,
-  );
 }
 
 /**

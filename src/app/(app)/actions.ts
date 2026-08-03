@@ -26,7 +26,6 @@ import {
   FlowRestError,
   getTaskFields,
   isChangeLog,
-  lastHumanComment,
   listComments,
   listParticipants,
   listStaleTasks,
@@ -353,31 +352,6 @@ export async function loadTaskPost(input: {
     };
   } catch (error) {
     return { ok: false, body: "", message: reasonOf(error) };
-  }
-}
-
-/** 마지막 댓글 응답을 데이터 캐시에 두는 시간(초). 같은 줄을 다시 스크롤해도 안 부른다. */
-const LAST_COMMENT_TTL = 300;
-
-/**
- * 업무 한 줄에 붙일 **마지막 사람 댓글** (내 업무 화면).
- *
- * **화면에 실제로 보이는 줄만 부른다** (`LastComment`가 화면에 들어올 때 호출). 댓글은
- * 게시글 하나에 REST 한 번이라 내 업무 951줄을 미리 채우면 951번인데 분당 상한이 120번이다.
- * `loadTaskFields`·`loadThread`가 같은 이유로 "누를 때만" 부르는 것과 같은 규칙이다.
- *
- * 시스템 댓글(`담당자를 바꿨어요` 같은 변경 로그)은 건너뛴다. 실측 14건 중 10건이 그것이라
- * 그냥 최신 한 건을 집으면 대부분의 줄이 변경 로그로 채워진다 — 사람이 남긴 말만 고른다.
- */
-export async function loadLastComment(postId: string): Promise<{ body: string } | null> {
-  if (!postId) return null;
-  try {
-    const last = lastHumanComment(await listComments(postId, LAST_COMMENT_TTL));
-    if (!last) return null;
-    return { body: stripMentions(last.contents).trim() };
-  } catch {
-    // 댓글은 곁가지다. 못 가져오면 그 줄만 조용히 없이 나온다.
-    return null;
   }
 }
 

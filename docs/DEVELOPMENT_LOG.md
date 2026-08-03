@@ -117,10 +117,20 @@ flow에서 이름을 부르는 건 알림을 보내는 동작이라 우리 화�
 flex를 넣어 짧을 때는 가운데, 길 때는 위에서부터 자라게 했다 — 벤더 이탈 #4로 적었다.
 호출자마다 높이를 재는 대신 칸 하나를 고쳐서 앱의 모든 모달이 같이 낫는다.
 
+`개선` **죽은 `LastComment` 덩어리를 걷었다.** v2.0.0에서 내 업무 화면이 `TaskTable`로 바뀌고
+댓글이 모달 스레드로 옮겨 가면서 `last-comment.tsx`를 부르는 곳이 없어졌는데, 그 아래로
+매달린 것들이 그대로 남아 있었다 — 서버 액션 `loadLastComment`, 조인 함수 `withLastComment`,
+`WorklistTask.lastComment` · `FocusPick.lastComment` 필드, 그리고 **아무도 안 읽는 값을
+채우려고 포커스 도구에서 15개를 더 받던 `topN: 20`**. 화면에 안 나오는 값을 위해 오늘 화면이
+매번 픽 20개를 받고 그 20개의 프로젝트 이름을 다 풀고 있었다. `topN`을 `FOCUS_CHECK`(8)로
+내렸다 — 포커스 5개를 채우는 데 실제로 필요한 수다. `lastHumanComment`는 남긴다:
+피드백 업무에 내가 마지막으로 답했는지 보는 `answeredByMe`가 아직 쓴다.
+
 관련 파일: `src/app/(app)/actions.ts`, `src/lib/flow/rest.ts`, `src/lib/flow/rest.test.ts`,
+`src/lib/flow/queries.ts`, `src/lib/flow/my-tasks.ts`, `src/components/last-comment.tsx`(삭제),
 `src/components/task-thread.tsx`, `src/components/thread-view.tsx`,
 `src/components/task-actions.tsx`, `src/components/mention-table.tsx`,
-`src/components/motion/center-morph-modal.tsx`, `docs/api-spec.md`
+`src/components/motion/center-morph-modal.tsx`, `docs/api-spec.md`, `docs/PRD.md`
 
 ### 2026-08-03 — 상세 모달 본문·댓글, 표 칸 순서·면색·폭 조절 (v2.1.0)
 

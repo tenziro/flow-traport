@@ -383,7 +383,8 @@ export async function listComments(postId: string, ttl?: number): Promise<FlowCo
 export const isChangeLog = (systemCode?: string | null) => Boolean(systemCode?.includes("^^"));
 
 /**
- * 목록에서 **사람이 쓴 마지막 댓글**. 업무 한 줄에 붙이는 값이다 (`loadLastComment`).
+ * 목록에서 **사람이 쓴 마지막 댓글**. 피드백 업무에 내가 마지막으로 답했는지 볼 때 쓴다
+ * (`answeredByMe` — queries.ts).
  *
  * 응답은 오래된 것부터 온다 — 뒤에서 찾는다. 변경 로그(`담당자를 바꿨어요` 같은 기록)는
  * 건너뛴다: 실측 15건 중 7건이 그것이라 그냥 최신 한 건을 집으면 대부분의 줄이 로그로 채워진다.

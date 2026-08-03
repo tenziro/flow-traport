@@ -87,7 +87,7 @@ function toRow(row: ProjectTasks, task: MyTask, now: number): WorklistTask {
     project: row.name,
     endDate: task.endDate,
     regDate: task.regDate,
-    // 마지막 댓글을 나중에 불러오는 데 쓴다 (`LastComment`). 여기서 미리 부르지 않는다 —
+    // 댓글을 나중에 불러오는 데 쓴다 (`TaskThread`). 여기서 미리 부르지 않는다 —
     // 업무 한 줄에 REST 한 번이라 951줄이면 951번이고, 분당 상한이 120번이다.
     postId: task.postId,
     // 마감일이 없으면 0이다. 그 줄에는 D-DAY 배지를 안 그린다 (task-table.tsx).

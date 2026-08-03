@@ -1406,6 +1406,8 @@ Tailwind `dark:` 변인은 블록 형태(`@custom-variant dark { … @slot }`)�
 | `src/lib/flow/rest.ts` | `stripMentions`가 `@`까지 뗀다 (`@[서동조](djseo7)` → `서동조`) |
 | `src/components/mention-table.tsx` | `마지막 말` 칸을 걷고 업무명 옆에 말풍선 + 숫자 |
 | `src/components/motion/center-morph-modal.tsx` | 스크롤 칸 세로 정렬 — 벤더 이탈 #4 |
+| `src/components/last-comment.tsx` | **삭제**. v2.0.0 이후 부르는 곳이 없다 |
+| `src/lib/flow/queries.ts` | `withLastComment`·`lastComment` 필드 삭제, 포커스 `topN` 20 → `FOCUS_CHECK`(8) |
 
 | 결정 | 이유 |
 |---|---|
@@ -1415,6 +1417,7 @@ Tailwind `dark:` 변인은 블록 형태(`@custom-variant dark { … @slot }`)�
 | `@`까지 뗀다 | flow에서 이름을 부르는 건 알림을 보내는 동작이다 — 우리 화면에서는 누를 데도 없는 표시고, 서너 명이 불려 있으면 `@`가 줄머리를 채워 본문이 안 읽힌다 |
 | 댓글 텍스트 → 말풍선 + 숫자 | 한 줄에 잘린 120자는 알기에 모자라고 훑기에 길다. 칩은 업무명 뒤다(앞이면 줄 번호로 읽힌다). 안 읽은 게 있으면 꽉 채운다 |
 | 모달은 벤더를 고쳤다 | `overflow-y-auto` + `items-center`는 위로 넘친 만큼이 스크롤 범위 밖에 남는다. 호출자마다 높이를 재는 대신 칸 하나를 고쳐 앱의 모든 모달이 같이 낫는다 |
+| `LastComment` 덩어리를 걷었다 | 화면에 안 나오는 값을 채우려고 오늘 화면이 매번 포커스 픽 20개를 받고 그 20개의 프로젝트 이름을 다 풀고 있었다. `lastHumanComment`는 남긴다 — `answeredByMe`가 쓴다 |
 
 **미검증**: 브라우저 확인을 못 했다 — Playwright MCP가 세션 내내 `Browser is already in use`다.
 `tsc`·eslint(0 errors)·`npm test`(128/128)·`npm run build`(15/15)까지는 통과했다.
