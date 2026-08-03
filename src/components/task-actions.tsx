@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import {
   createComment,
   loadParticipants,
@@ -16,35 +16,21 @@ import type { Participant, TaskFields } from "@/lib/flow/rest";
 import { TASK_STATUS, type TaskStatus } from "@/lib/task-status";
 import { TASK_PRIORITY, type TaskPriority } from "@/lib/task-priority";
 import { DateField } from "@/components/date-field";
-import { IconComment, IconNormal, IconPriority } from "@/components/icons";
-import { BouncyAccordion } from "@/components/motion/bouncy-accordion";
+import { IconComment, IconNormal } from "@/components/icons";
 import { Button } from "@/components/motion/button/base";
-import {
-  CenterMorphModal,
-  CenterMorphModalClose,
-  CenterMorphModalContent,
-  CenterMorphModalTrigger,
-} from "@/components/motion/center-morph-modal";
 import { Input } from "@/components/motion/input";
-import { ThreadView } from "@/components/thread-view";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, fmtDate } from "@/lib/utils";
 
 /**
- * 업무 행에 붙는 쓰기 액션 (PRD §6.1.4, §13 A4).
- *
- * 두 갈래다: **바꾸기**(상태·마감일·우선순위·담당자)는 모달로 열고, **댓글**은 행에서 접힘으로
- * 펼친다. 바꾸는 일과 말하는 일은 애초에 다른 일이다.
+ * 업무 상세 모달의 쓰기 줄 (PRD §6.1.4, §13 A4).
  *
  * **읽는 자리와 고치는 자리를 갈랐다.** 예전에는 셀렉트 네 개가 패널에 펼쳐져 있고 지금 값이
  * 그 셀렉트의 placeholder(`지금 진행중`)였다 — 값을 확인하려면 고르는 UI를 마주해야 했고,
- * 하나를 고르면 확인 문구·버튼 둘이 그 줄에 더 붙어 네 줄이 통째로 흔들렸다. 지금은 네 줄이
+ * 하나를 고르면 확인 문구·버튼 둘이 그 줄에 더 붙어 네 줄이 통째로 흔들렸다. 지금은 다섯 줄이
  * 다 텍스트고, `변경`을 누른 줄만 컨트롤로 바뀐다.
  *
- * 모달이 "어느 업무를 건드리는지 흐린다"던 v0.15의 판단은 머리에 업무명을 적어서 해소한다.
- * 행 안에서 펼치던 때는 밀리는 업무가 열 줄인 화면에서 목록이 통째로 밀려 내려갔다.
- *
- * 확인 단계는 그대로 두 번 누르기다 (§8.1) — `변경`으로 컨트롤을 열고, 고른 뒤 `저장`을
+ * 확인 단계는 두 번 누르기다 (§8.1) — `변경`으로 컨트롤을 열고, 고른 뒤 `저장`을
  * 누른다. 예전 "바꿀까요?" 한 줄이 하던 일을 `저장` 버튼이 한다.
  *
  * 댓글은 확인 단계를 두지 않는다. 내용을 직접 타이핑하는 것 자체가 확인이고, 댓글은
@@ -77,152 +63,63 @@ const FIELD = "flex min-w-0 flex-1 flex-wrap items-center gap-2";
 const EDITING = "flex min-w-0 flex-1 flex-col items-start gap-2";
 /** 고치는 중에도 지금 값은 남긴다 — 무엇에서 무엇으로 바뀌는지가 한 줄에서 읽힌다. */
 const FROM = "shrink-0 text-xs leading-8 text-muted-foreground";
-/** 모달 트리거. 바로 아래 댓글 접힘 트리거와 같은 치수·같은 색이라 둘이 한 벌로 읽힌다. */
-const TRIGGER =
-  "flex min-h-7 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground";
 
-export function TaskActions(props: {
-  /** null이면 프로젝트 ID를 해소하지 못한 것 — 액션 자체를 감춘다. */
-  projectId: string | null;
-  taskId: number;
-  /** 업무명. 댓글이 `taskSrno`를 `postId`로 바꿀 때 검색어로 쓴다 (`resolvePostId`). */
-  title: string;
-  /** flow 커스텀 상태 라벨. 현재 상태를 다시 고르면 flow가 400을 준다. */
-  status: string;
-  /** 워크리스트가 주는 마감일 `YYYYMMDD`. 이것만 공짜라 REST를 기다리지 않고 바로 쓴다. */
-  endDate?: string;
-  /** 성공 후 다시 불러올 경로. */
-  path: string;
-  /**
-   * 저장이 성공한 값을 행에 알린다 (BUG-037). `revalidatePath`는 되지만 페이지 재렌더가
-   * 실측 6.5초라, 그 사이 행이 옛 값을 들고 있으면 사용자는 저장이 안 된 줄 안다.
-   * 행에 보이는 두 값만 넘긴다 — 우선순위·담당자는 행에 없다.
-   */
-  onSaved?: (patch: { status?: string; endDate?: string }) => void;
-}) {
-  if (!props.projectId) {
-    return (
-      <p className="mt-2 text-xs text-muted-foreground">
-        이 프로젝트는 flow에서 열어야 바꿀 수 있어요.
-      </p>
-    );
-  }
-  return <Panels {...props} projectId={props.projectId} />;
-}
-
-function Panels({
+/**
+ * 상태·마감일·등록일·우선순위·담당자 다섯 줄 (PRD §6.1.4).
+ *
+ * 우선순위·담당자·등록일은 워크리스트에 없다. **이 덩어리가 붙을 때 한 번만** 부른다 —
+ * 업무 한 줄에 REST 한 번이라, 표의 모든 행이 미리 부르면 열 줄에 열 번이다. 상세 모달이
+ * 열릴 때만 붙으니 실제로는 보고 있는 업무 하나만 부른다.
+ */
+export function TaskEditFields({
   projectId,
   taskId,
   title,
   status,
   endDate = "",
+  regDate = "",
   path,
   onSaved,
 }: {
   projectId: string;
   taskId: number;
+  /** 업무명. `taskSrno`를 `postId`로 바꿀 때 검색어로 쓴다 (`resolvePostId`). */
   title: string;
+  /** flow 커스텀 상태 라벨. 현재 상태를 다시 고르면 flow가 400을 준다. */
   status: string;
+  /** 목록이 이미 아는 마감일 `YYYYMMDD`. 공짜라 REST를 기다리지 않고 바로 쓴다. */
   endDate?: string;
+  /** 목록이 아는 등록일 `YYYYMMDD`. 오늘·팀 화면은 안 줘서 REST 응답을 기다린다. */
+  regDate?: string;
+  /** 성공 후 다시 불러올 경로. */
   path: string;
-  onSaved?: (patch: { status?: string; endDate?: string }) => void;
-}) {
-  return (
-    <div className="mt-1">
-      <EditDialog
-        projectId={projectId}
-        taskId={taskId}
-        title={title}
-        status={status}
-        endDate={endDate}
-        path={path}
-        onSaved={onSaved}
-      />
-
-      {/* 댓글은 행 안에서 펼친다. 남긴 말이 이 업무 아래에 그대로 쌓여 있어야 읽는 일과
-          이어진다 — 모달로 띄우면 목록을 가리고 닫으면 사라진다 */}
-      <BouncyAccordion
-        classNames={{
-          // 업무 행은 이미 Card 안이다 — 배경을 지워 카드 안 카드를 만들지 않는다.
-          // `overflow-visible`이 짤림의 핵심이다: 원본은 `overflow-hidden` + 28px 라운드라
-          // 배경이 투명해도 네 모서리가 내용을 계속 잘라낸다 (bug-report BUG-009).
-          item: "overflow-visible bg-transparent",
-          trigger: "min-h-7 gap-1.5 px-0",
-          icon: "h-4 w-4",
-          title: "text-xs font-normal text-muted-foreground",
-          chevron: "h-4 w-4",
-          // 좌우 패딩을 끈다. 폼 왼쪽이 헤더에 맞고, 음수 마진 때와 달리 내용이
-          // 행 폭을 넘지 않아 오른쪽이 잘리지 않는다.
-          body: "px-0 pt-2 pb-3",
-          description: "text-sm text-foreground",
-        }}
-        items={[
-          {
-            id: `talk-${taskId}`,
-            icon: <IconComment size={13} />,
-            title: "댓글 보거나 남기기",
-            description: (
-              /*
-               * 트리거는 [아이콘 16px][간격 6px][제목]이다. 세로선은 아이콘 한가운데(8px)로,
-               * 폼 시작점은 제목 시작점(22px)으로 맞춘다 — 선 두께 2px를 빼면 7 + 2 + 13이다.
-               */
-              <div className="ml-[7px] space-y-2 border-l-2 border-border pl-[13px]">
-                <CommentForm projectId={projectId} taskId={taskId} title={title} path={path} />
-                {/* 전체 스레드는 눌러야 부른다 (PRD §13 A1). 시스템 댓글까지 같이 와서
-                    이 업무의 활동 이력이 된다 (§13 B4) */}
-                <ThreadView projectId={projectId} taskId={taskId} title={title} />
-              </div>
-            ),
-          },
-        ]}
-      />
-    </div>
-  );
-}
-
-/**
- * 바꾸기 모달 (PRD §6.1.4).
- *
- * 지금 우선순위·담당자는 워크리스트에 없다. **모달을 열 때 한 번만** 부른다 — 업무 한 줄에
- * REST 한 번이라, 행마다 미리 부르면 밀리는 업무 열 줄에 열 번이다.
- */
-function EditDialog({
-  projectId,
-  taskId,
-  title,
-  status,
-  endDate,
-  path,
-  onSaved,
-}: {
-  projectId: string;
-  taskId: number;
-  title: string;
-  status: string;
-  endDate: string;
-  path: string;
+  /**
+   * 저장이 성공한 값을 목록에 알린다 (BUG-037). `revalidatePath`는 되지만 페이지 재렌더가
+   * 실측 6.5초라, 그 사이 표가 옛 값을 들고 있으면 사용자는 저장이 안 된 줄 안다.
+   * 표에 보이는 두 값만 넘긴다 — 우선순위·담당자는 표에 없다.
+   */
   onSaved?: (patch: { status?: string; endDate?: string }) => void;
 }) {
   const [fields, setFields] = useState<TaskFields | null>(null);
-  const [loading, startLoad] = useTransition();
-  const [asked, setAsked] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  function onOpenChange(open: boolean) {
-    if (!open || asked) return;
-    setAsked(true);
-    startLoad(async () => {
-      // `catch`가 필요한 이유는 액션 **요청 자체가 끊길 때**다 (네트워크 끊김·서버 재시작·
-      // 세션 만료). 그때 거부가 트랜지션을 뚫고 나가 오류 경계가 화면을 통째로 가져간다 —
-      // 아래 "지금 값을 못 가져왔어요"는 쓰이지도 못한다. 이 조회는 곁가지라 화면을 죽일
-      // 자격이 없다. 서버 안에서 난 오류는 액션이 이미 `ok:false`로 싸서 준다 (BUG-038).
-      const result = await loadTaskFields(projectId, taskId, title).catch(() => null);
-      setFields(result?.fields ?? null);
-      // 못 가져온 건 물어본 것으로 치지 않는다 — 안 그러면 그 화면이 살아 있는 동안 계속
-      // "못 가져왔어요"고 새로고침만이 탈출구다. 조회 중에는 `asked`가 참이라 다시 열어도
-      // 두 번 부르지 않는다.
-      if (!result?.fields) setAsked(false);
-    });
-  }
+  useEffect(() => {
+    let alive = true;
+    // `catch`가 필요한 이유는 액션 **요청 자체가 끊길 때**다 (네트워크 끊김·서버 재시작·
+    // 세션 만료). 그때 거부가 렌더를 뚫고 나가 오류 경계가 화면을 통째로 가져간다 —
+    // 아래 "지금 값을 못 가져왔어요"는 쓰이지도 못한다. 이 조회는 곁가지라 화면을 죽일
+    // 자격이 없다. 서버 안에서 난 오류는 액션이 이미 `ok:false`로 싸서 준다 (BUG-038).
+    loadTaskFields(projectId, taskId, title)
+      .catch(() => null)
+      .then((result) => {
+        if (!alive) return;
+        setFields(result?.fields ?? null);
+        setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [projectId, taskId, title]);
 
   /**
    * 못 가져온 것과 값이 빈 것은 다른 말이다. 우선순위가 비어 있는데 "지금 값을 못 가져왔어요"로
@@ -231,81 +128,51 @@ function EditDialog({
   const restNow = (value: string) =>
     loading ? "불러오는 중…" : fields ? value || "아직 없어요" : "지금 값을 못 가져왔어요";
   const dueDate = fields?.endDate || endDate;
-  const descId = `edit-desc-${taskId}`;
+  const created = regDate || fields?.regDate || "";
 
   return (
-    <CenterMorphModal onOpenChange={onOpenChange}>
-      <CenterMorphModalTrigger>
-        <button type="button" className={TRIGGER}>
-          <span aria-hidden className="grid h-4 w-4 shrink-0 place-items-center">
-            <IconPriority size={13} />
+    /* 줄 사이에 선을 둔다. `변경`을 누른 줄만 컨트롤로 커지는데, 선이 없으면 커진
+       줄이 위아래 줄까지 한 덩어리로 읽혔다 — 특히 결과 문구가 값 열 아래로
+       접히면 그게 다음 줄의 값처럼 보였다 */
+    <div className="divide-y divide-border/60">
+      <StatusField
+        projectId={projectId}
+        taskId={taskId}
+        now={status}
+        path={path}
+        onSaved={(shown) => onSaved?.({ status: shown })}
+      />
+      <EndDateField
+        projectId={projectId}
+        taskId={taskId}
+        now={dueDate ? fmtDate(dueDate) : "아직 없어요"}
+        path={path}
+        /* 고른 값은 `YYYY-MM-DD`고 표는 flow 형식(`YYYYMMDD`)을 쓴다 */
+        onSaved={(shown) => onSaved?.({ endDate: shown.replaceAll("-", "") })}
+      />
+      {/* 등록일만 읽기다 — flow가 바꿀 수 있는 값으로 열어 두지 않았다 */}
+      <div className={ROW}>
+        <span className={LABEL}>등록일</span>
+        <div className={FIELD}>
+          <span className="min-w-0 flex-1 truncate text-sm leading-8">
+            {created ? fmtDate(created) : restNow("")}
           </span>
-          상태·마감일·우선순위·담당자 바꾸기
-        </button>
-      </CenterMorphModalTrigger>
-
-      {/* 오른쪽 위 닫기 아이콘은 끈다 — 아래 `닫기` 버튼과 이름이 같아서 화면 낭독기에
-          `닫기`가 두 번 읽힌다. 오른쪽 아래 한 자리로 모은다 (TEXT_GUIDE).
-          패널 패딩을 안 주고 머리·본문·바닥이 각자 갖는다 — 경계선이 패널 폭 끝까지
-          닿아야 세 덩어리가 갈린다 (site-footer.tsx의 업데이트 로그 모달과 같은 구조) */}
-      <CenterMorphModalContent
-        ariaLabel="업무 바꾸기"
-        ariaDescribedBy={descId}
-        showCloseButton={false}
-        className="max-w-[34rem]"
-      >
-        <div className="border-b border-border px-5 pt-5 pb-4">
-          <h2 className="text-base font-semibold">업무 바꾸기</h2>
-          {/* 어느 업무인지를 머리에 적는다 — 목록이 뒤로 가려도 대상이 남는다 */}
-          <p id={descId} className="mt-0.5 truncate text-xs text-muted-foreground">
-            {title}
-          </p>
         </div>
-
-        {/* 줄 사이에 선을 둔다. `변경`을 누른 줄만 컨트롤로 커지는데, 선이 없으면 커진
-            줄이 위아래 줄까지 한 덩어리로 읽혔다 — 특히 결과 문구가 값 열 아래로
-            접히면 그게 다음 줄의 값처럼 보였다 */}
-        <div className="divide-y divide-border/60 px-5 py-1">
-          <StatusField
-            projectId={projectId}
-            taskId={taskId}
-            now={status}
-            path={path}
-            onSaved={(shown) => onSaved?.({ status: shown })}
-          />
-          <EndDateField
-            projectId={projectId}
-            taskId={taskId}
-            now={dueDate ? fmtDate(dueDate) : "아직 없어요"}
-            path={path}
-            /* 고른 값은 `YYYY-MM-DD`고 행은 flow 형식(`YYYYMMDD`)을 쓴다 */
-            onSaved={(shown) => onSaved?.({ endDate: shown.replaceAll("-", "") })}
-          />
-          <PriorityField
-            projectId={projectId}
-            taskId={taskId}
-            now={restNow(TASK_PRIORITY[fields?.priority as TaskPriority] ?? "")}
-            path={path}
-          />
-          <WorkerField
-            projectId={projectId}
-            taskId={taskId}
-            now={restNow(fields?.workers.join(", ") ?? "")}
-            workers={fields?.workers ?? []}
-            path={path}
-          />
-        </div>
-
-        <div className="flex justify-end border-t border-border px-5 py-3">
-          <CenterMorphModalClose>
-            {/* `취소`가 아니라 `닫기`다 — 하던 일이 취소된다고 읽힌다 (TEXT_GUIDE) */}
-            <Button type="button" size="sm" variant="ghost">
-              닫기
-            </Button>
-          </CenterMorphModalClose>
-        </div>
-      </CenterMorphModalContent>
-    </CenterMorphModal>
+      </div>
+      <PriorityField
+        projectId={projectId}
+        taskId={taskId}
+        now={restNow(TASK_PRIORITY[fields?.priority as TaskPriority] ?? "")}
+        path={path}
+      />
+      <WorkerField
+        projectId={projectId}
+        taskId={taskId}
+        now={restNow(fields?.workers.join(", ") ?? "")}
+        workers={fields?.workers ?? []}
+        path={path}
+      />
+    </div>
   );
 }
 
@@ -802,7 +669,8 @@ function WorkerField({
   );
 }
 
-function CommentForm({
+/** 댓글 한 줄 남기기. 상세 모달의 댓글 칸이 이걸 쓴다. */
+export function CommentForm({
   projectId,
   taskId,
   title,

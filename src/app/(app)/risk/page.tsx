@@ -1,6 +1,5 @@
 import { DeptTabs } from '@/components/dept-tabs';
 import { EmptyState } from '@/components/empty-state';
-import { FlowLink } from '@/components/flow-link';
 import {
   IconChevronDown,
   IconDelay,
@@ -13,14 +12,9 @@ import { Meter } from '@/components/meter';
 import { NewTaskForm } from '@/components/new-task-form';
 import { StaleScan } from '@/components/stale-scan';
 import { StatHint } from '@/components/stat-hint';
-import { StatusPill } from '@/components/status-pill';
-import { TaskActions } from '@/components/task-actions';
+import { TaskTable } from '@/components/task-table';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  RISK_GRADE_LABEL,
-  type ProjectRollup,
-  type RiskTask,
-} from '@/lib/aggregate';
+import { RISK_GRADE_LABEL, type ProjectRollup } from '@/lib/aggregate';
 import { loadRisk } from '@/lib/flow/queries';
 import { cn } from '@/lib/utils';
 
@@ -316,13 +310,21 @@ function RollupCard({
             />
           </summary>
 
-          <ul className="mt-3 space-y-3 border-t border-border pt-3">
-            {rollup.tasks.map((task) => (
-              <li key={task.taskSrno}>
-                <TaskRow task={task} projectId={rollup.projectId} />
-              </li>
-            ))}
-          </ul>
+          {/* 카드가 이미 한 프로젝트라 프로젝트 칸을 끄고, 그 자리에 담당자를 세운다 —
+              여기는 남의 업무가 섞여 있어서 누구 것인지가 정보다.
+              급함은 마감일 칸의 D+/D- 배지가 말한다 (밀림/임박 아이콘이 하던 일이다) */}
+          <div className="mt-3 border-t border-border pt-3">
+            <TaskTable
+              rows={rollup.tasks.map((task) => ({
+                ...task,
+                projectId: rollup.projectId,
+              }))}
+              path={PATH}
+              showProject={false}
+              showOwner
+              emptyState="밀리거나 임박한 업무가 없어요"
+            />
+          </div>
 
           {rollup.projectId && (
             <>
@@ -344,58 +346,5 @@ function RollupCard({
         </details>
       </CardContent>
     </Card>
-  );
-}
-
-function TaskRow({
-  task,
-  projectId,
-}: {
-  task: RiskTask;
-  projectId: string | null;
-}) {
-  const late = task.daysLeft < 0;
-
-  return (
-    <div className="flex items-start gap-2">
-      {/* 앞 칸 + 간격이 **32px**이어야 업무 제목이 헤더의 등급 점과 같은 x에서 시작한다
-          (헤더는 순위 `w-5`(20) + `gap-3`(12)). 여기서는 `w-6`(24) + `gap-2`(8)로 쪼개
-          아이콘을 칸 오른쪽에 붙였다 — 아이콘 앞에 10px가 들어가고 아이콘과 글자는 8px로
-          붙어서, 아이콘이 제목에 딸린 표시로 읽힌다. */}
-      <span className="flex w-6 shrink-0 justify-end">
-        {late ? (
-          <IconRisk size={14} className="mt-1 text-danger" />
-        ) : (
-          <IconImminent size={14} className="mt-1 text-warning" />
-        )}
-      </span>
-      {/* 아이콘 오른쪽 한 열. 액션 폼까지 이 열 안에 둬야 제목과 왼쪽 끝이 맞는다 */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start gap-2">
-          <div className="min-w-0 flex-1">
-            {/* 굵기도, 한 줄에서 자르는 것도 다른 화면의 업무 제목과 같다 (task-item.tsx) */}
-            <p className="truncate text-sm font-semibold">{task.title}</p>
-            {/* 상태는 글자 대신 배지로 — 한 줄에 이름·상태·기한이 다 있으면 상태가 안 읽힌다 */}
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-              <StatusPill status={task.status} />
-              <span className="tabular text-xs text-muted-foreground">
-                {task.owner} ·{' '}
-                {late
-                  ? `${-task.daysLeft}일 지났어요`
-                  : `${task.daysLeft}일 남았어요`}
-              </span>
-            </div>
-          </div>
-          <FlowLink href={task.link} className="shrink-0" />
-        </div>
-        <TaskActions
-          projectId={projectId}
-          taskId={task.taskSrno}
-          title={task.title}
-          status={task.status}
-          path={PATH}
-        />
-      </div>
-    </div>
   );
 }

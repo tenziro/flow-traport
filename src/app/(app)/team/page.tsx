@@ -11,7 +11,7 @@ import {
 import { Kpi } from '@/components/kpi';
 import { Meter } from '@/components/meter';
 import { StatHint } from '@/components/stat-hint';
-import { TaskItem } from '@/components/task-item';
+import { TaskTable } from '@/components/task-table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { StandupMember, StandupTask } from '@/lib/aggregate';
 import type { FlowEvent } from '@/lib/flow/rest';
@@ -116,12 +116,13 @@ export default async function TeamPage({
       </section>
 
       {/*
-       * 3단까지만. 업무 줄이 오늘 화면과 같은 `TaskItem`이 되면서 한 줄에 상태 배지·
-       * 프로젝트·flow 링크·액션이 다 들어간다 — 4단으로 쪼개면 그게 줄줄이 접힌다.
+       * **3단에서 1단(넓은 화면만 2단)으로 내렸다.** 업무 줄이 표가 되면서다 — 표는 칸 폭이
+       * 고정 비율이라 3분의 1 칸에 넣으면 업무명이 열 글자에서 잘린다. 누가 몰려 있는지는
+       * 카드 머리의 부하 막대가 이미 보여주니, 표는 폭을 벌어 제목을 살린다.
        */}
       {/* `grid-cols-1` — 안 적으면 좁은 화면 열이 `auto`라 카드가 내용 최소폭 아래로
           안 줄어든다 (bug-report BUG-025) */}
-      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-4 2xl:grid-cols-2">
         {ranked.map((member, i) => (
           <MemberCard
             key={member.name}
@@ -251,7 +252,7 @@ function MemberCard({
           </ul>
         )}
       </CardHeader>
-      <CardContent className="space-y-0.5">
+      <CardContent>
         {quiet ? (
           /*
            * 오늘 화면 빈 칸과 같은 모양으로 (empty-state.tsx). 왼쪽에 붙은 한 줄짜리
@@ -280,20 +281,17 @@ function MemberCard({
           />
         ) : (
           <>
-            {tasks.map((task) => (
-              <div
-                key={task.taskSrno}
-                className="border-b border-border/60 last:border-0"
-              >
-                <TaskItem
-                  task={task}
-                  projectId={idOf(task.project)}
-                  path={path}
-                />
-              </div>
-            ))}
+            {/* 상태 칩은 안 건다 — 여기 오는 건 밀림·임박 몇 건이라 거를 게 없다 */}
+            <TaskTable
+              rows={tasks.map((task) => ({
+                ...task,
+                projectId: idOf(task.project),
+              }))}
+              path={path}
+              maxRows={6}
+            />
             {member.staleCount > 0 && (
-              <p className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+              <p className="flex items-center gap-1.5 pt-2 text-xs text-muted-foreground">
                 <IconStale size={12} />
                 방치 {member.staleCount}건은 flow에서 확인해주세요.
               </p>

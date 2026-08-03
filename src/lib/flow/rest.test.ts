@@ -325,6 +325,8 @@ describe('내 업무 조회', () => {
         postId: '78159339',
         title: 'LGI-REQ-기타-일반-테스트-001',
         endDate: '20260731',
+        // 픽스처에 등록일 칸(`RGSN_DTTM`)이 없다 — 표에서는 `—`로 나온다.
+        regDate: '',
         status: '완료',
         done: true,
         // 픽스처에 `upTaskId`가 없다 — 필드가 안 오면 최상위로 둔다.

@@ -77,7 +77,7 @@ const byUrgency = (a: WorklistTask, b: WorklistTask) =>
 /** 끝난 업무는 최근 마감 순. 마감일 없는 것은 뒤로 간다(빈 문자열이 가장 작다). */
 const byRecent = (a: WorklistTask, b: WorklistTask) => b.endDate.localeCompare(a.endDate);
 
-/** 화면 한 줄로 바꾼다. `TaskItem`이 오늘·팀 화면에서 쓰는 모양 그대로다. */
+/** 화면 한 줄로 바꾼다. `TaskTable`이 오늘·팀 화면에서 쓰는 모양 그대로다. */
 function toRow(row: ProjectTasks, task: MyTask, now: number): WorklistTask {
   const deadline = parseFlowDeadline(task.endDate);
   return {
@@ -86,10 +86,11 @@ function toRow(row: ProjectTasks, task: MyTask, now: number): WorklistTask {
     status: task.status,
     project: row.name,
     endDate: task.endDate,
+    regDate: task.regDate,
     // 마지막 댓글을 나중에 불러오는 데 쓴다 (`LastComment`). 여기서 미리 부르지 않는다 —
     // 업무 한 줄에 REST 한 번이라 951줄이면 951번이고, 분당 상한이 120번이다.
     postId: task.postId,
-    // 마감일이 없으면 0이다. 그 줄에는 D-DAY 배지를 안 그린다 (task-item.tsx).
+    // 마감일이 없으면 0이다. 그 줄에는 D-DAY 배지를 안 그린다 (task-table.tsx).
     daysLeft: deadline === null ? 0 : diffDays(now, deadline),
     link: flowPostUrl(row.projectId, task.postId),
   };

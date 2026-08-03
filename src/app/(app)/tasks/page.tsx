@@ -5,9 +5,8 @@ import { IconChevronDown, IconMyTasks, IconNormal, IconRisk } from "@/components
 import { Kpi } from "@/components/kpi";
 import { Meter } from "@/components/meter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/motion/tabs";
-import { ProjectTaskFilter } from "@/components/project-task-filter";
 import { StatHint } from "@/components/stat-hint";
-import { TaskItem } from "@/components/task-item";
+import { TaskTable } from "@/components/task-table";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadMyTasks, type MyTasksData, type MyTasksProject } from "@/lib/flow/my-tasks";
 
@@ -236,16 +235,23 @@ function ProjectCard({ project, i }: { project: MyTasksProject; i: number }) {
             />
           </summary>
 
-          {/* 줄은 서버에서 그려 넘긴다 — 거르기만 클라이언트다 (`ProjectTaskFilter` 주석) */}
+          {/* 카드가 이미 한 프로젝트라 프로젝트 칸은 끈다. 대신 등록일이 있다 —
+              필터 응답에만 오는 값이고(rest.ts), 이 화면이 그 응답을 쓰는 유일한 곳이다 */}
           {project.open.length > 0 && (
-            <ProjectTaskFilter
-              items={project.open.map((task) => ({
-                key: task.taskSrno,
-                status: task.status,
-                depth: task.depth,
-                row: <TaskItem task={task} projectId={project.projectId} path={PATH} />,
-              }))}
-            />
+            <div className="mt-3">
+              <TaskTable
+                rows={project.open.map((task) => ({
+                  ...task,
+                  projectId: project.projectId,
+                }))}
+                path={PATH}
+                showProject={false}
+                showRegDate
+                filterable
+                // 한 프로젝트에 실측 최대 300건이다. 12줄까지 펼치고 그 아래는 표가 스크롤한다
+                maxRows={12}
+              />
+            </div>
           )}
 
           {project.done.length > 0 && (

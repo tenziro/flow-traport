@@ -35,6 +35,11 @@ export interface WorklistTask {
   project: string;
   /** YYYYMMDD */
   endDate: string;
+  /**
+   * 등록일 `YYYYMMDD`. 업무 필터 REST(`MyTask`·`StaleTask`)에만 있다 — 워크리스트·포커스
+   * MCP 응답은 안 준다. 그래서 오늘·팀 화면 표에는 등록일 열이 없다.
+   */
+  regDate?: string;
   /** 음수면 지남 */
   daysLeft: number;
   link: string;

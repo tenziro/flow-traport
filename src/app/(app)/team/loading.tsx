@@ -12,7 +12,8 @@ import {
  * 멤버 카드는 리스크의 프로젝트 카드와 달리 처음부터 펼쳐져 있다 — 누가 무엇에 막혀 있는지가
  * 이 화면의 본문이라 접어 두지 않는다. 그래서 카드마다 업무 두 줄까지 비운다.
  *
- * 격자는 실제와 같은 1 → 2 → 3단이다. 여섯 장을 세우면 3단 화면에서 두 줄이 채워진다.
+ * 격자는 실제와 같은 1단(아주 넓은 화면만 2단)이다 — 업무 줄이 표가 되면서 3단을 접었다
+ * (page.tsx). 네 장을 세우면 2단 화면에서 두 줄이 채워진다.
  */
 export default function Loading() {
   return (
@@ -20,8 +21,8 @@ export default function Loading() {
       <HeadSkeleton />
       <TabBarSkeleton className="max-w-lg" />
       <KpiRowSkeleton count={4} />
-      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {[0, 1, 2, 3, 4, 5].map((i) => (
+      <div className="grid grid-cols-1 items-start gap-4 2xl:grid-cols-2">
+        {[0, 1, 2, 3].map((i) => (
           <PanelSkeleton key={i}>
             <TaskRowsSkeleton count={2} />
           </PanelSkeleton>

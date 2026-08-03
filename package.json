@@ -1,6 +1,6 @@
 {
   "name": "flow-traport",
-  "version": "1.9.0",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -10,6 +10,7 @@
     "test": "tsx --test src/lib/*.test.ts src/lib/aggregate/*.test.ts src/lib/flow/*.test.ts"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.14.9",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",

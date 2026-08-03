@@ -50,7 +50,7 @@ export function LastComment({ text, postId }: { text?: string; postId?: string }
 
   return (
     <p className="mt-1.5 flex gap-1.5 text-xs leading-relaxed text-muted-foreground">
-      {/* 아이콘 칸 높이를 글줄 한 줄(`1lh`)로 잡고 그 안에서 중앙에 둔다 (`TaskItem`과 같다) */}
+      {/* 아이콘 칸 높이를 글줄 한 줄(`1lh`)로 잡고 그 안에서 중앙에 둔다 (상세 모달의 댓글과 같다) */}
       <span className="flex h-[1lh] shrink-0 items-center">
         <IconLastComment size={13} />
       </span>

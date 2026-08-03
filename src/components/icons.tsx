@@ -33,6 +33,18 @@ export {
   ChevronRight as IconChevronRight,
   Check as IconCheck,
   Logout as IconSignOut,
+  /* 표(`motion/table`)가 쓰는 것들. beUI 원본은 lucide를 쓰는데 이 앱은 아이콘셋이
+     하나여야 해서 여기서 갈아 끼운다. reicon에 없는 짝은 뜻이 같은 것으로 바꿨다 —
+     `GripVertical`(잡이)은 `Menu`, `Arrow*ToLine`(앞/뒤에 끼우기)은 방향 화살표다. */
+  ChevronUp as IconChevronUp,
+  Menu as IconGrip,
+  MoreH as IconMoreH,
+  More as IconMoreV,
+  Trash2 as IconTrash,
+  ArrowUp as IconArrowUp,
+  ArrowDown as IconArrowDown,
+  ArrowLeft as IconArrowLeft,
+  ArrowRight as IconArrowRight,
   Calendar as IconCalendar,
   Repeat as IconRepeat,
   UserCheck as IconAttending,

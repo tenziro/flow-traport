@@ -1,6 +1,6 @@
 # 개발 진행 상황
 
-버전 1.7.0 · 2026-08-03 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
+버전 2.0.0 · 2026-08-03 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
 
 ## 요약
 
@@ -1392,6 +1392,46 @@ Tailwind `dark:` 변인은 블록 형태(`@custom-variant dark { … @slot }`)�
 흐르고 메타 줄이 접혀서 어떤 줄은 2단, 어떤 줄은 3단이었다. 제목은 `truncate`, 메타 줄은
 `flex-wrap`을 떼고 프로젝트명만 줄어들게 했다. 업무 줄·리스크 보드·방치 업무 스캔도 같다.
 
+### 업무 아이템을 표로 (v2.0.0)
+
+네 화면의 업무 목록이 각자 세 줄짜리 줄이었다(`TaskItem` 하나를 나눠 썼다). 같은 값이 줄마다
+다른 자리에 있어서 두 업무의 마감일을 비교하려면 눈이 줄 안을 다시 찾아야 했다. **표 한 벌로
+바꿨다** — beUI `motion/table`을 통째로 들여왔다.
+
+| 파일 | 무엇 |
+|---|---|
+| `src/components/motion/table/` (11개) | beUI 원본. `@tanstack/react-virtual`로 줄을 가상화하고 칸 정렬·순서 바꾸기·폭 조절이 들어 있다 |
+| `src/components/task-table.tsx` | 업무 표. 프로젝트·업무명·진행상태·마감일 네 칸, 화면에 따라 등록일/담당자를 켠다. 상태 칩·낙관값(BUG-037)·상세 모달 하나를 여기서 든다 |
+| `src/components/mention-table.tsx` | 나를 부른 사람들. 이 표만 칸이 다르다 — 프로젝트·업무명·부른 사람·마지막 말·시각 |
+| `src/components/task-detail-modal.tsx` | 업무명을 누르면 열린다. flow 업무 상세 화면처럼 다섯 구획을 테두리로 끊었다 |
+| `src/components/d-day.tsx` | 마감일 칸의 D+/D- 배지. 줄에 흩어져 있던 계산을 한 곳으로 모았다 |
+| `src/components/status-filter.tsx` | 칩 겉모양·점·건수만 남았다. `StatusFilter`·`Chip`은 지웠다 |
+| 지운 것 | `task-item.tsx` · `project-task-filter.tsx` |
+
+**아이콘은 Reicon으로 갈아 끼웠다.** 벤더 파일이 `lucide-react`에서 부르는데 이 프로젝트는
+Reicon 한 벌만 쓴다 — 두 벌을 같이 두면 같은 뜻의 아이콘이 화면에서 두 모양으로 나온다.
+벤더 파일이 `@/components/icons`에서 부르게 고치고, 없는 것은 뜻이 가까운 Reicon으로 바꿨다
+(행 손잡이 → `row-vertical`). 고친 곳은 파일마다 주석으로 남겼다.
+
+| 결정 | 이유 |
+|---|---|
+| 칸 폭을 **전부 %로, 합이 100%** | beUI 표는 `<colgroup>` 끝에 남는 폭을 먹는 채움 칸을 둔다. 폭을 안 준 칸이 하나라도 있으면 그 칸과 채움 칸이 남는 폭을 **반씩** 나눠 가진다 — 업무명이 절반만 받았다. 비율로 적으면 채움 칸이 0이 된다 |
+| 오늘 화면 **8:4 → 한 단**, 팀 화면 **3단 → 1단** | 표는 `table-layout: fixed`라 좁은 칸에서 가로 스크롤이 아니라 비율대로 눌린다. 12칸 중 4칸에 넣으면 업무명이 열 글자에서 잘렸다. 접근성으로는 눌리는 쪽이 맞아서(가로 스크롤 없음) 표를 옮기는 대신 단을 접었다 |
+| 등록일은 **내 업무 화면만** | `RGSN_DTTM`(`columnSrno 3`)은 REST `tasks/filter` 응답에만 있다. MCP 워크리스트·포커스에는 없어서 오늘·팀 화면은 칸을 끈다 — 빈 칸을 `—`로 늘어놓지 않는다 |
+| 리스크 화면만 **담당자 칸** | 남의 업무가 섞여 있어서 누구 것인지가 정보다. 프로젝트 칸은 카드가 이미 한 프로젝트라 끈다 |
+| 모달은 표마다 **하나** | 줄마다 두면 열 줄에 모달 열 개가 DOM에 깔린다. 닫을 때 `opened`를 비우지 않는다 — 접히는 동안 내용이 남아야 접히는 게 보인다(`AnimatePresence`) |
+| `onOpenChange`는 **`useCallback`** | 매 렌더 새 함수면 모달 컨텍스트가 새로 만들어지고, 그걸 의존성으로 쓰는 초점 이펙트가 열려 있는 동안 계속 돌아 첫 컨트롤로 초점을 끌어간다 — 댓글을 쓰는 중에 커서가 튄다 |
+| 표 높이는 `44 × (1 + 줄 수)` | 머리 줄이 스크롤 칸 안에 `sticky`로 들어 있어서 한 줄을 얹어야 맞는다. 줄 수 상한을 넘으면 표 안에서 스크롤한다(오늘 8줄 · 팀 6줄 · 내 업무 12줄) |
+| URL 상태 필터 **두 벌을 지웠다** | 서버 칩(`?focus=`)과 클라이언트 칩이 따로 있었다. 표가 스스로 거르면 둘 다 필요 없다 — 951줄 화면을 서버로 다녀오면 실측 7초다 |
+
+**골격도 같이 고쳤다.** 세 줄 줄 골격이 표 골격이 됐다 — 머리 줄 + 44px 줄이라 높이가 실제
+표와 같은 계산이다. 오늘·팀 골격의 격자도 새 배치를 따라간다. 안 고치면 골격이 사라지는 순간
+화면이 한 번 튀고, 그건 골격을 쓰는 이유를 스스로 깨는 일이다 (PRD §7.4.1).
+
+**눈으로 못 봤다.** Playwright 프로필이 다른 세션에 잡혀 있어서(`Browser is already in use`)
+이 변경은 타입 검사·린트·단위 테스트·프로덕션 빌드로만 확인했다. 표 폭·모달 배치·골격 높이는
+실화면 확인이 남아 있다.
+
 ## Phase 6 — 내 업무 화면 (완료 · v1.2.0)
 
 v0.20.1 설계(위 "내 업무 화면 설계")를 그대로 구현했다. 파일 셋이 새로 생기고 넷이 바뀌었다.
@@ -1402,8 +1442,8 @@ v0.20.1 설계(위 "내 업무 화면 설계")를 그대로 구현했다. 파일
 | `src/lib/flow/my-tasks.ts` | 59개 프로젝트를 동시 10으로 훑어 프로젝트별로 묶고 세운다. 순수 함수 `buildMyTasks(rows, now)`와 세션을 읽는 `loadMyTasks()`로 갈라 뒀다 |
 | `src/app/(app)/tasks/page.tsx` | KPI 3칸 + 프로젝트 아코디언. 완료는 프로젝트 안에서 다시 접는다 |
 | `src/components/done-task-row.tsx` | 완료 줄 — 제목·상태·마감일·flow 링크만. 바꾸기 액션도 D-DAY도 없다 |
-| `src/components/project-task-filter.tsx` | 프로젝트 안 목록을 상태 칩으로 거른다. **URL이 아니라 `useState`**다 — 칩 한 번에 59회 훑기와 3MB 재전송을 하지 않는다 (PRD §6.5) |
-| `src/components/task-item.tsx` | 마감일이 없으면 D-DAY 배지를 안 그린다 (785/951이 그렇다) |
+| `src/components/project-task-filter.tsx` | 프로젝트 안 목록을 상태 칩으로 거른다. **URL이 아니라 `useState`**다 — 칩 한 번에 59회 훑기와 3MB 재전송을 하지 않는다 (PRD §6.5). **v2.0.0에 지웠다** — 표가 스스로 거른다 |
+| `src/components/task-item.tsx` | 마감일이 없으면 D-DAY 배지를 안 그린다 (785/951이 그렇다). **v2.0.0에 `TaskTable`로 바뀌었다** |
 | `src/components/icons.tsx` · `app-shell.tsx` | `IconMyTasks` + `NAV` 한 줄, 모바일 탭 `grid-cols-3` → `grid-cols-4` |
 
 **세션을 인자로 받지 않는다.** `loadMyTasks()`가 안에서 `getSession()`을 부른다. 필터 값을
@@ -1463,9 +1503,9 @@ KPI 951/38/133/818, `<details>` 74개, flow 링크 951개, D-DAY는 마감일 �
 | 파일 | 무엇 |
 |---|---|
 | `src/components/skeletons.tsx` | 나눠 쓰는 부분 일곱 개 — `HeadSkeleton`·`KpiRowSkeleton`·`TabBarSkeleton`·`PanelSkeleton`·`TaskRowsSkeleton`·`SummaryCardsSkeleton`·`CommentRowsSkeleton`. 훅이 없어서 서버·클라이언트 양쪽에서 부른다 |
-| `src/app/(app)/(today)/loading.tsx` | 오늘 화면 3단 — KPI 4칸 → 포커스·방치 8:4 → 밀림·멘션 8:4 (일정 8칸이 4단이었는데 v1.6.0에 셸로 갔다) |
+| `src/app/(app)/(today)/loading.tsx` | 오늘 화면 2단 — KPI 4칸 → 표 넉 장 한 단 (일정 8칸이 4단이었는데 v1.6.0에 셸로 갔고, 8:4 2단은 v2.0.0에 접혔다) |
 | `src/app/(app)/risk/loading.tsx` | 제목 → 부서 탭 → KPI 4칸 → 프로젝트 요약 카드 4장(순위 칸 있음) |
-| `src/app/(app)/team/loading.tsx` | 제목 → 부서 탭 → KPI 4칸 → 팀원 카드 6장(2줄씩. 카드가 펼쳐진 채로 온다) |
+| `src/app/(app)/team/loading.tsx` | 제목 → 부서 탭 → KPI 4칸 → 팀원 카드 4장(2줄씩. 카드가 펼쳐진 채로 온다. v2.0.0에 3단 → 1단이 되면서 여섯 장에서 줄였다) |
 | `src/app/(app)/tasks/loading.tsx` | 제목 → KPI 3칸 → 탭(여긴 KPI **아래**다) → 프로젝트 카드 5장. 59개를 훑어서 가장 오래 기다리는 화면이다 |
 | `thread-view.tsx` · `task-actions.tsx` · `search-palette.tsx` | 화면 안 기다림도 같은 규칙 — 댓글 3줄 · 참여자 알약 5개 · 검색 결과 3줄. 글자 한 줄이던 자리인데 결과가 오면 레이어가 열 배로 뛰거나 저장 버튼이 손 아래에서 밀렸다 |
 
@@ -1628,9 +1668,9 @@ MCP 구성원 도구(`flow_list_employees`)로는 못 만든다. 전화번호를
 
 ```
 npx tsc --noEmit   # clean
-npm run lint       # 0 error / 1 warning (아래 참고)
-npm test           # 118/118
-npm run build      # 14 라우트 + proxy
+npm run lint       # 0 error / 2 warning (아래 참고)
+npm test           # 124/124
+npm run build      # 15 라우트 + proxy
 ```
 
 **v0.15.0은 실화면으로 봤다.** 로그인 세션이 여전히 없어서, 셸에 목업 소식 6건을 넣은 임시
@@ -1654,8 +1694,10 @@ Tab 포커스 링이 카드 안쪽에 제대로 그려지는 것(`clip-path`에 
 카드 폭 328px로 뒷판(352px) 안에 들어오는 것. v0.18에서 확인한 것: 탭이 목록을 실제로 거르는 것
 (전체 6 → 읽음 3), 목록만 스크롤되고 탭·전체 읽음이 위에 붙어 있는 것, 넘침 0px.
 
-남아 있는 warning은 [motion/select.tsx:409](../src/components/motion/select.tsx)의
-`react-hooks/exhaustive-deps` 하나다 — beUI에서 가져온 코드라 손대지 않았다.
+남아 있는 warning 둘은 다 beUI에서 가져온 코드라 손대지 않았다 —
+[motion/select.tsx:409](../src/components/motion/select.tsx)의 `react-hooks/exhaustive-deps`와
+[motion/table/index.tsx:110](../src/components/motion/table/index.tsx)의
+`react-hooks/incompatible-library`(`useVirtualizer`가 React Compiler와 안 맞는다고 본다).
 
 beUI 컴포넌트를 가져올 때 걸리는 린트 규칙이 하나 더 있다. React 19의
 `react-hooks/set-state-in-effect`가 `useEffect(() => setMounted(true), [])` 패턴을 막는다.

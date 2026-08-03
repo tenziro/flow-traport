@@ -75,7 +75,7 @@ export function StaleScan({
                   className="mt-0.5 shrink-0 text-neutral-foreground"
                 />
                 <div className="min-w-0 flex-1">
-                  {/* 다른 화면의 업무 제목처럼 한 줄에서 자른다 (task-item.tsx) */}
+                  {/* 다른 화면의 업무 제목처럼 한 줄에서 자른다 (task-table.tsx) */}
                   <p className="truncate text-[13px] leading-snug font-medium">
                     {task.title}
                   </p>

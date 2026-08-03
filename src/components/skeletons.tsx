@@ -77,16 +77,16 @@ export function TabBarSkeleton({ className }: { className?: string }) {
 /**
  * 카드 한 장. 제목 줄은 실제와 같은 세 자리다 — 아이콘, 이름, 오른쪽 건수.
  *
- * `chips`는 제목 아래 상태 필터 줄이다 (오늘 화면의 포커스·밀리는 업무 카드).
+ * `meter`는 제목 아래 분포 막대다 (오늘 화면의 밀리는 업무 카드만 갖는다).
  */
 export function PanelSkeleton({
   children,
   className,
-  chips = false,
+  meter = false,
 }: {
   children: React.ReactNode;
   className?: string;
-  chips?: boolean;
+  meter?: boolean;
 }) {
   return (
     <Card className={className}>
@@ -96,13 +96,7 @@ export function PanelSkeleton({
           <Skeleton className="h-4 w-28" />
           <Skeleton className="ml-auto h-3 w-16" />
         </div>
-        {chips && (
-          <div className="flex flex-wrap gap-1.5">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-6 w-16 rounded-md" />
-            ))}
-          </div>
-        )}
+        {meter && <Skeleton className="h-1 w-full rounded-full" />}
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>
@@ -110,19 +104,60 @@ export function PanelSkeleton({
 }
 
 /**
- * 업무 줄들 (`TaskItem`). 제목 · 상태·프로젝트·마감일 · flow 링크 세 줄에 구분선까지 같다.
+ * 업무 표 (`TaskTable`·`MentionTable`). 머리 줄 하나 + 줄 `count`개고, 줄 높이 44px와
+ * 테두리·머리 줄 면색까지 실제와 같다 — 표는 높이가 `44 × (1 + 줄 수)`로 딱 정해져 있어서
+ * 골격이 그 계산을 그대로 따라가면 내용이 도착할 때 한 픽셀도 안 튄다.
  *
- * 줄마다 제목 폭을 번갈아 준다 — 폭이 다 같으면 표처럼 보여서 업무 목록으로 안 읽힌다.
+ * 줄마다 폭을 번갈아 주지 않는다. 표는 칸 폭이 고정 비율이라 폭이 흔들리면 표로 안 읽힌다 —
+ * 업무 목록이 줄이었을 때(`TaskItem`)와 반대다.
+ *
+ * `chips`는 표 위 상태 칩 줄이다. 상태가 두 종류 이상인 표에만 나오고(오늘 화면의 포커스·
+ * 밀리는·방치된 업무), 카드 머리가 아니라 표와 같은 칸에 든다.
  */
-export function TaskRowsSkeleton({ count }: { count: number }) {
+export function TaskRowsSkeleton({
+  count,
+  cols = 4,
+  chips = false,
+}: {
+  count: number;
+  /** 칸 수. 오늘·팀은 넷(프로젝트·업무명·진행상태·마감일), 멘션 표만 다섯이다. */
+  cols?: 4 | 5;
+  chips?: boolean;
+}) {
   return (
-    <div className="space-y-0.5">
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="border-b border-border/60 px-2 py-2 last:border-0">
-          <Skeleton className={cn("h-4", i % 2 ? "w-1/2" : "w-3/4")} />
-          <Skeleton className="mt-1.5 h-3 w-2/5" />
-          <Skeleton className="mt-1.5 h-3 w-20" />
+    <div className="space-y-2">
+      {chips && (
+        <div className="flex flex-wrap items-center gap-1">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-6 w-16 rounded-md" />
+          ))}
         </div>
+      )}
+      <div className="overflow-hidden rounded-lg border border-border">
+        {/* 머리 줄. 실제와 같이 `bg-muted`에 아래 테두리 하나다 */}
+        <Cells cols={cols} className="border-border bg-muted" barClassName="h-3" />
+        {Array.from({ length: count }, (_, i) => (
+          <Cells key={i} cols={cols} className="border-border/60" barClassName="h-3.5" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 표 한 줄. 둘째 칸(업무명)이 남는 폭을 다 먹는 것까지 실제와 같다 (`titleWidth`). */
+function Cells({
+  cols,
+  className,
+  barClassName,
+}: {
+  cols: number;
+  className: string;
+  barClassName: string;
+}) {
+  return (
+    <div className={cn("flex h-11 items-center gap-4 border-b px-4", className)}>
+      {Array.from({ length: cols }, (_, i) => (
+        <Skeleton key={i} className={cn(barClassName, i === 1 ? "flex-[3]" : "flex-1")} />
       ))}
     </div>
   );

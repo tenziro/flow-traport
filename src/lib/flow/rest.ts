@@ -496,12 +496,21 @@ interface FilterTask {
 const columnData = (task: FilterTask, type: string) =>
   task.columns?.find((c) => c.defaultColumnType === type)?.columnData ?? [];
 
+/**
+ * 등록일 `RGSN_DTTM`. 원본은 `YYYYMMDDHHmmss`인데 앞 8자리만 남긴다 — 화면은 날짜만
+ * 쓰고, 그래야 마감일(`YYYYMMDD`)과 같은 모양이라 `fmtDate` 하나로 둘 다 그린다.
+ */
+const regDateOf = (task: FilterTask) =>
+  (columnData(task, "RGSN_DTTM")[0]?.customColumnData ?? "").slice(0, 8);
+
 /** 업무 한 건의 현재 값. 워크리스트·스탠드업이 주지 않는 것들이다 (PRD §13 A4). */
 export interface TaskFields {
   /** `colabo_commt_srno` — 댓글 도구가 요구하는 ID다 (BUG-005). */
   postId: string;
   /** `YYYYMMDD`. 미설정이면 빈 문자열이다 (`null`이 아니다 — api-spec §2.2). */
   endDate: string;
+  /** 등록일 `YYYYMMDD`. 워크리스트·포커스는 이 값을 안 줘서 여기서만 온다. */
+  regDate: string;
   /** `low`\|`normal`\|`high`\|`urgent`. 미설정이면 빈 문자열이다. */
   priority: string;
   /** 담당자 실명. 없으면 빈 배열이다. */
@@ -537,6 +546,7 @@ export async function getTaskFields(
   return {
     postId: task.postId,
     endDate: columnData(task, "END_DT")[0]?.customColumnData ?? "",
+    regDate: regDateOf(task),
     priority: columnData(task, "PRIORITY")[0]?.customColumnData ?? "",
     workers: columnData(task, "WORKER_ID")
       .map((d) => d.userName || d.customColumnData || "")
@@ -695,6 +705,8 @@ export interface StaleTask {
   title: string;
   /** `YYYYMMDD` */
   endDate: string;
+  /** 등록일 `YYYYMMDD`. 없으면 빈 문자열이다. */
+  regDate: string;
   /** 상태 이름. 옵션 조회가 실패하면 코드가 그대로 남는다 — 그래도 화면에 보여 준다. */
   status: string;
   /** 담당자 실명. 없으면 빈 배열이다. */
@@ -710,6 +722,8 @@ export interface MyTask {
   title: string;
   /** `YYYYMMDD`. 미설정이면 빈 문자열 — 실측 880건 중 720건이 그렇다. */
   endDate: string;
+  /** 등록일 `YYYYMMDD`. 없으면 빈 문자열이다. */
+  regDate: string;
   /** 상태 라벨. 못 풀면 빈 문자열이다. */
   status: string;
   /** 완료 상태인가. */
@@ -779,6 +793,7 @@ export async function listMyTasks(
         postId: task.postId,
         title: columnData(task, "TASK_NM")[0]?.customColumnData ?? "제목 없는 업무",
         endDate: columnData(task, "END_DT")[0]?.customColumnData ?? "",
+        regDate: regDateOf(task),
         status: cell?.optionName?.trim() || STTS_LABEL[cell?.customColumnData ?? ""] || "",
         done: cell?.optionCategory === "2",
         upTaskId: task.upTaskId || "-1",
@@ -836,6 +851,7 @@ export async function listStaleTasks(
         postId: task.postId,
         title: columnData(task, "TASK_NM")[0]?.customColumnData ?? "제목 없는 업무",
         endDate,
+        regDate: regDateOf(task),
         status,
         workers: columnData(task, "WORKER_ID")
           .map((d) => d.userName || d.customColumnData || "")

@@ -21,7 +21,11 @@ import {
  * 골격 두 벌이 같이 들어 있었다. 무리를 하나 두면 넷이 같은 깊이의 형제가 되어 각자
  * 자기 것만 그린다. 무리 이름은 URL에 안 나온다 — 주소는 그대로 `/`다.
  *
- * 오늘 화면의 3단을 그대로 비운다 — KPI 4칸 → 포커스·방치 8:4 → 밀림·멘션 8:4.
+ * 오늘 화면의 2단을 그대로 비운다 — KPI 4칸 → 표 네 개를 한 단으로. 8:4 격자였던 때는
+ * 골격도 8:4였는데, 업무가 표가 되면서 화면이 한 단으로 접혔다 (page.tsx).
+ *
+ * 줄 수는 실제 표의 기본 최대치가 아니라 **자주 나오는 건수**로 잡는다 — 표 높이가
+ * `44 × (1 + 줄 수)`로 정해져 있어서 여기 숫자가 곧 카드 높이다.
  */
 export default function Loading() {
   return (
@@ -29,22 +33,22 @@ export default function Loading() {
       <HeadSkeleton className="mb-8" />
       <KpiRowSkeleton count={4} meter />
 
-      {/* 실제 화면과 같은 12칸 격자에 8:4다. 폭이 다르면 카드 경계가 옮겨 앉는다 */}
-      <div className="mb-8 grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
-        <PanelSkeleton chips className="xl:col-span-8">
-          <TaskRowsSkeleton count={5} />
+      <div className="space-y-4">
+        {/* 포커스 — 상위 5건, 상태 칩 있음 */}
+        <PanelSkeleton>
+          <TaskRowsSkeleton count={5} chips />
         </PanelSkeleton>
-        <PanelSkeleton className="xl:col-span-4">
-          <TaskRowsSkeleton count={3} />
+        {/* 밀리는 업무 — 제목 아래 지연 분포 막대가 있는 유일한 카드다 */}
+        <PanelSkeleton meter>
+          <TaskRowsSkeleton count={4} chips />
         </PanelSkeleton>
-      </div>
-
-      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
-        <PanelSkeleton chips className="xl:col-span-8">
-          <TaskRowsSkeleton count={4} />
+        {/* 나를 부른 사람들 — 이 표만 칸이 다섯이고 상태 칩이 없다 */}
+        <PanelSkeleton>
+          <TaskRowsSkeleton count={3} cols={5} />
         </PanelSkeleton>
-        <PanelSkeleton className="xl:col-span-4">
-          <TaskRowsSkeleton count={3} />
+        {/* 방치된 업무 */}
+        <PanelSkeleton>
+          <TaskRowsSkeleton count={3} chips />
         </PanelSkeleton>
       </div>
     </div>
