@@ -4,9 +4,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { markMentionsRead } from "@/app/(app)/actions";
 import { IconCheck, IconInbox, IconNews } from "@/components/icons";
+import { BottomSheet } from "@/components/motion/bottom-sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { TaskNews } from "@/lib/flow/queries";
+import { useNarrowScreen } from "@/lib/hooks/use-narrow-screen";
 import { cn, fmtDateTime } from "@/lib/utils";
 
 /**
@@ -26,6 +28,16 @@ const NEWS_POLL_MS = 60_000;
  * v0.17까지는 beUI Notification Stack이었는데 접기 버튼을 걷어내자(v0.18) 남는 게 카드 목록
  * 하나여서 스택 자체를 물렸다 — 팝오버를 열면 Radix가 안쪽으로 포커스를 넣어서 스택은 늘
  * 펼친 상태였고, 겹쳐 쌓인 모습은 실제로 보이지도 않았다.
+ *
+ * **좁은 화면에서는 같은 내용이 바텀시트로 열린다** (v1.5.2, §7.3의 1024px 선). 팝오버는 종
+ * 아래에 매달리는데 좁은 화면에서 종은 앱바 오른쪽 끝이라, 폭을 거의 다 쓰는 판이 손이 가장 안
+ * 닿는 구석에 붙어 열렸다. 시트는 아래에서 올라와서 엄지가 닿는 곳에 서고, 손잡이를 아래로
+ * 밀거나 던져서 닫는다 — 좁은 화면에서 유일하게 닫는 법이던 "빈 곳 누르기"는 판이 화면을 거의
+ * 덮고 있을 때 누를 빈 곳이 없다.
+ *
+ * 판 안쪽(`panel`)은 두 껍데기가 **같은 것을 쓴다**. 컴포넌트로 가르지 않고 변수 하나로 둔 건
+ * 탭·읽음 처리·집계를 일곱 개 인자로 넘겨야 하기 때문이다 — 같은 함수 안에 두면 인자가 없다.
+ * 열려 있는 껍데기 하나만 실제로 그려진다 (닫힌 팝오버·시트는 자식을 안 붙인다).
  *
  * 한 줄을 누르면 그 글로 가고(새 탭) 그 알림은 읽음이 된다. 링크는 flow가 만들어 준
  * `connectUrl`이다 — 로그인 화면을 건너서도 대상을 지킨다 (queries.ts, BUG-024).
@@ -65,6 +77,9 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const [tab, setTab] = useState<"all" | "unread" | "read">("all");
+  // 여닫는 상태를 우리가 든다 — 껍데기가 둘이라 어느 쪽이 열릴지 여기서 고른다.
+  const [open, setOpen] = useState(false);
+  const narrow = useNarrowScreen();
 
   // 새 탭이 열리는 동안 이 탭에서는 읽음 처리만 한다. 액션이 revalidate까지 해서 배지와
   // 점이 그 자리에서 줄어든다 — 그게 처리됐다는 신호다.
@@ -86,129 +101,156 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
     (n) => tab === "all" || (tab === "unread" ? n.unread : !n.unread),
   );
 
-  return (
-    <Popover>
-      <PopoverTrigger
-        title="업무 소식"
-        className="relative flex min-h-9 cursor-pointer items-center rounded-md px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground data-open:text-foreground"
-      >
-        <IconNews size={18} />
-        <span className="sr-only">업무 소식{unread > 0 && ` — 안 읽은 소식 ${unread}건`}</span>
-        {/* 안 읽은 것만 배지로 센다. 다 읽은 줄까지 세면 배지가 늘 켜져 있어서 신호가 죽는다 */}
-        {unread > 0 && (
-          <span className="tabular absolute top-0.5 right-0.5 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] leading-4 font-semibold text-primary-foreground">
-            {unread}
-          </span>
-        )}
-      </PopoverTrigger>
-      <PopoverContent
-        aria-label="업무 소식"
-        align="end"
-        className="w-[min(24rem,calc(100vw-2rem))] gap-0 p-0"
-      >
-        {/* 아래 패딩이 없다 — 밑줄 인디케이터(`-bottom-px`)가 이 줄의 구분선 위에 그대로 앉는다.
-            탭 자체 `border-b`는 지운다. 안 지우면 폭이 짧은 선 하나가 위에 더 그려진다 */}
-        <div className="flex items-center justify-between gap-2 border-b border-border px-2 pt-0">
-          <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} variant="underline">
-            <TabsList aria-label="소식 보기" className="border-b-0">
-              <TabsTrigger value="all" className="mb-0 min-h-10 px-2.5 py-2 text-xs">
-                전체
-              </TabsTrigger>
-              <TabsTrigger value="unread" className="mb-0 min-h-10 px-2.5 py-2 text-xs">
-                안 읽음
-              </TabsTrigger>
-              <TabsTrigger value="read" className="mb-0 min-h-10 px-2.5 py-2 text-xs">
-                읽음
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-          {/* 안 읽은 게 없으면 누를 일이 없어서 끈다. 확인 단계는 두지 않는다 — 이전 상태가
-              "안 읽음" 하나고 잃는 데이터가 없다 (PRD §8.1) */}
-          <button
-            type="button"
-            disabled={pending || unread === 0}
-            onClick={() => markRead(...(items ?? []).filter((n) => n.unread).map((n) => n.id))}
-            className="flex min-h-8 shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
-          >
-            <IconCheck size={14} aria-hidden />
-            전체 읽음
-          </button>
-        </div>
+  const panel = (
+    <>
+      {/* 아래 패딩이 없다 — 밑줄 인디케이터(`-bottom-px`)가 이 줄의 구분선 위에 그대로 앉는다.
+          탭 자체 `border-b`는 지운다. 안 지우면 폭이 짧은 선 하나가 위에 더 그려진다 */}
+      <div className="flex items-center justify-between gap-2 border-b border-border px-2 pt-0">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} variant="underline">
+          <TabsList aria-label="소식 보기" className="border-b-0">
+            <TabsTrigger value="all" className="mb-0 min-h-10 px-2.5 py-2 text-xs">
+              전체
+            </TabsTrigger>
+            <TabsTrigger value="unread" className="mb-0 min-h-10 px-2.5 py-2 text-xs">
+              안 읽음
+            </TabsTrigger>
+            <TabsTrigger value="read" className="mb-0 min-h-10 px-2.5 py-2 text-xs">
+              읽음
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        {/* 안 읽은 게 없으면 누를 일이 없어서 끈다. 확인 단계는 두지 않는다 — 이전 상태가
+            "안 읽음" 하나고 잃는 데이터가 없다 (PRD §8.1) */}
+        <button
+          type="button"
+          disabled={pending || unread === 0}
+          onClick={() => markRead(...(items ?? []).filter((n) => n.unread).map((n) => n.id))}
+          className="flex min-h-8 shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+        >
+          <IconCheck size={14} aria-hidden />
+          전체 읽음
+        </button>
+      </div>
 
-        {shown.length === 0 ? (
-          <p
-            className={cn(
-              "flex items-center justify-center gap-2 p-8 text-sm font-medium text-muted-foreground",
-              items === null && "text-danger-foreground",
-            )}
-          >
-            <IconInbox size={16} aria-hidden />
-            {items === null
-              ? "소식을 못 가져왔어요"
-              : tab === "unread"
-                ? "안 읽은 소식이 없어요"
-                : tab === "read"
-                  ? "읽은 소식이 없어요"
-                  : "새 소식이 없어요"}
-          </p>
-        ) : (
-          // 목록만 스크롤한다 — 탭과 전체 읽음은 위에 붙어 있어야 긴 목록에서도 손에 닿는다.
-          <ul className="max-h-[min(28rem,60vh)] overflow-y-auto p-2">
-            {shown.map((item) => (
-              <li key={item.id}>
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  onClick={item.unread ? () => markRead(item.id) : undefined}
-                  className="flex min-w-0 flex-col gap-1.5 rounded-lg px-2.5 py-3 outline-none transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
-                >
-                  <span className="flex min-w-0 items-center justify-between gap-3">
-                    {/* 점과 제목을 한 줄짜리 flex로 묶는다 — `align-middle`로는 글자 상자
-                        기준이라 점이 살짝 위에 떴다. 여기서는 `items-center`가 두 개를
-                        같은 세로 중앙에 놓는다. */}
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      {item.unread && (
-                        <>
-                          {/* 안 읽은 줄에만 점. 눌러서 읽음이 되면 사라진다 */}
-                          <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary" />
-                          <span className="sr-only">안 읽음 · </span>
-                        </>
-                      )}
-                      {/* 한 줄로 자른다 — `[비즈플레이]B2603-…` 처럼 길어서 안 자르면 카드가
-                          제목 한 줄로 찬다. 아래 프로젝트명도 같은 이유로 한 줄이다. */}
-                      <span className="truncate text-sm font-bold">
-                        {item.title || item.project}
-                      </span>
-                    </span>
-                    <span className="tabular shrink-0 text-xs text-muted-foreground">
-                      {fmtDateTime(item.at)}
+      {shown.length === 0 ? (
+        <p
+          className={cn(
+            "flex items-center justify-center gap-2 p-8 text-sm font-medium text-muted-foreground",
+            items === null && "text-danger-foreground",
+          )}
+        >
+          <IconInbox size={16} aria-hidden />
+          {items === null
+            ? "소식을 못 가져왔어요"
+            : tab === "unread"
+              ? "안 읽은 소식이 없어요"
+              : tab === "read"
+                ? "읽은 소식이 없어요"
+                : "새 소식이 없어요"}
+        </p>
+      ) : (
+        // 목록만 스크롤한다 — 탭과 전체 읽음은 위에 붙어 있어야 긴 목록에서도 손에 닿는다.
+        // 이 상한이 시트의 키도 정한다: 시트는 내용 높이만큼만 서므로(`snapPoints=["auto"]`)
+        // 목록이 여기서 멈추면 시트도 화면의 4분의 3쯤에서 멈춘다.
+        <ul className="max-h-[min(28rem,60vh)] overflow-y-auto p-2">
+          {shown.map((item) => (
+            <li key={item.id}>
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noreferrer noopener"
+                onClick={item.unread ? () => markRead(item.id) : undefined}
+                className="flex min-w-0 flex-col gap-1.5 rounded-lg px-2.5 py-3 outline-none transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                <span className="flex min-w-0 items-center justify-between gap-3">
+                  {/* 점과 제목을 한 줄짜리 flex로 묶는다 — `align-middle`로는 글자 상자
+                      기준이라 점이 살짝 위에 떴다. 여기서는 `items-center`가 두 개를
+                      같은 세로 중앙에 놓는다. */}
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    {item.unread && (
+                      <>
+                        {/* 안 읽은 줄에만 점. 눌러서 읽음이 되면 사라진다 */}
+                        <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary" />
+                        <span className="sr-only">안 읽음 · </span>
+                      </>
+                    )}
+                    {/* 한 줄로 자른다 — `[비즈플레이]B2603-…` 처럼 길어서 안 자르면 카드가
+                        제목 한 줄로 찬다. 아래 프로젝트명도 같은 이유로 한 줄이다. */}
+                    <span className="truncate text-sm font-bold">
+                      {item.title || item.project}
                     </span>
                   </span>
-                  {/* 업무명이 제목 자리로 올라갔을 때만 프로젝트명이 아래에 붙는다. 업무명을
-                      못 풀었으면 프로젝트명이 이미 위에 있어서 같은 값을 두 번 쓰지 않는다. */}
-                  {item.title && (
-                    <span className="truncate text-xs font-medium text-muted-foreground">
-                      {item.project}
-                    </span>
-                  )}
-                  <span className="line-clamp-2 text-[13px] text-foreground">{item.message}</span>
-                  <span className="text-xs text-muted-foreground">{item.from}</span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
+                  <span className="tabular shrink-0 text-xs text-muted-foreground">
+                    {fmtDateTime(item.at)}
+                  </span>
+                </span>
+                {/* 업무명이 제목 자리로 올라갔을 때만 프로젝트명이 아래에 붙는다. 업무명을
+                    못 풀었으면 프로젝트명이 이미 위에 있어서 같은 값을 두 번 쓰지 않는다. */}
+                {item.title && (
+                  <span className="truncate text-xs font-medium text-muted-foreground">
+                    {item.project}
+                  </span>
+                )}
+                <span className="line-clamp-2 text-[13px] text-foreground">{item.message}</span>
+                <span className="text-xs text-muted-foreground">{item.from}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
 
-        {/* 목록이 스크롤돼도 이 줄은 아래에 붙어 있다. 숫자는 탭과 무관하게 전체 기준이다 —
-            "안 읽음" 탭에서 세 건만 보일 때 그게 전체 중 몇 건인지가 여기서 읽힌다.
-            소식이 아예 없거나 못 가져왔으면 `0건`을 적지 않는다 — 위 빈 화면이 이미 말한다. */}
-        {!!items?.length && (
-          <p className="tabular border-t border-border px-3 py-2 text-xs text-muted-foreground">
-            전체 {items.length}건{unread > 0 && ` · 안 읽음 ${unread}건`}
-          </p>
-        )}
-      </PopoverContent>
-    </Popover>
+      {/* 목록이 스크롤돼도 이 줄은 아래에 붙어 있다. 숫자는 탭과 무관하게 전체 기준이다 —
+          "안 읽음" 탭에서 세 건만 보일 때 그게 전체 중 몇 건인지가 여기서 읽힌다.
+          소식이 아예 없거나 못 가져왔으면 `0건`을 적지 않는다 — 위 빈 화면이 이미 말한다. */}
+      {!!items?.length && (
+        <p className="tabular border-t border-border px-3 py-2 text-xs text-muted-foreground">
+          전체 {items.length}건{unread > 0 && ` · 안 읽음 ${unread}건`}
+        </p>
+      )}
+    </>
+  );
+
+  return (
+    <>
+      {/* 좁은 화면에서는 이 팝오버가 열리지 않는다. 종은 여전히 여기 있어야 한다 —
+          Radix가 판을 매다는 기준점이고, 껍데기를 갈아도 눌리는 단추는 하나여야 한다 */}
+      <Popover open={open && !narrow} onOpenChange={setOpen}>
+        <PopoverTrigger
+          title="업무 소식"
+          className="relative flex min-h-9 cursor-pointer items-center rounded-md px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground data-open:text-foreground"
+        >
+          <IconNews size={18} />
+          <span className="sr-only">업무 소식{unread > 0 && ` — 안 읽은 소식 ${unread}건`}</span>
+          {/* 안 읽은 것만 배지로 센다. 다 읽은 줄까지 세면 배지가 늘 켜져 있어서 신호가 죽는다 */}
+          {unread > 0 && (
+            <span className="tabular absolute top-0.5 right-0.5 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] leading-4 font-semibold text-primary-foreground">
+              {unread}
+            </span>
+          )}
+        </PopoverTrigger>
+        <PopoverContent
+          aria-label="업무 소식"
+          align="end"
+          className="w-[min(24rem,calc(100vw-2rem))] gap-0 p-0"
+        >
+          {panel}
+        </PopoverContent>
+      </Popover>
+
+      {/* `max-w-none`은 폭을 화면에 맞추려는 것이다 — 시트 기본값 `max-w-2xl`(672px)로는
+          768~1023px에서 양옆에 틈이 생겨서 아래가 잘린 카드처럼 보인다.
+          `p-0`은 탭 줄과 집계 줄의 구분선이 시트 폭을 가로지르게 하려는 것이고(팝오버와 같다),
+          아래 여백은 홈 인디케이터 몫이다 — 없으면 집계 줄이 그 아래로 들어간다 */}
+      <BottomSheet
+        open={open && narrow}
+        onOpenChange={setOpen}
+        title="업무 소식"
+        snapPoints={["auto"]}
+        className="max-w-none"
+        bodyClassName="p-0 pb-[env(safe-area-inset-bottom)]"
+      >
+        {panel}
+      </BottomSheet>
+    </>
   );
 }
