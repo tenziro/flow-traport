@@ -504,7 +504,7 @@ https://api.flow.team
 | `registeredDateTime` | `"20260509093000"` | 작성일시 |
 | `projectTitle`, `title` | | |
 | `content`, `htmlContent` | | 본문 / HTML 본문 |
-| `remarkCount` | `"2"` | 댓글 수 |
+| `remarkCount` | `"2"` | 댓글 수. **최상위만 센다** — 답글은 안 들어간다 (§13.1) |
 | `readYn` | `"Y"` | 읽음 여부 |
 | `sysCode` | `"FLOW"` | 시스템 코드 |
 | `rangeType` | 문서 `"ALL"` / **실제 `"A"` `(관측)`** | 공개 범위 |
@@ -535,7 +535,7 @@ https://api.flow.team
 | `registeredDateTime` | string | ✓ | 작성 일시 |
 | `editedDateTime` | string | ✓ | **수정 일시 — 게시글 단위 "최종 활동" 판정에 가장 쓰기 쉬운 필드** |
 | `connectUrl` | string | | 연결 URL |
-| `remarkCount` | string | ✓ | 댓글 수 |
+| `remarkCount` | string | ✓ | 댓글 수. **최상위만 센다** — 답글은 안 들어간다 (§13.1) |
 | `existYn`, `nextYn`, `totalCount`, `sectionCount` | string | ✓ | |
 
 **응답 `data`** — "원본 목록" 배열 (전부 `required`, **아이템 스키마가 문서에 정의되어 있지 않다**. 2.2처럼 대문자 스네이크 OpenGate 레코드가 온다 `(관측)`):
@@ -551,6 +551,15 @@ https://api.flow.team
 > 못 받는 것은 맞지만, **전용 엔드포인트가 따로 있다** — `GET /user/comments/{postId}` (§13).
 > 같은 게시글 81211887에서 **14건 전부** 왔다. 이 문서가 §13~15 세 도메인을 놓쳤던 탓이다
 > (§0 참고).
+>
+> **`remarks` 만 아는 게 하나 있다 `(실측 2026-08-03)`: `REPLY_CNT`.** 댓글마다 답글 수가 붙어
+> 있어서 "이 댓글에 답글이 몇 개인가"는 여기서만 안다 — §13.1 은 그 필드를 안 주고 답글 본문은
+> 어디에도 없다. 다만 **2건 상한이 그대로 걸려서** 게시글의 답글 현황을 알 수는 없다.
+> 관측 키 전량: `CNTN` · `COLABO_COMMT_SRNO` · `COLABO_REMARK_SRNO` · `COLABO_SRNO` ·
+> `DELETE_YN` · `EDTR_DTTM` · `EMT_CNT` · `EMT_SELF_YN` · `LANG` · `MNGR_DSNC` · `MODIFY_YN` ·
+> `PHTG_USE_YN` · `PIN_USE_YN` · `PIN_YN` · `PRFL_PHTG` · `REMARK_ATCH_REC` · `REMARK_CNTN` ·
+> `REMARK_IMG_ATCH_REC` · `REPLY_CNT` · `RGSN_DTTM` · `RGSR_ID` · `RGSR_JBCL_NM` · `RGSR_NM` ·
+> `SELF_YN` · `SYSTEM_REMARK_YN` · `SYS_CODE`. **부모를 가리키는 필드는 없다.**
 
 > **`title` 이 업무명의 유일한 출처다 `(실측 2026-07-29)`.** 알림(§7.1)은 이름을 하나도 주지
 > 않아서 헤더 소식 카드의 업무명이 여기서 나온다 (`getPostBrief`, PRD §6.1.5). 게시글 82010144
@@ -925,7 +934,30 @@ Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSi
 **§6.3 `remarks` 의 한계(14건 중 2건)를 이 엔드포인트가 없앤다.** 같은 게시글에서 14건 전부 왔다.
 
 **Path**: `postId` (숫자)
-**Query**: 미확인. 응답이 `hasNext` / `lastCursor` 를 주므로 §1.4 커서 규약을 따를 것으로 보인다 `(추정)`. 실측에서는 파라미터 없이 14건이 한 번에 왔다.
+**Query**: **받지 않는다** `(실측 2026-08-03)`. 응답이 `hasNext` / `lastCursor` 를 주니 §1.4 커서 규약을 따를 것으로 보였는데, 쿼리를 **하나라도** 붙이면 `400 VALIDATION_ERROR "잘못된 query 형식입니다."` 다 (`lastCursor` · `cursor` · `size` · `pageSize` · `parentId` · `remarkId` · `replyId` · `depth` 전부). 파라미터 없이 한 번에 다 온다.
+
+> **답글은 안 온다** `(실측 2026-08-03)`. 이건 **최상위 댓글만** 주는 목록이다.
+>
+> | 게시글 | `remarkCount` | `comments` 길이 | `remarks[].REPLY_CNT` | 그 답글이 응답에 |
+> |---|---|---|---|---|
+> | 79974281 | `"2"` | `2` | `0`, `3` | **없음** |
+> | 82028718 | `"11"` | `11` | `1`, `0` | **없음** |
+>
+> `comments` 길이가 `remarkCount` 와 정확히 같다 — 즉 **둘 다 최상위만 센다**. 답글 4건은
+> 어느 쪽에도 안 들어간다. `Comment` 객체에 **부모를 가리키는 필드도, 중첩 배열도 없다**
+> (위 13건 전부 스칼라만. `hasNext: false`).
+>
+> 답글을 읽는 경로도 없다. 경로 후보 6종(`/user/comments/{post}/replies` · `/user/replies/{id}` ·
+> `/user/comments/{post}/{parent}/replies` · `/user/comments/{parent}/replies` ·
+> `/user/posts/{post}/comments/{parent}/replies` · `/user/comments/{post}/{replyId}`)은 전부
+> `404 NOT_FOUND_ERROR`, 쿼리 후보 5종은 위의 `VALIDATION_ERROR` 다 — **후보 11개 전패**.
+>
+> id 공간도 다르다. §7.1 알림의 `remarkId`(9자리)는 **부모 댓글** id이고 이 목록에 있다.
+> `replyId`(7자리)는 별개 공간이고 어느 목록에도 없다. 그래서 **답글 계층을 아는 자리는 알림뿐**이다
+> (`MentionAlarm.replyId !== "-1"` → `isReply`). 화면의 업무 스레드에는 답글이 없고, 들여쓰기는
+> 멘션 상세 모달에서만 한다 (PRD §6.1.2).
+>
+> 답글 **쓰기**는 된다 — §13.2.
 
 **응답 `data`**: `{ hasNext: boolean, lastCursor: number, comments: Comment[] }`
 
@@ -968,7 +1000,23 @@ Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSi
 
 ### 13.2 `POST /user/comments/{postId}` — 게시글 댓글 작성
 
-Body 스키마 미확인 (**쓰기라서 호출하지 않았다**). MCP `flow_create_comment` 는 `projectId` + `postId` 를 요구하는데 이쪽은 경로에 `postId` 하나다.
+Body 스키마 미확인 (**쓰기라서 REST로는 호출하지 않았다**). MCP `flow_create_comment` 는 `projectId` + `postId` 를 요구하는데 이쪽은 경로에 `postId` 하나다.
+
+**MCP `flow_create_comment` 파라미터** `(확인 2026-08-03)`:
+
+| 필드 | 필수 | 설명 |
+|---|---|---|
+| `projectId` / `postId` | ✅ | |
+| `content` | ✅ | 본문 |
+| `replyToRemarkId` | | **부모 댓글 id**(`colabo_remark_srno`). 주면 그 댓글에 달리는 **답글**이다 |
+| `files` / `imageFiles` | | 첨부 |
+
+> **답글은 쓸 수는 있고 읽을 수는 없다.** `replyToRemarkId` 로 남긴 답글은 flow 화면에는 제대로
+> 달리는데, §13.1 이 최상위 댓글만 주니 우리 목록에는 안 나타난다. 그래서 성공 문구가
+> "답글은 flow에서 볼 수 있어요"까지 말한다 (`createComment`).
+>
+> 수정은 `flow_update_comment` 이고 `{ projectId, postId, remarkId, content }` 가 전부 필수다.
+> 첨부는 **합치지 않고 덮는다** — 빼먹으면 기존 첨부가 사라진다.
 
 ---
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
   createComment,
   loadParticipants,
@@ -16,9 +16,10 @@ import type { Participant, TaskFields } from "@/lib/flow/rest";
 import { TASK_STATUS, type TaskStatus } from "@/lib/task-status";
 import { TASK_PRIORITY, type TaskPriority } from "@/lib/task-priority";
 import { DateField } from "@/components/date-field";
-import { IconComment, IconNormal } from "@/components/icons";
+import { IconComment, IconLastComment, IconNormal } from "@/components/icons";
 import { Button } from "@/components/motion/button/base";
 import { Input } from "@/components/motion/input";
+import { type ReplyTarget } from "@/components/thread-view";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, fmtDate } from "@/lib/utils";
 
@@ -669,18 +670,29 @@ function WorkerField({
   );
 }
 
-/** 댓글 한 줄 남기기. 상세 모달의 댓글 칸이 이걸 쓴다. */
+/**
+ * 댓글·답글 한 줄 남기기. 상세 모달의 댓글 칸이 이걸 쓴다.
+ *
+ * `replyTo`가 있으면 그 댓글에 달리는 답글이다. **남긴 답글은 위 목록에 안 나타난다** —
+ * flow API에 답글을 읽는 경로가 없다 (`createComment` 주석). 그래서 성공 문구가 어디서
+ * 볼 수 있는지까지 말한다.
+ */
 export function CommentForm({
   projectId,
   taskId,
   title,
   path,
+  replyTo,
+  onCancelReply,
   onSaved,
 }: {
   projectId: string;
   taskId: number;
   title: string;
   path: string;
+  /** 답글을 달 댓글. 없으면 일반 댓글이다. */
+  replyTo?: ReplyTarget | null;
+  onCancelReply?: () => void;
   /**
    * 남기기가 성공한 뒤. 바로 위 목록을 다시 부르는 데 쓴다 (`TaskThread`) — `revalidatePath`가
    * 도착하는 데 실측 6.5초라, 그동안 방금 남긴 말이 목록에 없으면 남았는지 알 수 없다.
@@ -691,27 +703,53 @@ export function CommentForm({
     createComment,
     null,
   );
+  const input = useRef<HTMLInputElement>(null);
 
   // `useActionState` 결과는 다음 제출까지 같은 객체다 — 한 번 남기면 한 번만 부른다.
   useEffect(() => {
     if (result?.ok) onSaved?.();
   }, [result, onSaved]);
 
+  // `답글`은 목록 위쪽에서도 누른다 — 커서를 옮겨 주지 않으면 입력칸을 다시 찾아 눌러야 한다.
+  useEffect(() => {
+    if (replyTo) input.current?.focus();
+  }, [replyTo]);
+
   return (
     <form action={action} className="flex flex-wrap items-center gap-2">
       <TaskRef projectId={projectId} taskId={taskId} path={path} />
       {/* 업무명은 `postId`를 찾는 검색어다 — 서버가 이걸로 프로젝트 업무를 줄인다 (rest.ts) */}
       <input type="hidden" name="title" value={title} />
+      {replyTo && <input type="hidden" name="replyToRemarkId" value={replyTo.id} />}
+
+      {/* 누구에게 답하는지 한 줄로 세운다 — 입력칸 하나로 댓글과 답글을 다 받으니
+          이 줄이 없으면 지금 어느 쪽인지 알 수 없다. `w-full`로 제 줄을 차지한다 */}
+      {replyTo && (
+        <p className="flex w-full min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <IconLastComment size={12} className="shrink-0 text-primary" />
+          <span className="min-w-0 truncate">
+            <span className="font-medium text-foreground">{replyTo.from}</span>님에게 답글
+          </span>
+          <button
+            type="button"
+            onClick={onCancelReply}
+            className="shrink-0 cursor-pointer font-medium text-muted-foreground/70 transition-colors hover:text-primary"
+          >
+            그만두기
+          </button>
+        </p>
+      )}
 
       <label className="sr-only" htmlFor={`comment-${taskId}`}>
-        댓글
+        {replyTo ? "답글" : "댓글"}
       </label>
       {/* beUI Input 기본 치수(h-11 text-base)를 촘촘한 행에 맞춘다. 모서리는 기본값
           그대로다 — 바로 옆 `남기기` 버튼과 같은 계열이라 둘이 한 벌로 붙는다. */}
       <Input
+        ref={input}
         id={`comment-${taskId}`}
         name="content"
-        placeholder="댓글 남기기"
+        placeholder={replyTo ? "답글 남기기" : "댓글 남기기"}
         maxLength={2000}
         className="min-w-0 flex-1"
         classNames={{ field: "h-8 bg-background", input: "text-sm" }}

@@ -8,6 +8,7 @@ import {
   listMyTasks,
   mergeMentionComments,
   resolvePostId,
+  stripMentions,
   type FlowComment,
   type MentionAlarm,
   type MentionRow,
@@ -428,5 +429,30 @@ describe('업무 줄에 붙는 마지막 댓글', () => {
     assert.equal(isChangeLog(''), false);
     assert.equal(isChangeLog(null), false);
     assert.equal(isChangeLog(undefined), false);
+  });
+});
+
+describe('댓글에서 부른 이름 걷어 내기', () => {
+  it('마크다운을 벗기고 이름만 남긴다 — @도 뗀다', () => {
+    assert.equal(stripMentions('@[서동조](djseo7) 확인 부탁드립니다'), '서동조 확인 부탁드립니다');
+  });
+
+  it('한 댓글에 여러 명이 불려 있어도 전부 걷는다', () => {
+    assert.equal(
+      stripMentions('@[이종석](jslee) @[장혜진](wkd41051) 회의 잡을게요'),
+      '이종석 장혜진 회의 잡을게요',
+    );
+  });
+
+  it('부른 이름이 없으면 원문 그대로다', () => {
+    assert.equal(stripMentions('오늘 배포합니다'), '오늘 배포합니다');
+    assert.equal(stripMentions(''), '');
+  });
+
+  it('본문에 섞인 @나 대괄호는 건드리지 않는다 — 이메일과 목록이 그렇게 온다', () => {
+    assert.equal(
+      stripMentions('jslee@traport.com 으로 보냈어요 [완료]'),
+      'jslee@traport.com 으로 보냈어요 [완료]',
+    );
   });
 });

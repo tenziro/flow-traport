@@ -6,7 +6,7 @@ import { IconLastComment } from "@/components/icons";
 import { Button } from "@/components/motion/button/base";
 import { CommentRowsSkeleton } from "@/components/skeletons";
 import { CommentForm } from "@/components/task-actions";
-import { CommentRows } from "@/components/thread-view";
+import { CommentRows, type ReplyTarget } from "@/components/thread-view";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +45,8 @@ export function TaskThread({
   const [all, setAll] = useState(false);
   /** 댓글을 남긴 뒤 다시 부르는 스위치. 방금 남긴 말이 목록에 안 보이면 남았는지 알 수 없다. */
   const [reload, setReload] = useState(0);
+  /** 답글을 달 댓글. 비어 있으면 입력칸이 일반 댓글이다. */
+  const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -57,7 +59,12 @@ export function TaskThread({
     };
   }, [projectId, taskId, title, postId, reload]);
 
-  const onSaved = useCallback(() => setReload((n) => n + 1), []);
+  const onSaved = useCallback(() => {
+    setReload((n) => n + 1);
+    // 남긴 뒤에는 일반 댓글로 돌아온다 — 답글 하나 달고 다음 말을 또 그 밑에 붙일 이유는 없다
+    setReplyTo(null);
+  }, []);
+  const cancelReply = useCallback(() => setReplyTo(null), []);
 
   if (!got) {
     return (
@@ -88,9 +95,26 @@ export function TaskThread({
       )}
 
       <div className="space-y-3 border-b border-border px-5 py-4">
-        <p className="tabular text-xs font-semibold text-muted-foreground">
-          댓글{comments.length > 0 && ` ${comments.length}개`}
-        </p>
+        {/* 갯수와 펼치기를 한 줄 양 끝에 둔다 — 둘 다 "이 목록이 전부냐"에 대한 답이라
+            같은 줄에서 읽힌다. 버튼을 아래 줄에 따로 두면 목록의 첫 줄처럼 보였다 */}
+        <div className="flex items-center justify-between gap-2">
+          <p className="tabular text-xs font-semibold text-muted-foreground">
+            댓글{comments.length > 0 && ` ${comments.length}개`}
+          </p>
+          {hidden > 0 && !all && (
+            // `-my-1` — 버튼(h-7)이 줄 높이를 밀어 본문 간격이 어긋나는 걸 막는다
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setAll(true)}
+              className="-my-1 h-7 px-2"
+            >
+              <IconLastComment size={13} />
+              댓글 다 보기
+            </Button>
+          )}
+        </div>
 
         {comments.length === 0 ? (
           <p
@@ -100,22 +124,11 @@ export function TaskThread({
             {got.message}
           </p>
         ) : (
-          <>
-            {/* 목록 위에 둔다 — 접었을 때 감춰지는 건 위쪽(오래된) 댓글이다 */}
-            {hidden > 0 && !all && (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => setAll(true)}
-                className="h-7 px-2"
-              >
-                <IconLastComment size={13} />
-                댓글 다 보기
-              </Button>
-            )}
-            <CommentRows comments={all ? comments : comments.slice(-SHOWN)} />
-          </>
+          <CommentRows
+            comments={all ? comments : comments.slice(-SHOWN)}
+            onReply={setReplyTo}
+            replyingTo={replyTo?.id}
+          />
         )}
 
         {/* 입력칸은 제일 아래다 — 위의 대화를 읽고 그 끝에 말을 붙이는 순서다 */}
@@ -124,6 +137,8 @@ export function TaskThread({
           taskId={taskId}
           title={title}
           path={path}
+          replyTo={replyTo}
+          onCancelReply={cancelReply}
           onSaved={onSaved}
         />
       </div>

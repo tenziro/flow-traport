@@ -354,6 +354,12 @@ export interface FlowComment {
  * `flow_get_post`의 `remarks`는 같은 게시글에서 14건 중 2건만 줬다 (api-spec §13.1).
  * 여기는 14건이 다 온다.
  *
+ * **답글은 안 온다** (실측 2026-08-03, api-spec §13.1). 이건 최상위 댓글만 주는 목록이다 —
+ * 게시글 79974281은 댓글 2건인데 그중 하나의 `REPLY_CNT`가 3이고, 그 답글 셋은 응답에 없다.
+ * 답글 id(알림의 `replyId`)는 댓글 id와 자리수부터 다른 별개 공간이고, 답글을 읽는 경로는
+ * `/user/*`에 없다 (경로·쿼리 후보 11개 전부 404 또는 `VALIDATION_ERROR`). 그래서 화면의
+ * 스레드에는 답글이 없고, 답글 계층을 아는 자리는 알림뿐이다 (`MentionAlarm.replyId`).
+ *
  * ponytail: 첫 페이지만 본다. `hasNext`·`lastCursor`는 오는데 커서 파라미터 이름이
  * 문서화되지 않았다 — 한 게시글의 댓글이 한 페이지를 넘기면 그때 확인하면 된다.
  */
@@ -390,9 +396,14 @@ export function lastHumanComment(comments: FlowComment[]): FlowComment | null {
   return null;
 }
 
-/** `@[서동조](djseo7)` → `@서동조`. 알림은 걷어서 주는데 댓글 API는 안 걷는다. */
+/**
+ * `@[서동조](djseo7)` → `서동조`. 알림은 걷어서 주는데 댓글 API는 안 걷는다.
+ *
+ * `@`까지 뗀다. 여기서 이름을 부르는 건 flow 안에서 알림을 보내는 동작이라 우리 화면에서는
+ * 누를 데도 없는 표시고, 한 댓글에 서너 명이 불려 있으면 `@`가 줄머리를 채워 본문이 안 읽힌다.
+ */
 export const stripMentions = (contents: string) =>
-  contents.replace(/@\[([^\]]*)\]\([^)]*\)/g, "@$1");
+  contents.replace(/@\[([^\]]*)\]\([^)]*\)/g, "$1");
 
 /** 관측한 시스템 코드 (api-spec §13.1). 전체 코드표는 flow가 공개하지 않았다. */
 const SYSTEM_FIELD: Record<string, string> = {

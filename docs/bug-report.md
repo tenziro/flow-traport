@@ -42,6 +42,7 @@
 | [BUG-036](#bug-036) | `revalidatePath`에 쿼리스트링을 넘겨 캐시가 안 지워졌다 | 해결 (v1.4.0) |
 | [BUG-037](#bug-037) | 모달에서 바꾼 값이 업무 줄에 6.5초 뒤에야 닿았다 | 해결 (v1.4.1) |
 | [BUG-038](#bug-038) | 우선순위·담당자를 한 번 못 가져오면 새로고침까지 잠겼다 | 해결 (v1.4.2) |
+| [BUG-039](#bug-039) | 내용이 긴 모달이 위아래로 잘려 끝까지 못 올라갔다 | 해결 (v2.2.0) |
 
 ---
 
@@ -1340,6 +1341,42 @@ if (!result?.fields) setAsked(false);
 **교훈 3**: 합성 실패 주입은 오염되기 쉽다. POST를 **한 번만** 끊었을 때는 Next가 조용히 재시도해서
 성공으로 보였다 — 처리 효과를 잘못 읽을 수 있었다. 차단 창을 열어 두고 끊긴 횟수를 함께 세서야
 `POST 2회`(원본 + 재시도)가 드러났다.
+
+---
+
+## BUG-039
+
+**내용이 긴 모달이 위아래로 잘려 끝까지 못 올라갔다** — 2026-08-03, 해결 (v2.2.0)
+
+신고는 "모달 내용이 길어질 경우 내용 짤림"이었다. 본문과 댓글이 모달로 들어온 뒤(v2.1.0)
+긴 업무에서 머리글이 화면 위로 잘렸고, **스크롤을 올려도 안 나왔다**.
+
+원인은 벤더 모달의 스크롤 칸이다:
+
+```tsx
+<div className="… overflow-y-auto p-4">   {/* 스크롤 칸 */}
+  <div className="flex min-h-full items-center justify-center">   {/* ← items-center */}
+```
+
+`overflow-y-auto` 칸에서 `align-items: center`로 가운데 정렬한 자식이 칸보다 크면, **위로 넘친
+만큼이 스크롤 범위 밖에 남는다.** 스크롤은 `scrollTop >= 0`만 갈 수 있는데 넘침이 위아래로 반씩
+갈려 있어서, 위쪽 절반은 어떤 `scrollTop`으로도 닿지 못한다 (flexbox 정렬과 오버플로의
+알려진 상호작용). 짧은 내용에서는 안 보이는 결함이라 v2.1.0까지 드러나지 않았다.
+
+**처리**: 정렬을 스크롤 칸에서 안쪽 열 방향 flex로 내렸다.
+
+```tsx
+<div className="… overflow-y-auto p-4">
+  <div className="flex min-h-full w-full flex-col items-center justify-center py-8">
+```
+
+`min-h-full`이 있으니 내용이 짧으면 칸 높이만큼 늘어 `justify-center`가 가운데에 세우고, 길면
+자연 높이로 자라 **위에서부터** 흐른다 — 넘침이 아래쪽 한 방향뿐이라 전부 닿는다.
+
+호출자마다 `max-h`를 재지 않은 이유는 그게 증상 자리라서다. 잘림은 이 칸 하나에서 나오고,
+그 칸을 앱의 모든 모달이 쓴다 — 여기서 고치면 다 낫는다. 벤더 파일이라
+[center-morph-modal.tsx](../src/components/motion/center-morph-modal.tsx) 머리 주석에
+**이탈 #4**로 적었다.
 
 ---
 

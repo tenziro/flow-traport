@@ -8,6 +8,11 @@
 //    바꿨다 (`mounted`). 원본 패턴이 React 19 린트에 걸린다 — 아래 주석 참고.
 // 3. 패널 모서리를 `rounded-[30px]` → `rounded-lg`. 이 앱의 모서리는 카드 기준 8px이고,
 //    모달은 화면에서 가장 큰 면인데 그 면만 30px이면 안에 든 카드·버튼과 계열이 어긋난다.
+// 4. 스크롤 칸의 세로 정렬을 `items-center` → 안쪽 `min-h-full justify-center`로 바꿨다.
+//    원본은 `overflow-y-auto` 칸에 `items-center`를 걸어서, 내용이 화면보다 길면 위로
+//    넘친 만큼이 스크롤 범위 밖에 남아 **끝까지 못 올라간다** (업무 상세 모달의 긴 본문에서
+//    머리글이 잘렸다). 열 방향 flex에 `min-h-full`을 주면 짧을 때는 가운데, 길 때는
+//    위에서부터 자라 전부 닿는다.
 // 나머지 구조·모션·포커스 트랩은 그대로 둔다.
 
 import {
@@ -314,10 +319,10 @@ export function CenterMorphModalContent({
                 )}
               />
 
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-y-auto p-4 drop-shadow-2xl">
+              <div className="pointer-events-none absolute inset-0 overflow-y-auto p-4 drop-shadow-2xl">
                 {/* Drop-shadow reads the clipped child's alpha, so depth follows the
                     unfolding silhouette without introducing another panel layer. */}
-                <div className="flex w-full flex-col items-center py-8">
+                <div className="flex min-h-full w-full flex-col items-center justify-center py-8">
                   <motion.div
                     ref={panelRef}
                     id={context.contentId}

@@ -25,8 +25,11 @@ const ROW_HEIGHT = 44;
  * 나를 부른 사람들 표 (PRD §6.1.2).
  *
  * **이 표만 열이 다르다.** 업무 표는 프로젝트·업무명·상태·마감일인데, 여기서 알아야 하는 건
- * "누가 뭐라고 불렀나"다 — 부른 사람과 마지막 말이 그 자리를 차지한다. 표 겉모양·줄 높이·
+ * "누가 언제 불렀나"다 — 부른 사람과 시각이 그 자리를 차지한다. 표 겉모양·줄 높이·
  * 업무명을 눌러 모달을 여는 방식은 업무 표와 같다.
+ *
+ * 댓글 본문은 줄에 안 낸다. 한 줄에 잘려 들어간 120자는 무슨 말인지 알기에는 모자라고
+ * 훑기에는 길어서, 업무명 옆 말풍선 숫자로 "몇 마디 있나"만 알리고 본문은 모달에서 읽는다.
  */
 export function MentionTable({
   rows,
@@ -55,7 +58,7 @@ export function MentionTable({
         key: "title",
         header: "업무명",
         sortable: true,
-        width: "30%",
+        width: "50%",
         cell: (row) => (
           <button
             type="button"
@@ -72,19 +75,21 @@ export function MentionTable({
                 : `알림 ${row.count}개`
             }
           >
-            {/* 안 읽은 게 남았으면 배지를 꽉 채운다. 옅은 배경(다 읽은 줄)과 나란히
-                놓였을 때 눈이 먼저 가는 쪽이 아직 답 안 한 쪽이다 */}
+            <span className="min-w-0 truncate">{row.title}</span>
+            {/* 말풍선 + 숫자. 업무명 뒤에 붙는다 — 앞에 두면 줄 번호처럼 읽히고, 알아야 하는
+                건 업무명이 먼저다. 안 읽은 게 남았으면 꽉 채운다: 옅은 배경(다 읽은 줄)과
+                나란히 놓였을 때 눈이 먼저 가는 쪽이 아직 답 안 한 쪽이다 */}
             <span
               className={cn(
-                "tabular inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-xs font-semibold",
+                "tabular inline-flex h-5 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-semibold",
                 row.unread > 0
                   ? "bg-primary text-primary-foreground"
                   : "bg-primary/15 text-primary",
               )}
             >
+              <IconLastComment size={11} />
               {row.count}
             </span>
-            <span className="min-w-0 truncate">{row.title}</span>
           </button>
         ),
       },
@@ -92,25 +97,16 @@ export function MentionTable({
         key: "project",
         header: "프로젝트",
         sortable: true,
-        width: "16%",
+        width: "18%",
         // 업무 표와 같이 업무명보다 한 톤 흐리다 (`TaskTable`)
         cell: (row) => <span className="text-muted-foreground">{row.project ?? "—"}</span>,
       },
-      { key: "lastFrom", header: "부른 사람", sortable: true, width: "14%" },
-      {
-        key: "lastComment",
-        header: "마지막 말",
-        width: "26%",
-        // 알림 조회가 실패하면 본문이 없다 — 그 자리만 비운다.
-        cell: (row) => (
-          <span className="text-muted-foreground">{row.alarms[0]?.content ?? "—"}</span>
-        ),
-      },
+      { key: "lastFrom", header: "부른 사람", sortable: true, width: "16%" },
       {
         key: "lastAt",
         header: "시각",
         sortable: true,
-        width: "14%",
+        width: "16%",
         cell: (row) => <span className="tabular">{fmtDateTime(row.lastAt)}</span>,
       },
     ],

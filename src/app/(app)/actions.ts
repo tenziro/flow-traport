@@ -77,6 +77,15 @@ export async function updateTaskStatus(
   );
 }
 
+/**
+ * 댓글·답글 남기기 (PRD §13 A3).
+ *
+ * `replyToRemarkId`가 있으면 그 댓글에 달리는 **답글**이다 (`flow_create_comment`).
+ *
+ * **답글은 남긴 뒤 이 화면에 안 보인다.** `GET /user/comments/{postId}`가 최상위 댓글만 주고
+ * 답글을 읽는 경로는 flow API에 없다 (`listComments` 주석, 2026-08-03 실측). 그래서 성공
+ * 문구가 "flow에서 볼 수 있어요"까지 말한다 — 아무 말 없이 목록이 그대로면 남았는지 알 수 없다.
+ */
 export async function createComment(
   _prev: ActionResult | null,
   form: FormData,
@@ -85,6 +94,7 @@ export async function createComment(
   const taskId = String(form.get("taskId") ?? "");
   const title = String(form.get("title") ?? "");
   const content = String(form.get("content") ?? "").trim();
+  const replyTo = String(form.get("replyToRemarkId") ?? "");
 
   if (!projectId || !taskId) return { ok: false, message: "업무를 찾지 못했어요." };
   if (!content) return { ok: false, message: "댓글 내용을 적어주세요." };
@@ -97,8 +107,13 @@ export async function createComment(
 
   return run(
     async (mcp) => {
-      await mcp.call("flow_create_comment", { projectId, postId, content });
-      return "댓글을 남겼어요.";
+      await mcp.call("flow_create_comment", {
+        projectId,
+        postId,
+        content,
+        ...(replyTo ? { replyToRemarkId: replyTo } : {}),
+      });
+      return replyTo ? "답글을 남겼어요. 답글은 flow에서 볼 수 있어요." : "댓글을 남겼어요.";
     },
     form.get("path"),
   );

@@ -86,11 +86,29 @@ export function ThreadView({
   );
 }
 
+/** 답글을 달 대상. `id`는 flow의 댓글 번호(`colabo_remark_srno`)다. */
+export type ReplyTarget = { id: string; from: string };
+
 /**
  * 댓글 줄들. 멘션 패널(`ThreadView`)과 업무 상세 모달(`TaskThread`)이 같이 쓴다 —
  * 같은 댓글이 자리마다 다르게 생기면 같은 것인지 알아보는 데 시간이 든다.
+ *
+ * **답글은 목록에 안 들여쓴다.** `GET /user/comments/{postId}`가 최상위 댓글만 주고 답글을
+ * 읽는 경로가 flow API에 없어서 (`listComments` 주석) 여기 오는 줄은 전부 같은 층이다.
+ * 들여쓸 게 없으니 계층 표시도 안 만든다 — 알림이 부모·답글을 구분해 주는 멘션 상세
+ * 모달에서만 한 칸 들여쓴다 (`MentionDetail`).
  */
-export function CommentRows({ comments }: { comments: ThreadComment[] }) {
+export function CommentRows({
+  comments,
+  onReply,
+  replyingTo,
+}: {
+  comments: ThreadComment[];
+  /** 주면 사람 댓글에 `답글` 버튼이 붙는다. 시스템 기록에는 안 붙인다 — 답할 상대가 없다. */
+  onReply?: (target: ReplyTarget) => void;
+  /** 지금 답글을 달고 있는 댓글. 입력칸이 어느 말에 붙는지 목록에서도 보인다. */
+  replyingTo?: string;
+}) {
   return (
     <ul className="space-y-2.5">
       {comments.map((comment) => (
@@ -114,6 +132,20 @@ export function CommentRows({ comments }: { comments: ThreadComment[] }) {
               </span>
               {comment.system && <span className="text-muted-foreground/70">기록</span>}
               <span className="text-muted-foreground">{fmtDateTime(comment.at)}</span>
+              {/* 이름·시각과 같은 줄이다. 줄을 하나 더 쓰면 댓글 스무 개에 빈 줄이 스무 개고,
+                  hover에 숨기면 만질 수 있는지를 만져 봐야 안다 */}
+              {onReply && !comment.system && (
+                <button
+                  type="button"
+                  onClick={() => onReply({ id: comment.id, from: comment.from })}
+                  className={cn(
+                    "cursor-pointer font-medium transition-colors hover:text-primary",
+                    replyingTo === comment.id ? "text-primary" : "text-muted-foreground/70",
+                  )}
+                >
+                  답글
+                </button>
+              )}
             </p>
             {/* 줄바꿈은 살린다 — 댓글이 목록 형태로 오는 경우가 많다.
                 `wrap-anywhere` — 링크는 띄어쓰기가 없어서 안 끊으면 그 한 덩어리가

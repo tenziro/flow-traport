@@ -1,6 +1,6 @@
 # 개발 진행 상황
 
-버전 2.1.0 · 2026-08-03 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
+버전 2.2.0 · 2026-08-03 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
 
 ## 요약
 
@@ -1391,6 +1391,33 @@ Tailwind `dark:` 변인은 블록 형태(`@custom-variant dark { … @slot }`)�
 **업무명·프로젝트명은 한 줄에서 자른다** (v1.1.0). 나를 부른 사람들은 제목이 두 줄까지
 흐르고 메타 줄이 접혀서 어떤 줄은 2단, 어떤 줄은 3단이었다. 제목은 `truncate`, 메타 줄은
 `flex-wrap`을 떼고 프로젝트명만 줄어들게 했다. 업무 줄·리스크 보드·방치 업무 스캔도 같다.
+
+### 답글, 멘션 표 말풍선, 긴 모달 (v2.2.0)
+
+댓글 자리에 남은 넷을 붙였다 — 답글 달기, `@` 걷기, 멘션 표의 댓글 텍스트 → 숫자,
+그리고 긴 모달이 잘리던 것.
+
+| 파일 | 무엇 |
+|---|---|
+| `src/app/(app)/actions.ts` | `createComment`가 `replyToRemarkId`를 받아 `flow_create_comment`로 넘긴다. 답글이면 성공 문구가 다르다 |
+| `src/components/thread-view.tsx` | `CommentRows`에 `onReply`·`replyingTo`. 사람 댓글 줄에만 `답글`이 붙는다 |
+| `src/components/task-actions.tsx` | `CommentForm`이 `replyTo`를 받는다 — 숨은 입력 + "○○님에게 답글" 한 줄 + `그만두기` + 커서 이동 |
+| `src/components/task-thread.tsx` | `replyTo` 상태를 들고 둘을 잇는다. 갯수와 `댓글 다 보기`를 한 줄 양 끝으로 |
+| `src/lib/flow/rest.ts` | `stripMentions`가 `@`까지 뗀다 (`@[서동조](djseo7)` → `서동조`) |
+| `src/components/mention-table.tsx` | `마지막 말` 칸을 걷고 업무명 옆에 말풍선 + 숫자 |
+| `src/components/motion/center-morph-modal.tsx` | 스크롤 칸 세로 정렬 — 벤더 이탈 #4 |
+
+| 결정 | 이유 |
+|---|---|
+| 답글은 **쓰기만** | `GET /user/comments/{postId}`가 최상위 댓글만 준다. 실측 두 게시글에서 `comments` 길이가 `remarkCount`와 정확히 같고(2=2, 11=11) `REPLY_CNT` 4건은 어느 쪽에도 없다. `Comment`에 부모 필드도 중첩 배열도 없다. 답글 읽는 경로 후보 11개 전패 (api-spec §13.1) |
+| 그래서 모달 스레드에 들여쓰기 없음 | 들여쓸 데이터가 없다. 계층을 아는 자리는 알림뿐이라(`replyId`) 멘션 상세 모달만 한 칸 들여쓴다 |
+| 성공 문구가 "flow에서 볼 수 있어요"까지 | 남긴 답글이 위 목록에 안 나타난다. 아무 말 없이 목록이 그대로면 남았는지 알 수 없다 |
+| `@`까지 뗀다 | flow에서 이름을 부르는 건 알림을 보내는 동작이다 — 우리 화면에서는 누를 데도 없는 표시고, 서너 명이 불려 있으면 `@`가 줄머리를 채워 본문이 안 읽힌다 |
+| 댓글 텍스트 → 말풍선 + 숫자 | 한 줄에 잘린 120자는 알기에 모자라고 훑기에 길다. 칩은 업무명 뒤다(앞이면 줄 번호로 읽힌다). 안 읽은 게 있으면 꽉 채운다 |
+| 모달은 벤더를 고쳤다 | `overflow-y-auto` + `items-center`는 위로 넘친 만큼이 스크롤 범위 밖에 남는다. 호출자마다 높이를 재는 대신 칸 하나를 고쳐 앱의 모든 모달이 같이 낫는다 |
+
+**미검증**: 브라우저 확인을 못 했다 — Playwright MCP가 세션 내내 `Browser is already in use`다.
+`tsc`·eslint(0 errors)·`npm test`(128/128)·`npm run build`(15/15)까지는 통과했다.
 
 ### 상세 모달 본문·댓글, 표 손질 (v2.1.0)
 
