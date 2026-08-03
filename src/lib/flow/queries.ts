@@ -6,6 +6,7 @@
  * 우리가 하는 집계는 멘션 접기(`groupMentions`) 하나뿐이다.
  */
 
+import { cache } from "react";
 import { rollupProjects, type ProjectRollup, type StandupMember } from "@/lib/aggregate";
 import { kstYmd } from "@/lib/aggregate/date";
 import { getSession } from "@/lib/auth";
@@ -133,14 +134,24 @@ export async function flowMcp(): Promise<FlowMcp> {
   return createFlowMcp(session.accessToken);
 }
 
+/**
+ * 오늘 일정 (PRD §13 B3). KST 하루가 곧 화면의 "오늘"이다.
+ *
+ * `cache()`로 감싼 것은 한 요청 안에서 두 곳이 같은 하루를 보기 때문이다 — 셸의 계정 팝오버가
+ * 여는 서랍(app-shell.tsx)과 오늘 화면의 카드다. 감싸 두면 `/`에서도 왕복이 한 번이다.
+ * 인자를 안 받는 것도 같은 이유다: 부르는 쪽마다 `Date.now()`가 달라지면 캐시 키가 갈린다.
+ */
+export const loadTodayEvents = cache(async (): Promise<FlowEvent[] | null> => {
+  const today = kstYmd(Date.now());
+  return listEvents(`${today}000000`, `${today}235959`).catch(() => null);
+});
+
 export async function loadToday(): Promise<TodayData> {
   const mcp = await flowMcp();
   const now = Date.now();
 
   // ponytail: 보조 데이터는 실패해도 null로 흘린다. flow_list_alarms가 서버측 스키마
   // 오류로 죽는 걸 이미 봤다(docs/bug-report.md) — 한 도구 때문에 화면 전체를 날리지 않는다.
-  const today = kstYmd(now);
-
   const [worklist, picks, wide, alarms, events] = await Promise.all([
     mcp.call<Worklist>("flow_get_my_worklist", { format: "structured" }),
     // 화면에 뿌리는 포커스는 5개인데 20개를 받는다. 나머지 15개는 **마지막 댓글**용이다 —
@@ -156,8 +167,8 @@ export async function loadToday(): Promise<TodayData> {
       .catch(() => null),
     // 멘션 댓글 본문은 워크리스트에 없다. 실패하면 본문만 빠지고 행은 그대로 뜬다.
     listMentionAlarms().catch(() => null),
-    // 오늘 일정 (PRD §13 B3). KST 하루가 곧 화면의 "오늘"이다.
-    listEvents(`${today}000000`, `${today}235959`).catch(() => null),
+    // 셸이 이미 부른 그 하루다 — `cache()`가 왕복을 하나로 묶는다.
+    loadTodayEvents(),
   ]);
 
   const stale = staleTasks(worklist, wide, picks);

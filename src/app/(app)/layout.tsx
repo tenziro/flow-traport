@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/auth";
 import { loadMyAccount } from "@/lib/flow/members";
-import { loadNews } from "@/lib/flow/queries";
+import { loadNews, loadTodayEvents } from "@/lib/flow/queries";
 import { SIDEBAR_COOKIE, toSidebarOpen } from "@/lib/sidebar";
 import { THEME_COOKIE, toTheme } from "@/lib/theme";
 
@@ -20,9 +20,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // 사진·한마디는 세션에 없다 (§9.3에만 있다). 소식과 나란히 부르니 기다림이 더 늘지 않는다 —
   // 실패해도 빈 문자열이라 계정 블록만 손 그림으로 돌아간다.
-  const [news, me, cookieStore] = await Promise.all([
+  // 오늘 일정도 여기서 받는다. 계정 팝오버의 서랍이 세 화면 어디서나 같은 하루를 연다 —
+  // 오늘 화면도 같은 `loadTodayEvents()`를 부르는데 `cache()`가 왕복을 하나로 묶는다.
+  const [news, me, events, cookieStore] = await Promise.all([
     loadNews(session.userId),
     loadMyAccount(session.fullname, session.email),
+    loadTodayEvents(),
     cookies(),
   ]);
 
@@ -36,6 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         slogan: me.slogan,
       }}
       news={news}
+      events={events}
       theme={toTheme(cookieStore.get(THEME_COOKIE)?.value)}
       sidebarOpen={toSidebarOpen(cookieStore.get(SIDEBAR_COOKIE)?.value)}
     >

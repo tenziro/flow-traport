@@ -4,8 +4,11 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useRef, useState } from 'react';
+import { EmptyState } from '@/components/empty-state';
 import {
+  IconCalendar,
   IconChevronRight,
+  IconClose,
   IconComment,
   IconMyTasks,
   IconRisk,
@@ -28,6 +31,7 @@ import {
   ChromaticTextReveal,
   SWEEP_CHART,
 } from '@/components/motion/chromatic-text-reveal';
+import { Drawer } from '@/components/motion/drawer';
 import { NewsBell } from '@/components/news-bell';
 import { SearchProvider, useSearchOpen } from '@/components/search-palette';
 import { SiteFooter } from '@/components/site-footer';
@@ -41,8 +45,9 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import type { TaskNews } from '@/lib/flow/queries';
+import type { FlowEvent } from '@/lib/flow/rest';
 import type { Theme } from '@/lib/theme';
-import { cn } from '@/lib/utils';
+import { cn, fmtTime } from '@/lib/utils';
 
 /**
  * 레이아웃 셸 (PRD §7.3).
@@ -86,6 +91,7 @@ type User = {
 export function AppShell({
   user,
   news,
+  events,
   theme,
   sidebarOpen,
   children,
@@ -93,6 +99,8 @@ export function AppShell({
   user: User;
   /** 담당 업무·내가 올린 글 소식. 못 가져오면 null — 종은 그대로 있고 안이 빈다. */
   news: TaskNews[] | null;
+  /** 오늘 일정. 계정 팝오버가 여는 서랍이 낸다. 못 가져오면 null — 서랍이 그렇게 적는다. */
+  events: FlowEvent[] | null;
   /** 쿠키에 남아 있는 밝기. 토글의 처음 상태다 (lib/theme.ts). */
   theme: Theme;
   /** 쿠키에 남아 있는 사이드바 접힘. 레일의 처음 폭이다 (lib/sidebar.ts). */
@@ -113,7 +121,7 @@ export function AppShell({
           <AnimatedSidebar
             ariaLabel="주요"
             brand={<Brand />}
-            footer={<Account user={user} />}
+            footer={<Account user={user} events={events} />}
           >
             <SidebarSearch />
 
@@ -246,8 +254,11 @@ function Brand() {
 }
 
 /**
- * 레일 발의 계정. 이름·부서·이메일을 그대로 내고, 마우스를 올리면 로그아웃이 딸린 팝오버가
- * 옆으로 열린다.
+ * 레일 발의 계정. 이름·부서·이메일을 그대로 내고, 마우스를 올리면 오늘 일정·로그아웃이 딸린
+ * 팝오버가 옆으로 열린다.
+ *
+ * 팝오버의 "오늘 일정"은 오른쪽 서랍을 연다 (motion/drawer.tsx, PRD §13 B3). 오늘 화면의
+ * 카드와 같은 하루를 같은 줄 모양으로 내는데, 여기 있으면 내 업무·팀·구성원 화면에서도 열린다.
  *
  * 헤더 오른쪽 끝에 있던 이니셜 원판을 여기로 내렸다. 계정은 화면마다 쓰는 물건이 아니라 늘
  * 같은 자리에 있으면 되는 것이라, 브랜드와 메뉴가 있는 레일의 반대쪽 끝이 제자리다. 대신
@@ -257,11 +268,15 @@ function Brand() {
  * 호버로 여는 팝오버지만 라딕스 Popover다 — HoverCard는 키보드로 안을 짚을 수 없어서 그 안에
  * 로그아웃 같은 단추를 두면 마우스 없는 사람에게는 없는 기능이 된다.
  */
-function Account({ user }: { user: User }) {
+function Account({ user, events }: { user: User; events: FlowEvent[] | null }) {
   const [open, setOpen] = useState(false);
+  /** 오늘 일정 서랍. 팝오버와 함께 열리지 않는다 — 여는 순간 팝오버는 닫는다. */
+  const [schedule, setSchedule] = useState(false);
   /** 초점을 옮길지 가르는 값. 호버로 열렸는데 초점까지 따라가면 글자를 읽던 자리를 잃는다. */
   const byHover = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 서랍을 닫을 때 초점을 돌려줄 자리. 서랍을 연 단추는 팝오버와 함께 사라진다. */
+  const trigger = useRef<HTMLButtonElement>(null);
 
   const show = () => {
     if (timer.current) clearTimeout(timer.current);
@@ -275,114 +290,200 @@ function Account({ user }: { user: User }) {
   };
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        byHover.current = false;
-        setOpen(next);
-      }}
-    >
-      <PopoverTrigger
-        onMouseEnter={show}
-        onMouseLeave={hide}
-        title="계정"
-        className="flex min-h-12 w-full cursor-pointer items-center gap-3 overflow-hidden rounded-lg px-3 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {/* 28px 원판. 접히면 이 원판만 남고 중심이 레일 중심에 온다 (animated-sidebar.tsx).
-            구성원 화면과 같은 flow 프로필 사진이다 — 접힌 레일에서는 이 원판이 유일한 표시라
-            얼굴이 인사하는 손보다 알아보기 쉽다. 사진이 없는 사람은 손을 그대로 쓴다 */}
-        {user.photo ? (
-          <Image
-            src={user.photo}
-            alt=""
-            width={28}
-            height={28}
-            className="size-7 shrink-0 rounded-full object-cover"
-          />
-        ) : (
-          <span
-            aria-hidden
-            className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-sm"
-          >
-            👋🏻
-          </span>
-        )}
-
-        <SidebarLabel>
-          <span className="block truncate text-sm">
-            <span className="font-medium">{user.fullname}</span>
-            <span className="ml-1.5 text-[11px] text-muted-foreground">
-              {user.divisionName}
-            </span>
-          </span>
-          <span className="block truncate text-[11px] text-muted-foreground">
-            {user.email}
-          </span>
-        </SidebarLabel>
-
-        {/* 접히면 레일 밖으로 나가 잘린다 — 따로 숨기지 않아도 된다 */}
-        <IconChevronRight
-          size={14}
-          aria-hidden
-          className="shrink-0 text-muted-foreground"
-        />
-      </PopoverTrigger>
-
-      <PopoverContent
-        side="right"
-        align="end"
-        sideOffset={8}
-        onMouseEnter={show}
-        onMouseLeave={hide}
-        onOpenAutoFocus={(e) => {
-          if (byHover.current) e.preventDefault();
+    <>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          byHover.current = false;
+          setOpen(next);
         }}
-        className="w-60 gap-2 p-2"
       >
-        {/* 줄에 있는 것과 같은 말이지만 여기서는 잘리지 않는다 — 접힌 레일에서는 이쪽이 유일한
-            확인 자리다 */}
-        <PopoverHeader className="px-1.5 pt-1">
-          <PopoverTitle className="truncate">{user.fullname}</PopoverTitle>
-          <PopoverDescription className="text-xs">
-            {user.divisionName}
-          </PopoverDescription>
-          <PopoverDescription className="text-xs break-all">
-            {user.email}
-          </PopoverDescription>
+        <PopoverTrigger
+          ref={trigger}
+          onMouseEnter={show}
+          onMouseLeave={hide}
+          title="계정"
+          className="flex min-h-12 w-full cursor-pointer items-center gap-3 overflow-hidden rounded-lg px-3 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {/* 28px 원판. 접히면 이 원판만 남고 중심이 레일 중심에 온다 (animated-sidebar.tsx).
+              구성원 화면과 같은 flow 프로필 사진이다 — 접힌 레일에서는 이 원판이 유일한 표시라
+              얼굴이 인사하는 손보다 알아보기 쉽다. 사진이 없는 사람은 손을 그대로 쓴다 */}
+          {user.photo ? (
+            <Image
+              src={user.photo}
+              alt=""
+              width={28}
+              height={28}
+              className="size-7 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <span
+              aria-hidden
+              className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-sm"
+            >
+              👋🏻
+            </span>
+          )}
 
-          {/* flow에 적어 둔 상태 메시지. 위 세 줄은 "어느 계정인지"고 이 줄은 내가 쓴 말이라
-              선으로 끊는다 — 구성원 카드의 한마디도 선·말풍선·빈 문구까지 같은 모양이다
-              (members/page.tsx). 비어 있어도 줄은 남긴다. 여기가 자기 계정을 보는 유일한
-              자리라, 없다고 적어 두는 편이 자리가 아예 사라지는 것보다 낫다 — 적을 수 있는
-              칸이라는 것도 알게 된다 */}
-          <PopoverDescription
-            className={cn(
-              'mt-1 flex items-start gap-1.5 border-t border-border pt-1.5 text-xs',
-              !user.slogan && 'text-muted-foreground/60',
-            )}
-          >
-            {/* 말풍선. 위 세 줄과 달리 이 줄만 "본인이 쓴 말"이라는 표시다 — 선 하나로는
-                무엇이 달라졌는지 말해 주지 않는다. `aria-hidden`인 것은 줄에 붙는 이름표가
-                아니라 성격 표시라서다 */}
-            <IconComment size={12} aria-hidden className="mt-0.5 shrink-0" />
-            <span>{user.slogan || '상태 메시지가 없어요.'}</span>
-          </PopoverDescription>
-        </PopoverHeader>
+          <SidebarLabel>
+            <span className="block truncate text-sm">
+              <span className="font-medium">{user.fullname}</span>
+              <span className="ml-1.5 text-[11px] text-muted-foreground">
+                {user.divisionName}
+              </span>
+            </span>
+            <span className="block truncate text-[11px] text-muted-foreground">
+              {user.email}
+            </span>
+          </SidebarLabel>
 
-        <span aria-hidden className="h-px bg-border" />
+          {/* 접히면 레일 밖으로 나가 잘린다 — 따로 숨기지 않아도 된다 */}
+          <IconChevronRight
+            size={14}
+            aria-hidden
+            className="shrink-0 text-muted-foreground"
+          />
+        </PopoverTrigger>
 
-        {/* POST인 이유는 `SignOut` 주석에 */}
-        <form action="/api/auth/logout" method="post">
+        <PopoverContent
+          side="right"
+          align="end"
+          sideOffset={8}
+          onMouseEnter={show}
+          onMouseLeave={hide}
+          onOpenAutoFocus={(e) => {
+            if (byHover.current) e.preventDefault();
+          }}
+          className="w-60 gap-2 p-2"
+        >
+          {/* 줄에 있는 것과 같은 말이지만 여기서는 잘리지 않는다 — 접힌 레일에서는 이쪽이 유일한
+              확인 자리다 */}
+          <PopoverHeader className="px-1.5 pt-1">
+            <PopoverTitle className="truncate">{user.fullname}</PopoverTitle>
+            <PopoverDescription className="text-xs">
+              {user.divisionName}
+            </PopoverDescription>
+            <PopoverDescription className="text-xs break-all">
+              {user.email}
+            </PopoverDescription>
+
+            {/* flow에 적어 둔 상태 메시지. 위 세 줄은 "어느 계정인지"고 이 줄은 내가 쓴 말이라
+                선으로 끊는다 — 구성원 카드의 한마디도 선·말풍선·빈 문구까지 같은 모양이다
+                (members/page.tsx). 비어 있어도 줄은 남긴다. 여기가 자기 계정을 보는 유일한
+                자리라, 없다고 적어 두는 편이 자리가 아예 사라지는 것보다 낫다 — 적을 수 있는
+                칸이라는 것도 알게 된다 */}
+            <PopoverDescription
+              className={cn(
+                'mt-1 flex items-start gap-1.5 border-t border-border pt-1.5 text-xs',
+                !user.slogan && 'text-muted-foreground/60',
+              )}
+            >
+              {/* 말풍선. 위 세 줄과 달리 이 줄만 "본인이 쓴 말"이라는 표시다 — 선 하나로는
+                  무엇이 달라졌는지 말해 주지 않는다. `aria-hidden`인 것은 줄에 붙는 이름표가
+                  아니라 성격 표시라서다 */}
+              <IconComment size={12} aria-hidden className="mt-0.5 shrink-0" />
+              <span>{user.slogan || '상태 메시지가 없어요.'}</span>
+            </PopoverDescription>
+          </PopoverHeader>
+
+          <span aria-hidden className="h-px bg-border" />
+
+          {/* 오늘 일정 (PRD §13 B3). 오늘 화면 카드와 같은 하루인데, 여기서 열면 어느 화면에
+              있든 볼 수 있다 — 일정은 "지금 어디로 갈지"라 화면을 옮기면서 확인할 일이 잦다.
+              건수를 단추에 적어 두는 것은 열지 않고도 오늘이 빈 날인지 알기 위해서다 */}
           <button
-            type="submit"
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              setSchedule(true);
+            }}
             className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            <IconSignOut size={16} aria-hidden />
-            로그아웃
+            <IconCalendar size={16} aria-hidden />
+            오늘 일정
+            {events && events.length > 0 && (
+              <span className="tabular ml-auto text-[11px]">
+                {events.length}건
+              </span>
+            )}
           </button>
-        </form>
-      </PopoverContent>
-    </Popover>
+
+          {/* POST인 이유는 `SignOut` 주석에 */}
+          <form action="/api/auth/logout" method="post">
+            <button
+              type="submit"
+              className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <IconSignOut size={16} aria-hidden />
+              로그아웃
+            </button>
+          </form>
+        </PopoverContent>
+      </Popover>
+
+      {/* 서랍은 팝오버 밖이다 — 팝오버가 닫히면서 같이 사라지면 안 된다. 오른쪽에서 들어오는
+          것은 여는 자리가 왼쪽 레일 발이라 왼쪽에서 열면 그 레일을 덮기 때문이다 */}
+      <Drawer
+        open={schedule}
+        onOpenChange={(next) => {
+          setSchedule(next);
+          // 서랍을 연 단추는 팝오버와 함께 사라졌다. 초점을 계정 줄로 돌려 준다 —
+          // 안 돌리면 탭이 문서 맨 앞에서 다시 시작한다
+          if (!next) trigger.current?.focus();
+        }}
+        ariaLabel="오늘 일정"
+      >
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <IconCalendar size={16} aria-hidden className="text-primary" />
+          <h2 className="text-sm font-semibold">오늘 일정</h2>
+          {events && events.length > 0 && (
+            <span className="tabular text-xs text-muted-foreground">
+              {events.length}건
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setSchedule(false)}
+            aria-label="닫기"
+            title="닫기"
+            className="ml-auto grid size-7 cursor-pointer place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <IconClose size={16} aria-hidden />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          {events === null ? (
+            <p className="text-xs text-muted-foreground">
+              flow가 잠시 답을 주지 않았어요. 새로고침하면 오늘 일정을 다시
+              불러와요.
+            </p>
+          ) : events.length === 0 ? (
+            <EmptyState
+              icon={<IconCalendar size={18} />}
+              title="오늘은 일정이 없어요"
+            />
+          ) : (
+            /* 오늘 화면 카드와 같은 줄 모양이다 — 시각을 폭 고정으로 앞에 세워
+               하루 흐름이 위아래로 읽힌다 ((today)/page.tsx) */
+            <ul className="space-y-2">
+              {events.map((event) => (
+                <li key={event.eventSrno} className="flex items-start gap-2">
+                  <span className="tabular mt-0.5 w-[76px] shrink-0 text-xs text-muted-foreground">
+                    {event.allDayYn === 'Y'
+                      ? '종일'
+                      : `${fmtTime(event.eventStartDateTime)}–${fmtTime(event.eventFinishDateTime)}`}
+                  </span>
+                  <span className="min-w-0 flex-1 text-[13px] leading-snug">
+                    {event.eventName}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Drawer>
+    </>
   );
 }
 
