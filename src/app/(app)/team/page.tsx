@@ -57,7 +57,7 @@ export default async function TeamPage({
 
   return (
     <>
-      <header className="rise mb-4 flex flex-wrap items-start justify-between gap-3">
+      <header className="rise mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">팀</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
@@ -72,7 +72,7 @@ export default async function TeamPage({
 
       <section
         aria-label="부서 요약"
-        className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4"
+        className="mb-10 grid grid-cols-2 gap-4 sm:grid-cols-4"
       >
         <Kpi
           i={1}
@@ -80,6 +80,7 @@ export default async function TeamPage({
           value={counts.members}
           unit="명"
           Icon={IconTeam}
+          tone="primary"
         />
         <Kpi
           i={2}

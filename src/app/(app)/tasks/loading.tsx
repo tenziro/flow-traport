@@ -17,7 +17,7 @@ import {
 export default function Loading() {
   return (
     <div aria-busy="true" aria-label="불러오는 중">
-      <HeadSkeleton />
+      <HeadSkeleton className="mb-8" />
       <KpiRowSkeleton count={3} />
       <TabBarSkeleton className="mb-4 max-w-md" />
       <SummaryCardsSkeleton count={5} />

@@ -51,25 +51,27 @@ export default async function TasksPage() {
 
   return (
     <>
-      <header className="rise mb-4">
+      <header className="rise mb-8">
         <h1 className="text-xl font-semibold tracking-tight">내 업무</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
           내가 담당인 업무를 프로젝트별로 모았어요. 오늘 화면에 안 나오는 것까지 전부예요.
         </p>
       </header>
 
-      <section aria-label="요약" className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <section aria-label="요약" className="mb-10 grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Kpi
           i={1}
           label="내 업무"
           value={total}
           unit="건"
           Icon={IconMyTasks}
+          tone="primary"
           note={`프로젝트 ${projects.length}개`}
         />
-        {/* `primary`는 밝은 화면에서 `#171717`이라 본문과 구별이 안 된다 — 세 칸이 다 검게
-            보였다. 신호가 있는 두 칸은 실제 색을 가진 토큰으로 준다. `danger`는 아니다:
-            안 끝난 것 전부가 마감을 넘긴 게 아니다 (그건 리스크 화면의 `밀리는 업무`다). */}
+        {/* 세 칸이 각각 다른 톤이다. `primary`는 v1.7.0부터 밝은 화면에서도 파랑이라
+            전체 건수 자리로 쓴다 — 그 전엔 `#171717`이라 본문 글자와 구별이 안 됐다.
+            가운데는 `danger`가 아니다: 안 끝난 것 전부가 마감을 넘긴 게 아니다
+            (그건 리스크 화면의 `밀리는 업무`다). */}
         <Kpi
           i={2}
           label="안 끝난 업무"

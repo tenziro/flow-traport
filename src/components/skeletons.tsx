@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 /** 화면 제목 + 설명 한 줄. 아래 여백은 화면마다 달라서 밖에서 준다. */
 export function HeadSkeleton({ className }: { className?: string }) {
   return (
-    <div className={cn("mb-4", className)}>
+    <div className={cn("mb-6", className)}>
       <Skeleton className="h-7 w-56" />
       <Skeleton className="mt-2 h-4 w-full max-w-md" />
     </div>
@@ -41,14 +41,18 @@ export function KpiRowSkeleton({
   return (
     <div
       className={cn(
-        "mb-6 grid grid-cols-2 gap-3",
+        "mb-10 grid grid-cols-2 gap-4",
         count === 3 ? "sm:grid-cols-3" : "sm:grid-cols-4",
       )}
     >
       {Array.from({ length: count }, (_, i) => (
-        <Card key={i} size="sm" className={meter ? "gap-2" : "gap-1.5"}>
-          <CardContent className={meter ? "space-y-1.5" : "space-y-1"}>
-            <Skeleton className="h-3.5 w-20" />
+        <Card key={i} size="sm" className="gap-2">
+          <CardContent className="space-y-1.5">
+            {/* 실제와 같은 아이콘 칩 + 라벨 두 자리다 (`Kpi`, 오늘 화면 `Stat`) */}
+            <div className="flex items-center gap-2">
+              <Skeleton className="size-6 shrink-0 rounded-md" />
+              <Skeleton className="h-3.5 w-20" />
+            </div>
             <Skeleton className="h-7 w-14" />
             {meter && <Skeleton className="h-1 w-full rounded-full" />}
             <Skeleton className="h-2.5 w-24" />
@@ -88,7 +92,7 @@ export function PanelSkeleton({
     <Card className={className}>
       <CardHeader className="gap-2">
         <div className="flex items-center gap-2">
-          <Skeleton className="size-4" />
+          <Skeleton className="size-7 shrink-0 rounded-md" />
           <Skeleton className="h-4 w-28" />
           <Skeleton className="ml-auto h-3 w-16" />
         </div>
@@ -168,7 +172,7 @@ export function MemberCardsSkeleton({ count }: { count: number }) {
   return (
     <>
       <Skeleton className="mb-2 h-4 w-28" />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: count }, (_, i) => (
           <Card key={i} size="sm" className="gap-2.5">
             <CardContent className="flex items-center gap-2.5">

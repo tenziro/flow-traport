@@ -9,6 +9,7 @@ import {
   IconRisk,
   IconStale,
 } from '@/components/icons';
+import { KPI_TONE, type KpiTone } from '@/components/kpi';
 import { MentionActions } from '@/components/mention-actions';
 import { Meter } from '@/components/meter';
 import { NumberTicker } from '@/components/motion/number-ticker';
@@ -105,7 +106,7 @@ export default async function TodayPage({
 
   return (
     <>
-      <header className="rise mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+      <header className="rise mb-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">
             {worklist.user.name}님, 오늘 챙길 건 이거예요
@@ -124,7 +125,7 @@ export default async function TodayPage({
       {/* KPI는 한 줄로 세운다. 2×2로 접으면 4칸이 두 덩어리로 보여서 순위가 안 읽힌다 */}
       <section
         aria-label="요약"
-        className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4"
+        className="mb-10 grid grid-cols-2 gap-4 sm:grid-cols-4"
       >
         <Stat
           i={1}
@@ -171,7 +172,7 @@ export default async function TodayPage({
       {/* `items-start` — 방치된 업무는 길이가 들쭉날쭉하다. 높이를 맞추면 짧은 쪽이 빈 상자가 된다.
           `grid-cols-1`은 좁은 화면에서 반드시 필요하다 — 안 적으면 열이 `auto`라 카드가
           내용 최소폭 아래로 안 줄어든다 (bug-report BUG-025) */}
-      <div className="mb-6 grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
+      <div className="mb-8 grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
         <Card
           id="focus"
           className="rise scroll-mt-32 xl:col-span-8"
@@ -179,7 +180,7 @@ export default async function TodayPage({
         >
           <CardHeader className="gap-2">
             <CardTitle className="flex items-center gap-2">
-              <IconFocus size={16} className="text-primary" />
+              <TitleMark Icon={IconFocus} tone="primary" />
               오늘의 포커스
               {focus && focus.length > 0 && (
                 <span className="tabular ml-auto text-xs font-normal text-muted-foreground">
@@ -234,7 +235,7 @@ export default async function TodayPage({
         >
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <IconStale size={16} className="text-neutral-foreground" />
+              <TitleMark Icon={IconStale} tone="neutral" />
               방치된 업무
               {counts.overdueStale > 0 && (
                 <span className="tabular ml-auto text-xs font-normal text-muted-foreground">
@@ -293,7 +294,7 @@ export default async function TodayPage({
         >
           <CardHeader className="gap-2">
             <CardTitle className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <IconRisk size={16} className="text-danger" />
+              <TitleMark Icon={IconRisk} tone="danger" />
               밀리는 업무
               <span className="tabular text-xs font-normal text-muted-foreground">
                 {counts.overdueActive}건
@@ -350,7 +351,7 @@ export default async function TodayPage({
           <CardHeader>
             {/* 3분의 1 칸에 제목과 두 건수가 같이 들어간다 — 안 접으면 오른쪽이 잘린다 */}
             <CardTitle className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <IconMention size={16} className="text-primary" />
+              <TitleMark Icon={IconMention} tone="primary" />
               나를 부른 사람들
               <span className="tabular ml-auto text-xs font-normal text-muted-foreground">
                 업무 {mentions.length}건 · 알림 {counts.mentions}개
@@ -512,20 +513,6 @@ export default async function TodayPage({
 
 /* ── 조각들 ───────────────────────────────────────────────────────────── */
 
-const TONE = {
-  danger: 'text-danger-foreground',
-  warning: 'text-warning-foreground',
-  primary: 'text-primary',
-  neutral: 'text-neutral-foreground',
-} as const;
-
-/** 점유율 막대 색. 텍스트 색(`TONE`)은 AA용으로 밝혀둔 값이라 막대에는 원본 토큰을 쓴다. */
-const BAR = {
-  danger: 'bg-danger',
-  warning: 'bg-warning',
-  primary: 'bg-primary',
-  neutral: 'bg-neutral',
-} as const;
 
 function Stat({
   label,
@@ -540,21 +527,29 @@ function Stat({
   value: number;
   total: number;
   Icon: typeof IconRisk;
-  tone: keyof typeof TONE;
+  tone: KpiTone;
   note: string;
   i: number;
 }) {
   const share = total > 0 ? Math.round((value / total) * 100) : 0;
+  const t = KPI_TONE[tone];
 
   return (
     <Card
       size="sm"
-      className="rise gap-2"
+      className={cn('rise gap-2 bg-linear-to-b', t.face)}
       style={{ '--i': i } as React.CSSProperties}
     >
       <CardContent className="space-y-1.5">
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Icon size={13} className={TONE[tone]} />
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span
+            className={cn(
+              'grid size-6 shrink-0 place-items-center rounded-md',
+              t.chip,
+            )}
+          >
+            <Icon size={14} />
+          </span>
           <span className="truncate">{label}</span>
           <span className="tabular ml-auto shrink-0">{share}%</span>
         </p>
@@ -563,7 +558,7 @@ function Stat({
           <span
             className={cn(
               'tabular text-[28px] leading-none font-semibold',
-              TONE[tone],
+              t.text,
             )}
           >
             <NumberTicker value={value} />
@@ -572,13 +567,34 @@ function Stat({
             / {total}건
           </span>
         </p>
-        <Meter
-          total={total}
-          segments={[{ value, label, className: BAR[tone] }]}
-        />
+        <Meter total={total} segments={[{ value, label, className: t.bar }]} />
         <p className="text-[11px] leading-snug text-muted-foreground">{note}</p>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * 카드 제목 앞 표지. KPI 아이콘 칩(`Kpi`, `Stat`)과 같은 모양·같은 톤이라
+ * 위 요약과 아래 카드가 같은 색 언어로 읽힌다 — 빨강 칩이 붙은 요약을 누르면
+ * 빨강 칩이 붙은 카드가 나온다.
+ */
+function TitleMark({
+  Icon,
+  tone,
+}: {
+  Icon: typeof IconRisk;
+  tone: KpiTone;
+}) {
+  return (
+    <span
+      className={cn(
+        'grid size-7 shrink-0 place-items-center rounded-md',
+        KPI_TONE[tone].chip,
+      )}
+    >
+      <Icon size={16} />
+    </span>
   );
 }
 

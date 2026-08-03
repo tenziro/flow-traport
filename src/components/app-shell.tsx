@@ -63,7 +63,7 @@ import { cn, fmtTime } from '@/lib/utils';
  * 브랜드와 검색까지 레일로 내리면 헤더는 한 줄로 줄고 세로 자리를 한 행(44px) 돌려받는다.
  *
  * 폭은 fluid다 — `max-w-*` 없이 화면을 꽉 쓴다. 카드가 목록 위주라 넓어지면 한 행에
- * 담기는 정보가 늘고, 좌우 여백만 `px-4 → sm:px-6 → lg:px-8`로 벌려 잡아준다.
+ * 담기는 정보가 늘고, 좌우 여백만 `px-4 → sm:px-6 → lg:px-10`으로 벌려 잡아준다.
  *
  * <1024px는 상단 앱바 + 하단 탭이다 — 엄지가 닿는 곳에 두는 편이 낫다. 레일은 여기서 아예
  * 렌더되지 않는다: 원본의 모바일 시트를 들이면 같은 메뉴로 가는 길이 둘이 된다. 레일이
@@ -149,7 +149,7 @@ export function AppShell({
                 블러는 통과하는 색이 있어야 보인다. 이 앱은 배경이 근검정이라 alpha를 55%까지
                 열고 saturate로 색을 끌어올려야 유리판처럼 읽힌다 (70%/blur만으로는 안 보였다). */}
             <header className="sticky top-0 z-20 border-b border-border bg-card/55 backdrop-blur-2xl backdrop-saturate-200">
-              <div className="flex h-14 w-full items-center gap-3 px-4 sm:px-6 lg:px-8">
+              <div className="flex h-14 w-full items-center gap-3 px-4 sm:px-6 lg:px-10">
                 <SidebarTrigger />
                 <span
                   aria-hidden
@@ -184,7 +184,9 @@ export function AppShell({
               </div>
             </header>
 
-            <main className="w-full flex-1 px-4 py-8 pb-20 sm:px-6 md:pb-8 lg:px-8">
+            {/* 넓은 화면에서 좌우·상하 40px. 헤더도 같은 `lg:px-10`이라 화면 이름과
+                본문 `h1`이 한 줄에 선다 */}
+            <main className="w-full flex-1 px-4 py-8 pb-20 sm:px-6 md:pb-8 lg:px-10 lg:py-10 lg:pb-10">
               {children}
             </main>
 

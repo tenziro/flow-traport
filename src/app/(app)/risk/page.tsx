@@ -90,7 +90,7 @@ export default async function RiskPage({
 
   return (
     <>
-      <header className="rise mb-4">
+      <header className="rise mb-6">
         <h1 className="text-xl font-semibold tracking-tight">리스크</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
           {dept}이 물고 있는 프로젝트를 위험도순으로 세웠어요. 목록이 아니라
@@ -102,7 +102,7 @@ export default async function RiskPage({
 
       <section
         aria-label="부서 요약"
-        className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4"
+        className="mb-10 grid grid-cols-2 gap-4 sm:grid-cols-4"
       >
         <Kpi
           i={1}
@@ -110,6 +110,7 @@ export default async function RiskPage({
           value={rollups.length}
           unit="개"
           Icon={IconProject}
+          tone="primary"
           note={`위험·주의 ${risky.length}개`}
         />
         <Kpi

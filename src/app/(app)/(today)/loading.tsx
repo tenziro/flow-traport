@@ -26,11 +26,11 @@ import {
 export default function Loading() {
   return (
     <div aria-busy="true" aria-label="불러오는 중">
-      <HeadSkeleton className="mb-6" />
+      <HeadSkeleton className="mb-8" />
       <KpiRowSkeleton count={4} meter />
 
       {/* 실제 화면과 같은 12칸 격자에 8:4다. 폭이 다르면 카드 경계가 옮겨 앉는다 */}
-      <div className="mb-6 grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
+      <div className="mb-8 grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
         <PanelSkeleton chips className="xl:col-span-8">
           <TaskRowsSkeleton count={5} />
         </PanelSkeleton>

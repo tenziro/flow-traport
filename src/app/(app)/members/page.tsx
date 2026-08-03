@@ -25,7 +25,7 @@ export default async function MembersPage() {
 
   return (
     <>
-      <header className="rise mb-4">
+      <header className="rise mb-6">
         <h1 className="text-xl font-semibold tracking-tight">구성원</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
           구성원 {total}명 · 부서 {divisions.length}개예요. 이메일과 번호는 눌러서 바로 복사해요.
@@ -33,7 +33,7 @@ export default async function MembersPage() {
       </header>
 
       <Tabs defaultValue="all" variant="segment">
-        <TabsList aria-label="부서 보기" className="mb-4 flex-wrap bg-secondary">
+        <TabsList aria-label="부서 보기" className="mb-8 flex-wrap bg-secondary">
           <TabsTrigger value="all" className="min-h-8">
             전체
             {/* 골라진 칸은 글자색이 반전되므로 색이 아니라 투명도로 낮춘다 (`/tasks`와 같다) */}
@@ -68,7 +68,7 @@ export default async function MembersPage() {
  */
 function DivisionList({ divisions }: { divisions: MemberDivision[] }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {divisions.map(({ name, members }, i) => (
         <section key={name} className="rise" style={{ "--i": i } as React.CSSProperties}>
           <h2 className="mb-2 text-sm font-semibold">
@@ -77,7 +77,7 @@ function DivisionList({ divisions }: { divisions: MemberDivision[] }) {
               {members.length}
             </span>
           </h2>
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {members.map((member) => (
               <MemberCard key={member.email} member={member} />
             ))}
@@ -164,10 +164,12 @@ function ContactRow({
   return (
     <div className="flex items-center gap-2">
       <span className="w-11 shrink-0 text-xs text-muted-foreground">{label}</span>
+      {/* 값이 곧 링크다 — 색으로 "누를 수 있다"를 낸다. flow로 나가는 링크(`FlowLink`)와
+          같은 파랑이라 앱 안에서 누를 수 있는 글자는 늘 같은 색이다 */}
       <a
         href={href}
         className={cn(
-          "truncate text-xs underline-offset-2 hover:underline",
+          "truncate text-xs text-primary underline-offset-2 hover:underline",
           tabular && "tabular",
         )}
       >

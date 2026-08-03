@@ -13,7 +13,7 @@ export default function Loading() {
   return (
     <div aria-busy="true" aria-label="불러오는 중">
       <HeadSkeleton />
-      <TabBarSkeleton className="mb-4 max-w-md" />
+      <TabBarSkeleton className="mb-8 max-w-md" />
       <MemberCardsSkeleton count={6} />
     </div>
   );
