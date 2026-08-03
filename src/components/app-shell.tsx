@@ -48,7 +48,7 @@ import {
 import type { TaskNews } from '@/lib/flow/queries';
 import type { FlowEvent } from '@/lib/flow/rest';
 import type { Theme } from '@/lib/theme';
-import { cn, fmtTime } from '@/lib/utils';
+import { cn, fmtDayLabel, fmtTime } from '@/lib/utils';
 
 /**
  * 레이아웃 셸 (PRD §7.3).
@@ -93,6 +93,7 @@ export function AppShell({
   user,
   news,
   events,
+  today,
   theme,
   sidebarOpen,
   children,
@@ -100,9 +101,12 @@ export function AppShell({
   user: User;
   /** 담당 업무·내가 올린 글 소식. 못 가져오면 null — 종은 그대로 있고 안이 빈다. */
   news: TaskNews[] | null;
-  /** 오늘 일정. 넓은 화면은 계정 팝오버가 여는 서랍이, 좁은 화면은 헤더의 시트가 낸다.
+  /** 나의 일정. 넓은 화면은 계정 팝오버가 여는 서랍이, 좁은 화면은 헤더의 시트가 낸다.
       못 가져오면 null — 판이 그렇게 적는다. */
   events: FlowEvent[] | null;
+  /** 오늘의 KST `YYYYMMDD`. 서버가 정해서 내려 준다 — 목록이 `오늘`·`내일` 소제목을 붙이는
+      데 쓴다. 클라이언트에서 `Date.now()`를 읽으면 첫 그림과 어긋나 수화가 깨진다. */
+  today: string;
   /** 쿠키에 남아 있는 밝기. 토글의 처음 상태다 (lib/theme.ts). */
   theme: Theme;
   /** 쿠키에 남아 있는 사이드바 접힘. 레일의 처음 폭이다 (lib/sidebar.ts). */
@@ -123,7 +127,7 @@ export function AppShell({
           <AnimatedSidebar
             ariaLabel="주요"
             brand={<Brand />}
-            footer={<Account user={user} events={events} />}
+            footer={<Account user={user} events={events} today={today} />}
           >
             <SidebarSearch />
 
@@ -166,14 +170,14 @@ export function AppShell({
                     늘 쓰는 밝기가 한 번 더 눌러야 나오는 자리로 들어갔다.
                     세로선 뒤의 로그아웃은 좁은 화면만 든다 — 넓은 화면에서는 레일 발이 맡는다
                     (`Account`). 종과 로그아웃이 붙어 있어서 종을 누르려다 로그아웃을 누르던
-                    자리도 그래서 넓은 화면에서는 없어졌다. 오늘 일정도 같은 짝이다 —
+                    자리도 그래서 넓은 화면에서는 없어졌다. 나의 일정도 같은 짝이다 —
                     좁은 화면에서만 여기 있고 넓은 화면에서는 레일 발의 팝오버가 연다.
                     이니셜 원판은 좁은 화면에서 빼 뒀다. 로그인은 한 계정뿐이라 누구인지 확인할
                     일이 없고, 컨트롤 다섯 개가 좁은 헤더에 들어가면 종과 로그아웃 사이가 좁다 */}
                 <div className="ml-auto flex min-w-0 items-center gap-2">
                   <HeaderSearch />
                   <ThemeToggle theme={theme} />
-                  <HeaderSchedule events={events} />
+                  <HeaderSchedule events={events} today={today} />
                   <NewsBell news={news} />
                   <span
                     aria-hidden
@@ -260,11 +264,11 @@ function Brand() {
 }
 
 /**
- * 레일 발의 계정. 이름·부서·이메일을 그대로 내고, 마우스를 올리면 오늘 일정·로그아웃이 딸린
+ * 레일 발의 계정. 이름·부서·이메일을 그대로 내고, 마우스를 올리면 나의 일정·로그아웃이 딸린
  * 팝오버가 옆으로 열린다.
  *
- * 팝오버의 "오늘 일정"은 오른쪽 서랍을 연다 (motion/drawer.tsx, PRD §13 B3). 오늘 화면의
- * 카드와 같은 하루를 같은 줄 모양으로 내는데, 여기 있으면 내 업무·팀·구성원 화면에서도 열린다.
+ * 팝오버의 "나의 일정"은 오른쪽 서랍을 연다 (motion/drawer.tsx, PRD §13 B3). 오늘부터
+ * 이레치를 날짜별로 내는데, 여기 있으면 내 업무·팀·구성원 화면에서도 열린다.
  *
  * 헤더 오른쪽 끝에 있던 이니셜 원판을 여기로 내렸다. 계정은 화면마다 쓰는 물건이 아니라 늘
  * 같은 자리에 있으면 되는 것이라, 브랜드와 메뉴가 있는 레일의 반대쪽 끝이 제자리다. 대신
@@ -274,9 +278,17 @@ function Brand() {
  * 호버로 여는 팝오버지만 라딕스 Popover다 — HoverCard는 키보드로 안을 짚을 수 없어서 그 안에
  * 로그아웃 같은 단추를 두면 마우스 없는 사람에게는 없는 기능이 된다.
  */
-function Account({ user, events }: { user: User; events: FlowEvent[] | null }) {
+function Account({
+  user,
+  events,
+  today,
+}: {
+  user: User;
+  events: FlowEvent[] | null;
+  today: string;
+}) {
   const [open, setOpen] = useState(false);
-  /** 오늘 일정 서랍. 팝오버와 함께 열리지 않는다 — 여는 순간 팝오버는 닫는다. */
+  /** 나의 일정 서랍. 팝오버와 함께 열리지 않는다 — 여는 순간 팝오버는 닫는다. */
   const [schedule, setSchedule] = useState(false);
   /** 초점을 옮길지 가르는 값. 호버로 열렸는데 초점까지 따라가면 글자를 읽던 자리를 잃는다. */
   const byHover = useRef(false);
@@ -394,9 +406,9 @@ function Account({ user, events }: { user: User; events: FlowEvent[] | null }) {
 
           <span aria-hidden className="h-px bg-border" />
 
-          {/* 오늘 일정 (PRD §13 B3). 오늘 화면 카드와 같은 하루인데, 여기서 열면 어느 화면에
-              있든 볼 수 있다 — 일정은 "지금 어디로 갈지"라 화면을 옮기면서 확인할 일이 잦다.
-              건수를 단추에 적어 두는 것은 열지 않고도 오늘이 빈 날인지 알기 위해서다 */}
+          {/* 나의 일정 (PRD §13 B3). 어느 화면에 있든 열린다 — 일정은 "지금 어디로 갈지"라
+              화면을 옮기면서 확인할 일이 잦다. 건수를 단추에 적어 두는 것은 열지 않고도 이레가
+              빈지 알기 위해서다 */}
           <button
             type="button"
             onClick={() => {
@@ -406,7 +418,7 @@ function Account({ user, events }: { user: User; events: FlowEvent[] | null }) {
             className="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <IconCalendar size={16} aria-hidden />
-            오늘 일정
+            나의 일정
             {events && events.length > 0 && (
               <span className="tabular ml-auto text-[11px]">
                 {events.length}건
@@ -437,11 +449,11 @@ function Account({ user, events }: { user: User; events: FlowEvent[] | null }) {
           // 안 돌리면 탭이 문서 맨 앞에서 다시 시작한다
           if (!next) trigger.current?.focus();
         }}
-        ariaLabel="오늘 일정"
+        ariaLabel="나의 일정"
       >
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           <IconCalendar size={16} aria-hidden className="text-primary" />
-          <h2 className="text-sm font-semibold">오늘 일정</h2>
+          <h2 className="text-sm font-semibold">나의 일정</h2>
           {events && events.length > 0 && (
             <span className="tabular text-xs text-muted-foreground">
               {events.length}건
@@ -459,7 +471,7 @@ function Account({ user, events }: { user: User; events: FlowEvent[] | null }) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3">
-          <ScheduleList events={events} />
+          <ScheduleList events={events} today={today} />
         </div>
       </Drawer>
     </>
@@ -467,47 +479,78 @@ function Account({ user, events }: { user: User; events: FlowEvent[] | null }) {
 }
 
 /**
- * 오늘 일정 목록. 넓은 화면의 서랍(`Account`)과 좁은 화면의 시트(`HeaderSchedule`)가
+ * 나의 일정 목록. 넓은 화면의 서랍(`Account`)과 좁은 화면의 시트(`HeaderSchedule`)가
  * 같은 것을 쓴다 — 껍데기만 폭에 따라 갈리고 안은 하나다.
  *
  * 시각을 폭 고정으로 앞에 세운다 — 일정 이름 길이가 달라도 시각이 한 줄로 맞아서 하루 흐름이
  * 위아래로 읽힌다. 오늘 화면 카드에 있던 모양 그대로다 (v1.6.0에 이리로 옮겼다).
+ *
+ * 날짜 소제목으로 하루씩 끊는다 — 시각만 늘어놓으면 이레치가 한 덩어리로 붙어서 `15:16`이
+ * 어느 날 세시인지 알 수 없다. 목록은 이미 시작 시각순이라 앞에서부터 접으면 끊긴다
+ * (`listEvents`가 정렬해 준다).
  */
-function ScheduleList({ events }: { events: FlowEvent[] | null }) {
+function ScheduleList({
+  events,
+  today,
+}: {
+  events: FlowEvent[] | null;
+  today: string;
+}) {
   if (events === null) {
     return (
       <p className="text-xs text-muted-foreground">
-        flow가 잠시 답을 주지 않았어요. 새로고침하면 오늘 일정을 다시 불러와요.
+        flow가 잠시 답을 주지 않았어요. 새로고침하면 일정을 다시 불러와요.
       </p>
     );
   }
 
   if (events.length === 0) {
     return (
-      <EmptyState icon={<IconCalendar size={18} />} title="오늘은 일정이 없어요" />
+      <EmptyState
+        icon={<IconCalendar size={18} />}
+        title="앞으로 일주일은 일정이 없어요"
+      />
     );
   }
 
+  const days: [string, FlowEvent[]][] = [];
+  for (const event of events) {
+    const ymd = event.eventStartDateTime.slice(0, 8);
+    const last = days.at(-1);
+    if (last?.[0] === ymd) last[1].push(event);
+    else days.push([ymd, [event]]);
+  }
+
   return (
-    <ul className="space-y-2">
-      {events.map((event) => (
-        <li key={event.eventSrno} className="flex items-start gap-2">
-          <span className="tabular mt-0.5 w-[76px] shrink-0 text-xs text-muted-foreground">
-            {event.allDayYn === 'Y'
-              ? '종일'
-              : `${fmtTime(event.eventStartDateTime)}–${fmtTime(event.eventFinishDateTime)}`}
-          </span>
-          <span className="min-w-0 flex-1 text-[13px] leading-snug">
-            {event.eventName}
-          </span>
-        </li>
+    <div className="space-y-4">
+      {days.map(([ymd, list]) => (
+        <section key={ymd}>
+          <h3 className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+            {ymd === today && <span className="text-primary">오늘 · </span>}
+            {fmtDayLabel(ymd)}
+          </h3>
+          <ul className="space-y-2">
+            {list.map((event) => (
+              <li key={event.eventSrno} className="flex items-start gap-2">
+                <span className="tabular mt-0.5 w-[76px] shrink-0 text-xs text-muted-foreground">
+                  {event.allDayYn === 'Y'
+                    ? '종일'
+                    : `${fmtTime(event.eventStartDateTime)}–${fmtTime(event.eventFinishDateTime)}`}
+                </span>
+                <span className="min-w-0 flex-1 text-[13px] leading-snug">
+                  {event.eventName}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
       ))}
-    </ul>
+    </div>
   );
 }
 
 /**
- * 좁은 화면의 오늘 일정. 레일이 없어서 헤더가 대신 든다 — 넓은 화면에서는 레일 발의 팝오버가
+ * 좁은 화면의 나의 일정. 레일이 없어서 헤더가 대신 든다 — 넓은 화면에서는 레일 발의 팝오버가
  * 서랍을 연다 (`Account`).
  *
  * 서랍이 아니라 바텀시트인 것은 소식 종과 같은 이유다 (news-bell.tsx, v1.5.2). 오른쪽에서
@@ -517,7 +560,13 @@ function ScheduleList({ events }: { events: FlowEvent[] | null }) {
  * `lg:hidden`이면 충분해서 `useNarrowScreen`은 안 쓴다 — 종처럼 껍데기를 고르는 게 아니라
  * 여기는 좁은 화면 전용 단추 하나다.
  */
-function HeaderSchedule({ events }: { events: FlowEvent[] | null }) {
+function HeaderSchedule({
+  events,
+  today,
+}: {
+  events: FlowEvent[] | null;
+  today: string;
+}) {
   const [open, setOpen] = useState(false);
   const count = events?.length ?? 0;
 
@@ -526,13 +575,13 @@ function HeaderSchedule({ events }: { events: FlowEvent[] | null }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title="오늘 일정"
+        title="나의 일정"
         className="flex min-h-9 cursor-pointer items-center rounded-md px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:hidden"
       >
         <IconCalendar size={18} aria-hidden />
         {/* 건수 배지는 안 단다 — 옆의 종이 쓰는 표시라 같은 모양이면 안 읽은 소식으로 읽힌다.
             대신 읽어 주는 이름에 붙여서 화면 낭독으로는 열기 전에 알 수 있다 */}
-        <span className="sr-only">오늘 일정{count > 0 && ` — ${count}건`}</span>
+        <span className="sr-only">나의 일정{count > 0 && ` — ${count}건`}</span>
       </button>
 
       {/* `max-w-none`·아래 여백은 소식 시트와 같은 이유다 (news-bell.tsx). 여기는 목록 하나뿐이라
@@ -540,13 +589,13 @@ function HeaderSchedule({ events }: { events: FlowEvent[] | null }) {
       <BottomSheet
         open={open}
         onOpenChange={setOpen}
-        title="오늘 일정"
+        title="나의 일정"
         description={count > 0 ? `${count}건이에요.` : undefined}
         snapPoints={['auto']}
         className="max-w-none"
         bodyClassName="px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
       >
-        <ScheduleList events={events} />
+        <ScheduleList events={events} today={today} />
       </BottomSheet>
     </>
   );

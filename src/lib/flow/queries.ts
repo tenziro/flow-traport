@@ -7,7 +7,7 @@
  */
 
 import { rollupProjects, type ProjectRollup, type StandupMember } from "@/lib/aggregate";
-import { kstYmd } from "@/lib/aggregate/date";
+import { DAY_MS, kstYmd } from "@/lib/aggregate/date";
 import { getSession } from "@/lib/auth";
 import { createFlowMcp, type FlowMcp } from "./mcp";
 import {
@@ -131,15 +131,34 @@ export async function flowMcp(): Promise<FlowMcp> {
   return createFlowMcp(session.accessToken);
 }
 
+/** 일정 창의 길이. 오늘을 1일째로 세서 오늘 + 엿새다. */
+export const EVENT_WINDOW_DAYS = 7;
+
 /**
- * 오늘 일정 (PRD §13 B3). KST 하루가 곧 화면의 "오늘"이다.
+ * 나의 일정 (PRD §13 B3). KST 오늘 00:00부터 엿새 뒤 23:59까지다.
  *
- * 부르는 곳은 셸의 레이아웃 하나다 — 서랍·시트가 세 화면 어디서나 같은 하루를 연다
- * (app-shell.tsx). 실패하면 null이고, 판이 그렇게 적는다.
+ * 이번 주(월~일)가 아니라 **오늘부터 굴러가는 이레**다. 달력 주로 자르면 금요일에 열었을 때
+ * 이틀치만 남아서, "다음이 언제냐"를 묻는 자리에서 답이 요일에 따라 얇아진다.
+ *
+ * 부르는 곳은 셸의 레이아웃 하나다 — 서랍·시트가 어느 화면에서나 같은 이레를 연다
+ * (app-shell.tsx). 실패하면 `events`가 null이고, 판이 그렇게 적는다.
+ *
+ * `today`를 같이 낸다. 목록이 "오늘" 소제목을 붙이는 데 쓰는데, 판에서 `Date.now()`를 읽으면
+ * 첫 그림과 어긋나 수화가 깨진다. 창의 시작과 같은 시각에서 뽑아야 자정을 넘는 순간에도
+ * 소제목이 창 밖을 가리키지 않는다.
+ *
+ * ponytail: 첫 페이지 100건까지다 (`listEvents`). 이레면 하루 14건까지 담기니 넘칠 일이
+ * 드물지만, 넘치면 뒤쪽이 조용히 잘린다 — 더 늘리려면 `cursor`를 따라가야 한다.
  */
-export async function loadTodayEvents(): Promise<FlowEvent[] | null> {
-  const today = kstYmd(Date.now());
-  return listEvents(`${today}000000`, `${today}235959`).catch(() => null);
+export async function loadWeekEvents(): Promise<{
+  today: string;
+  events: FlowEvent[] | null;
+}> {
+  const now = Date.now();
+  const today = kstYmd(now);
+  const to = kstYmd(now + (EVENT_WINDOW_DAYS - 1) * DAY_MS);
+  const events = await listEvents(`${today}000000`, `${to}235959`).catch(() => null);
+  return { today, events };
 }
 
 export async function loadToday(): Promise<TodayData> {

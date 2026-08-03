@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getSession } from "@/lib/auth";
 import { loadMyAccount } from "@/lib/flow/members";
-import { loadNews, loadTodayEvents } from "@/lib/flow/queries";
+import { loadNews, loadWeekEvents } from "@/lib/flow/queries";
 import { SIDEBAR_COOKIE, toSidebarOpen } from "@/lib/sidebar";
 import { THEME_COOKIE, toTheme } from "@/lib/theme";
 
@@ -11,7 +11,7 @@ import { THEME_COOKIE, toTheme } from "@/lib/theme";
  * 로그인한 화면들의 셸. 프록시가 이미 막지만, 여기서도 세션을 확인한다 —
  * 세션이 있어야 사용자 이름을 렌더할 수 있고, 프록시 매처가 바뀌어도 데이터가 새지 않는다.
  *
- * 소식과 오늘 일정은 여기서 받는다. 둘 다 오늘 화면에만 있던 카드인데 헤더 종과 계정 서랍으로
+ * 소식과 나의 일정은 여기서 받는다. 둘 다 오늘 화면에만 있던 카드인데 헤더 종과 계정 서랍으로
  * 올렸으니 (PRD §13 B1·B2·B3) 데이터도 화면들이 같이 쓰는 자리로 따라 올라온다.
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -20,11 +20,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // 사진·한마디는 세션에 없다 (§9.3에만 있다). 소식과 나란히 부르니 기다림이 더 늘지 않는다 —
   // 실패해도 빈 문자열이라 계정 블록만 손 그림으로 돌아간다.
-  // 오늘 일정도 여기서 받는다. 서랍·시트가 어느 화면에서나 열려서 부르는 자리가 여기뿐이다.
-  const [news, me, events, cookieStore] = await Promise.all([
+  // 나의 일정도 여기서 받는다. 서랍·시트가 어느 화면에서나 열려서 부르는 자리가 여기뿐이다.
+  const [news, me, week, cookieStore] = await Promise.all([
     loadNews(session.userId),
     loadMyAccount(session.fullname, session.email),
-    loadTodayEvents(),
+    loadWeekEvents(),
     cookies(),
   ]);
 
@@ -38,7 +38,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         slogan: me.slogan,
       }}
       news={news}
-      events={events}
+      events={week.events}
+      today={week.today}
       theme={toTheme(cookieStore.get(THEME_COOKIE)?.value)}
       sidebarOpen={toSidebarOpen(cookieStore.get(SIDEBAR_COOKIE)?.value)}
     >
