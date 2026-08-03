@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DAY_MS, kstYmd } from "./aggregate/date";
-import { fmtDayLabel } from "./utils";
+import { fmtDayLabel, hexColor } from "./utils";
 import { EVENT_WINDOW_DAYS } from "./flow/queries";
 
 /* fmtDayLabel — 나의 일정의 날짜 소제목 */
@@ -20,6 +20,24 @@ test("fmtDayLabel: 요일이 KST 달력 일자를 따른다", () => {
 test("fmtDayLabel: 형식이 어긋나면 원본을 그대로 낸다", () => {
   assert.equal(fmtDayLabel(""), "");
   assert.equal(fmtDayLabel("2026-08-03"), "2026-08-03");
+});
+
+/* hexColor — 일정 색 막대 */
+
+test("hexColor: 앞에 준 값부터 보고 첫 번째로 쓸 만한 것을 고른다", () => {
+  assert.equal(hexColor("D0DA09"), "#D0DA09");
+  // 실측 응답 모양. 일정 색은 비어 있고 달력 색만 온다.
+  assert.equal(hexColor("", "D0DA09"), "#D0DA09");
+  assert.equal(hexColor("1D4ED8", "D0DA09"), "#1D4ED8");
+});
+
+test("hexColor: 6자리 hex가 아니면 null이다", () => {
+  // 응답 값을 style에 그대로 꽂는 자리라, 여기가 뚫리면 인라인 스타일이 주입된다.
+  assert.equal(hexColor(), null);
+  assert.equal(hexColor("", undefined), null);
+  assert.equal(hexColor("#D0DA09"), null);
+  assert.equal(hexColor("D0DA0"), null);
+  assert.equal(hexColor("red; background: url(x)"), null);
 });
 
 /* 일정 창 — 오늘을 1일째로 세서 오늘 + 엿새 */

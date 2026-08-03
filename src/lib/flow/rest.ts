@@ -853,7 +853,13 @@ export async function listStaleTasks(
 
 /* ── 일정 (api-spec §8.2, PRD §13 B3) ─────────────────────────────────── */
 
-/** api-spec §8.2 `Event`. 화면에 쓰는 것만 적었다. */
+/**
+ * api-spec §8.2 `Event`. 화면에 쓰는 것만 적었다.
+ *
+ * 명세는 전부 필수라고 적어 뒀지만 실측(2026-08-03)에선 `eventColor`·`colaboSrno`처럼
+ * 빈 문자열로 오는 게 많다. 그래서 앞의 다섯만 필수로 두고 나머지는 optional이다 —
+ * 없는 것과 빈 것을 같게 다뤄야 화면이 안 깨진다.
+ */
 export interface FlowEvent {
   eventSrno: string;
   eventName: string;
@@ -864,6 +870,28 @@ export interface FlowEvent {
   allDayYn: string;
   /** 프로젝트에서 만든 일정이면 projectId가 들어 있다. */
   colaboSrno?: string;
+  /** 일정에 따로 준 색. `#` 없는 6자리다. 실측에선 늘 비어서 `calendarColor`로 떨어졌다. */
+  eventColor?: string;
+  /** 달력 색. `#` 없는 6자리(`"D0DA09"`). 일정 색이 없을 때 이걸 쓴다. */
+  calendarColor?: string;
+  /** 달력 이름. 달력이 하나뿐이면 내 이름이라 화면에 안 쓴다 (`ScheduleList`). */
+  calendarName?: string;
+  /** 비어 있지 않으면 반복 일정이다. 주기(`WEEKLY`·`FR`…)는 상세 §8.5에만 있다. */
+  repeatSrno?: string;
+  /**
+   * 이 일정에 대한 **내** 참석 응답.
+   *
+   * 값 목록이 명세 어디에도 없다 — §8.2·§8.5·§9 다 필드 이름만 적혀 있고, MCP 쓰기 도구도
+   * 참석 응답을 다루지 않는다. 실측으로 본 건 `"ATTENDING"`(내가 수락)과 `""`(아직 응답 안
+   * 함, 또는 참석자가 없는 일정) 둘뿐이다.
+   *
+   * 그래서 화면은 `"ATTENDING"`만 긍정으로 읽고 나머지는 아무것도 그리지 않는다
+   * (`ScheduleList`). 모르는 값을 "불참"으로 오독하는 것보다 안 그리는 편이 낫다.
+   *
+   * 상세(§8.5)의 최상위 같은 이름 필드는 비어 있고 내 응답은 `attendances[]` 안에만 있다 —
+   * 목록과 어긋난다. 목록 응답의 이 필드만 믿는다.
+   */
+  attendanceStatus?: string;
 }
 
 /**

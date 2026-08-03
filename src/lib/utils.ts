@@ -37,6 +37,19 @@ export function fmtDayLabel(value: string): string {
   return `${m}.${d} (${WEEKDAY[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]})`;
 }
 
+/**
+ * flow가 주는 색(`"D0DA09"`)을 CSS 색으로 바꾼다. 여러 개를 주면 앞에서부터 보고 쓸 만한
+ * 첫 번째를 고른다 — 일정 색이 있으면 그걸, 없으면 달력 색이다 (§8.2 `eventColor`는
+ * 실측에서 늘 비어 있었다).
+ *
+ * 6자리 hex가 아니면 null이다. 응답 값을 `style`에 그대로 꽂는 자리라, 형식을 안 보면
+ * 남이 적어 넣은 문자열이 인라인 스타일로 들어간다.
+ */
+export function hexColor(...values: (string | undefined)[]): string | null {
+  const hex = values.find((v) => v && /^[0-9a-fA-F]{6}$/.test(v));
+  return hex ? `#${hex}` : null;
+}
+
 /** `20260430` → `2026-04-30` */
 export function fmtDate(value: string): string {
   return /^\d{8}$/.test(value)

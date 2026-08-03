@@ -16,7 +16,8 @@
 
 import { diffDays, parseFlowDeadline } from "@/lib/aggregate/date";
 import { getSession } from "@/lib/auth";
-import { flowPostUrl, flowProjectUrl, type WorklistTask } from "@/lib/flow/queries";
+import { type WorklistTask } from "@/lib/flow/queries";
+import { flowPostUrl, flowProjectUrl } from "@/lib/flow/urls";
 import { listMyTasks, listProjects, type MyTask } from "@/lib/flow/rest";
 
 /**

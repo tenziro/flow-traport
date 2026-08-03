@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { flowPostUrl } from "@/lib/flow/queries";
+import { flowPostUrl } from "@/lib/flow/urls";
 import { getPostBrief } from "@/lib/flow/rest";
 
 /**

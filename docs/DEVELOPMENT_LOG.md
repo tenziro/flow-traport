@@ -46,6 +46,8 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
   오른쪽에서 서랍이 들어오고(건수는 단추에 함께 적힌다), 좁은 화면은 헤더의 달력 단추가
   아래에서 바텀시트를 올린다. 목록은 한 컴포넌트를 같이 써서 껍데기만 폭에 따라 갈린다.
   창은 오늘부터 이레(달력 주가 아니다)고 날짜 소제목으로 하루씩 끊는다.
+  줄마다 시각 옆에 달력 색 막대, 반복 일정이면 이름 뒤에 반복 표시, 프로젝트 일정이면
+  아래에 flow 링크가 붙는다 — 셋 다 목록 응답에 이미 있는 값이라 호출이 안 늘어난다.
   오늘 화면에만 있던 카드였는데 셸로 올리면서 그 카드는 뺐다.
 - **화면 밝기** — 밝게·어둡게·기기 설정 세 갈래 라디오. 첫 HTML에 박아서 번쩍임이 없다.
 - **업데이트 로그** — 푸터 버튼 → 모달에서 버전별로 접어 본다.
@@ -64,11 +66,47 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
 
 - Next.js 16 App Router · React 19 · Tailwind v4 · Motion · beUI(vendoring) · Reicon.
 - 색은 `globals.css`의 `light-dark()` 토큰 한 벌. 컴포넌트에 raw hex 금지 (PRD §7.1).
-- 유닛 테스트는 `node:test`. 현재 118건.
+- 유닛 테스트는 `node:test`. 현재 124건.
 
 ---
 
 ## 변경 이력
+
+### 2026-08-03 — 나의 일정 줄에 색·반복·프로젝트 링크 (v1.9.0)
+
+`기능` 일정 줄이 시각과 이름 둘만 냈다. **§8.2 목록 응답에 이미 들어 있던** 값 넷을 붙였다 —
+시각 옆 달력 색 막대(`eventColor` → `calendarColor`), 이름 뒤 참석 표시(`attendanceStatus`)와
+반복 표시(`repeatSrno`), 프로젝트 일정이면 아래에 `FlowLink`(`colaboSrno`).
+상세(§8.5)를 안 부르니 호출이 안 늘어난다.
+
+붙이기 전에 실제 응답을 찍었다(MCP `flow_query_events`·`flow_get_event`). 명세는 전 필드를
+필수로 적어 뒀지만 `eventColor`·`colaboSrno`·`eventBody`가 빈 문자열로 왔다. 그래서 `FlowEvent`의
+새 필드는 전부 optional이고, 색은 일정 색 → 달력 색으로 떨어진다.
+
+달력 이름은 **달력이 여럿일 때만** 적는다. 하나뿐이면 그 이름이 곧 내 이름이라 줄마다 같은 말이
+반복되고, 색 막대도 전부 같은 색이라 구분할 게 없다. 여럿이면 반대로 색이 뜻을 갖기 시작하니
+이름이 그 색의 범례가 된다 — 색만으로 뜻을 나르지 않기 위한 짝이다.
+
+**참석 상태(`attendanceStatus`)는 값 목록이 명세 어디에도 없다** — §8.2·§8.5·§9 다 필드 이름만
+있고, MCP 쓰기 도구도 참석 응답을 다루지 않는다. 실측으로 본 건 `"ATTENDING"`과 `""` 둘뿐이라
+`"ATTENDING"`일 때만 그리고 나머지는 아무것도 안 그린다. 모르는 값을 "불참"으로 오독하느니
+안 그리는 편이 낫다 — 대신 불참으로 응답한 일정은 무표시 일정과 같아 보인다.
+
+상세(§8.5)의 최상위 `attendanceStatus`는 비어 있고 내 응답은 `attendances[]` 안에만 있다.
+목록과 어긋나니 목록 응답의 값만 믿는다.
+
+장소·참석자 명단·회의 링크·반복 주기는 뺐다 — 일정마다 상세를 한 번씩 더 불러야 나온다.
+
+`hexColor`(`utils.ts`)가 `"D0DA09"` → `"#D0DA09"`를 만든다. 응답 값을 `style`에 그대로 꽂는
+자리라 6자리 hex가 아니면 null을 내고 막대는 토큰 색으로 남는다.
+
+`flowPostUrl`·`flowProjectUrl`은 `queries.ts`에서 `flow/urls.ts`로 옮겼다. `queries.ts`가
+세션·MCP를 끌어와 서버 전용인데 링크 형식을 판에서도 써야 해서, 그대로 두면 서버 코드가
+브라우저 묶음에 끌려 들어와 빌드가 깨졌다. 새 파일은 아무것도 import 하지 않는다.
+
+관련 파일: `src/components/app-shell.tsx`, `src/components/icons.tsx`, `src/lib/utils.ts`,
+`src/lib/utils.test.ts`, `src/lib/flow/rest.ts`, `src/lib/flow/urls.ts`, `src/lib/flow/queries.ts`,
+`src/lib/flow/my-tasks.ts`, `src/app/api/go/[postId]/route.ts`, `src/lib/changelog.ts`
 
 ### 2026-08-03 — 일정 창을 하루에서 이레로 (v1.8.0)
 

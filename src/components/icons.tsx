@@ -34,6 +34,8 @@ export {
   Check as IconCheck,
   Logout as IconSignOut,
   Calendar as IconCalendar,
+  Repeat as IconRepeat,
+  UserCheck as IconAttending,
   BellRing as IconNews,
   Sparkles as IconChangelog,
   Magnifier as IconSearch,

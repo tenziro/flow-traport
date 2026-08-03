@@ -5,12 +5,15 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useRef, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
+import { FlowLink } from '@/components/flow-link';
 import {
+  IconAttending,
   IconCalendar,
   IconChevronRight,
   IconClose,
   IconComment,
   IconMyTasks,
+  IconRepeat,
   IconRisk,
   IconSearch,
   IconSignOut,
@@ -47,8 +50,9 @@ import {
 } from '@/components/ui/popover';
 import type { TaskNews } from '@/lib/flow/queries';
 import type { FlowEvent } from '@/lib/flow/rest';
+import { flowProjectUrl } from '@/lib/flow/urls';
 import type { Theme } from '@/lib/theme';
-import { cn, fmtDayLabel, fmtTime } from '@/lib/utils';
+import { cn, fmtDayLabel, fmtTime, hexColor } from '@/lib/utils';
 
 /**
  * 레이아웃 셸 (PRD §7.3).
@@ -488,6 +492,14 @@ function Account({
  * 날짜 소제목으로 하루씩 끊는다 — 시각만 늘어놓으면 이레치가 한 덩어리로 붙어서 `15:16`이
  * 어느 날 세시인지 알 수 없다. 목록은 이미 시작 시각순이라 앞에서부터 접으면 끊긴다
  * (`listEvents`가 정렬해 준다).
+ *
+ * 시각 옆에 색 막대, 이름 뒤에 참석·반복 표시, 프로젝트 일정이면 아래에 flow 링크가 붙는다.
+ * 넷 다 §8.2 목록 응답에 이미 들어 있는 값이라 호출이 더 늘지 않는다. 장소·참석자 명단·회의
+ * 링크는 일정마다 상세(§8.5)를 한 번씩 더 불러야 나와서 여기에 안 넣었다.
+ *
+ * 참석 표시는 `"ATTENDING"`일 때만 그린다. 값 목록이 명세에 없어서(`FlowEvent`) 나머지를
+ * 짐작해 적으면 "미정"과 "불참"이 뒤집힌다 — 모르면 안 그리는 편이 낫다. 그래서 불참으로
+ * 응답한 일정은 아무 표시 없는 일정과 같아 보인다. 그 값을 한 번 보면 그때 갈라 준다.
  */
 function ScheduleList({
   events,
@@ -521,6 +533,11 @@ function ScheduleList({
     else days.push([ymd, [event]]);
   }
 
+  // 달력이 여럿일 때만 이름을 붙인다. 하나뿐이면 그 이름이 곧 내 이름이라 줄마다 같은 말이
+  // 반복될 뿐이고, 색 막대도 전부 같은 색이라 구분할 게 없다. 여럿이면 반대로 색이 뜻을
+  // 갖기 시작하니 이름이 그 색의 범례가 된다 (a11y: 색만으로 뜻을 나르지 않는다).
+  const named = new Set(events.map((e) => e.calendarName).filter(Boolean)).size > 1;
+
   return (
     <div className="space-y-4">
       {days.map(([ymd, list]) => (
@@ -530,18 +547,72 @@ function ScheduleList({
             {fmtDayLabel(ymd)}
           </h3>
           <ul className="space-y-2">
-            {list.map((event) => (
-              <li key={event.eventSrno} className="flex items-start gap-2">
-                <span className="tabular mt-0.5 w-[76px] shrink-0 text-xs text-muted-foreground">
-                  {event.allDayYn === 'Y'
-                    ? '종일'
-                    : `${fmtTime(event.eventStartDateTime)}–${fmtTime(event.eventFinishDateTime)}`}
-                </span>
-                <span className="min-w-0 flex-1 text-[13px] leading-snug">
-                  {event.eventName}
-                </span>
-              </li>
-            ))}
+            {list.map((event) => {
+              const color = hexColor(event.eventColor, event.calendarColor);
+              const calendar = named ? event.calendarName : undefined;
+              return (
+                // 세 칸을 격자로 세운다. flex로 두면 시각·색 막대가 이름 줄 위에 걸려서
+                // `mt-0.5`·`mt-1` 같은 값을 손으로 맞춰야 하는데, 글자 크기가 바뀌면 그대로
+                // 어긋난다. 격자는 `items-center`가 칸마다 세로 가운데를 잡아 준다.
+                // 아래 줄(달력 이름·링크)은 `col-start-3`으로 이름 아래에 붙어서 왼쪽 여백을
+                // 따로 계산하지 않는다.
+                <li
+                  key={event.eventSrno}
+                  className="grid grid-cols-[76px_3px_1fr] items-center gap-x-2 gap-y-0.5"
+                >
+                  <span className="tabular text-xs text-muted-foreground">
+                    {event.allDayYn === 'Y'
+                      ? '종일'
+                      : `${fmtTime(event.eventStartDateTime)}–${fmtTime(event.eventFinishDateTime)}`}
+                  </span>
+                  <span
+                    aria-hidden
+                    className="h-3 rounded-full bg-border"
+                    style={color ? { backgroundColor: color } : undefined}
+                  />
+                  {/*
+                    아이콘의 `align-[-1px]`은 12px 아이콘을 13px 한글 가운데에 앉히는 값이다.
+                    `align-middle`은 x-height(로마자 소문자 높이) 기준이라 위아래가 꽉 찬 한글
+                    옆에서는 1px쯤 내려앉아 보인다. 둘은 같은 값을 쓴다 — 서로 어긋나면 그게
+                    제일 먼저 눈에 띈다.
+                  */}
+                  <span className="min-w-0 text-[13px] leading-snug">
+                    {event.eventName}
+                    {event.attendanceStatus === 'ATTENDING' && (
+                      <>
+                        <IconAttending
+                          size={12}
+                          aria-hidden
+                          className="ml-1 inline align-[-1px] text-muted-foreground"
+                        />
+                        <span className="sr-only"> (참석해요)</span>
+                      </>
+                    )}
+                    {event.repeatSrno && (
+                      <>
+                        <IconRepeat
+                          size={12}
+                          aria-hidden
+                          className="ml-1 inline align-[-1px] text-muted-foreground"
+                        />
+                        <span className="sr-only"> (반복 일정)</span>
+                      </>
+                    )}
+                  </span>
+                  {(calendar || event.colaboSrno) && (
+                    <span className="col-start-3 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+                      {calendar}
+                      {event.colaboSrno && (
+                        <FlowLink
+                          href={flowProjectUrl(event.colaboSrno)}
+                          className="text-[11px]"
+                        />
+                      )}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       ))}
