@@ -27,6 +27,7 @@ import {
   SidebarSection,
   SidebarTrigger,
 } from '@/components/motion/animated-sidebar';
+import { BottomSheet } from '@/components/motion/bottom-sheet';
 import {
   ChromaticTextReveal,
   SWEEP_CHART,
@@ -99,7 +100,8 @@ export function AppShell({
   user: User;
   /** 담당 업무·내가 올린 글 소식. 못 가져오면 null — 종은 그대로 있고 안이 빈다. */
   news: TaskNews[] | null;
-  /** 오늘 일정. 계정 팝오버가 여는 서랍이 낸다. 못 가져오면 null — 서랍이 그렇게 적는다. */
+  /** 오늘 일정. 넓은 화면은 계정 팝오버가 여는 서랍이, 좁은 화면은 헤더의 시트가 낸다.
+      못 가져오면 null — 판이 그렇게 적는다. */
   events: FlowEvent[] | null;
   /** 쿠키에 남아 있는 밝기. 토글의 처음 상태다 (lib/theme.ts). */
   theme: Theme;
@@ -164,12 +166,14 @@ export function AppShell({
                     늘 쓰는 밝기가 한 번 더 눌러야 나오는 자리로 들어갔다.
                     세로선 뒤의 로그아웃은 좁은 화면만 든다 — 넓은 화면에서는 레일 발이 맡는다
                     (`Account`). 종과 로그아웃이 붙어 있어서 종을 누르려다 로그아웃을 누르던
-                    자리도 그래서 넓은 화면에서는 없어졌다.
+                    자리도 그래서 넓은 화면에서는 없어졌다. 오늘 일정도 같은 짝이다 —
+                    좁은 화면에서만 여기 있고 넓은 화면에서는 레일 발의 팝오버가 연다.
                     이니셜 원판은 좁은 화면에서 빼 뒀다. 로그인은 한 계정뿐이라 누구인지 확인할
                     일이 없고, 컨트롤 다섯 개가 좁은 헤더에 들어가면 종과 로그아웃 사이가 좁다 */}
                 <div className="ml-auto flex min-w-0 items-center gap-2">
                   <HeaderSearch />
                   <ThemeToggle theme={theme} />
+                  <HeaderSchedule events={events} />
                   <NewsBell news={news} />
                   <span
                     aria-hidden
@@ -453,36 +457,95 @@ function Account({ user, events }: { user: User; events: FlowEvent[] | null }) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3">
-          {events === null ? (
-            <p className="text-xs text-muted-foreground">
-              flow가 잠시 답을 주지 않았어요. 새로고침하면 오늘 일정을 다시
-              불러와요.
-            </p>
-          ) : events.length === 0 ? (
-            <EmptyState
-              icon={<IconCalendar size={18} />}
-              title="오늘은 일정이 없어요"
-            />
-          ) : (
-            /* 오늘 화면 카드와 같은 줄 모양이다 — 시각을 폭 고정으로 앞에 세워
-               하루 흐름이 위아래로 읽힌다 ((today)/page.tsx) */
-            <ul className="space-y-2">
-              {events.map((event) => (
-                <li key={event.eventSrno} className="flex items-start gap-2">
-                  <span className="tabular mt-0.5 w-[76px] shrink-0 text-xs text-muted-foreground">
-                    {event.allDayYn === 'Y'
-                      ? '종일'
-                      : `${fmtTime(event.eventStartDateTime)}–${fmtTime(event.eventFinishDateTime)}`}
-                  </span>
-                  <span className="min-w-0 flex-1 text-[13px] leading-snug">
-                    {event.eventName}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ScheduleList events={events} />
         </div>
       </Drawer>
+    </>
+  );
+}
+
+/**
+ * 오늘 일정 목록. 넓은 화면의 서랍(`Account`)과 좁은 화면의 시트(`HeaderSchedule`)가
+ * 같은 것을 쓴다 — 껍데기만 폭에 따라 갈리고 안은 하나다.
+ *
+ * 시각을 폭 고정으로 앞에 세운다 — 일정 이름 길이가 달라도 시각이 한 줄로 맞아서 하루 흐름이
+ * 위아래로 읽힌다. 오늘 화면 카드에 있던 모양 그대로다 (v1.6.0에 이리로 옮겼다).
+ */
+function ScheduleList({ events }: { events: FlowEvent[] | null }) {
+  if (events === null) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        flow가 잠시 답을 주지 않았어요. 새로고침하면 오늘 일정을 다시 불러와요.
+      </p>
+    );
+  }
+
+  if (events.length === 0) {
+    return (
+      <EmptyState icon={<IconCalendar size={18} />} title="오늘은 일정이 없어요" />
+    );
+  }
+
+  return (
+    <ul className="space-y-2">
+      {events.map((event) => (
+        <li key={event.eventSrno} className="flex items-start gap-2">
+          <span className="tabular mt-0.5 w-[76px] shrink-0 text-xs text-muted-foreground">
+            {event.allDayYn === 'Y'
+              ? '종일'
+              : `${fmtTime(event.eventStartDateTime)}–${fmtTime(event.eventFinishDateTime)}`}
+          </span>
+          <span className="min-w-0 flex-1 text-[13px] leading-snug">
+            {event.eventName}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * 좁은 화면의 오늘 일정. 레일이 없어서 헤더가 대신 든다 — 넓은 화면에서는 레일 발의 팝오버가
+ * 서랍을 연다 (`Account`).
+ *
+ * 서랍이 아니라 바텀시트인 것은 소식 종과 같은 이유다 (news-bell.tsx, v1.5.2). 오른쪽에서
+ * 들어오는 320px 판은 390px 화면에서 스크림을 한 뼘만 남기고, 그 판을 여는 단추도 손이 가장 안
+ * 닿는 헤더 오른쪽 끝이다. 시트는 아래에서 올라와 엄지가 닿는 곳에 서고 던져서 닫는다.
+ *
+ * `lg:hidden`이면 충분해서 `useNarrowScreen`은 안 쓴다 — 종처럼 껍데기를 고르는 게 아니라
+ * 여기는 좁은 화면 전용 단추 하나다.
+ */
+function HeaderSchedule({ events }: { events: FlowEvent[] | null }) {
+  const [open, setOpen] = useState(false);
+  const count = events?.length ?? 0;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="오늘 일정"
+        className="flex min-h-9 cursor-pointer items-center rounded-md px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:hidden"
+      >
+        <IconCalendar size={18} aria-hidden />
+        {/* 건수 배지는 안 단다 — 옆의 종이 쓰는 표시라 같은 모양이면 안 읽은 소식으로 읽힌다.
+            대신 읽어 주는 이름에 붙여서 화면 낭독으로는 열기 전에 알 수 있다 */}
+        <span className="sr-only">오늘 일정{count > 0 && ` — ${count}건`}</span>
+      </button>
+
+      {/* `max-w-none`·아래 여백은 소식 시트와 같은 이유다 (news-bell.tsx). 여기는 목록 하나뿐이라
+          가로지르는 구분선이 없어서 좌우 여백은 시트 기본값을 쓴다 */}
+      <BottomSheet
+        open={open}
+        onOpenChange={setOpen}
+        title="오늘 일정"
+        description={count > 0 ? `${count}건이에요.` : undefined}
+        snapPoints={['auto']}
+        className="max-w-none"
+        bodyClassName="px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+      >
+        <ScheduleList events={events} />
+      </BottomSheet>
     </>
   );
 }

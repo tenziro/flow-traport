@@ -1,7 +1,6 @@
 import { EmptyState } from '@/components/empty-state';
 import { FlowLink } from '@/components/flow-link';
 import {
-  IconCalendar,
   IconChevronDown,
   IconFocus,
   IconImminent,
@@ -19,19 +18,23 @@ import { TaskItem } from '@/components/task-item';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { groupMentions } from '@/lib/aggregate';
 import { loadToday } from '@/lib/flow/queries';
-import { cn, fmtDateTime, fmtTime } from '@/lib/utils';
+import { cn, fmtDateTime } from '@/lib/utils';
 
 export const metadata = { title: '오늘 · flow Cockpit' };
 
 /**
- * 배치 (관리자 패널 성격에 맞춘 4단):
+ * 배치 (관리자 패널 성격에 맞춘 3단):
  *
  * 1. KPI 4칸 — 건수 + 전체 점유율 막대. 숫자만 있으면 크고 작음이 안 읽힌다.
  * 2. 포커스(넓게) + 방치된 업무(좁게) — "먼저 할 것"과 "잊고 있던 것"을 나란히.
  * 3. 밀리는 업무 + 나를 부른 사람들 — 둘 다 "지금 답해야 하는 것"이다.
- * 4. 업무 소식 + 오늘 일정 — 챙길 일은 아니고 알고만 있으면 되는 것들이라 맨 아래다.
  *
- * 2·3·4단은 같은 12칸 격자에 8:4로 얹는다. 세 줄의 세로 경계가 한 줄로 맞아야 화면에
+ * 한때 4단이 더 있었다. "알고만 있으면 되는 것들" 자리로 업무 소식과 오늘 일정을 뒀는데,
+ * 소식은 헤더 종으로(news-bell.tsx), 일정은 계정 팝오버의 서랍으로 올라갔다
+ * (app-shell.tsx, v1.6.0). 둘 다 이 화면에서만 보이던 것이라 다른 화면에서는 없는
+ * 기능이었다 — 셸로 올리니 어디서나 같은 자리에 있고, 이 화면은 챙길 일만 남는다.
+ *
+ * 2·3단은 같은 12칸 격자에 8:4로 얹는다. 두 줄의 세로 경계가 한 줄로 맞아야 화면에
  * 기준선이 하나만 생긴다 — 8:4와 6:6을 섞었을 때는 카드 모서리가 계단처럼 어긋났다.
  *
  * 패널마다 배치를 다르게 두는 게 의도다. 같은 카드가 세로로 반복되면 무엇이 중요한지가
@@ -47,7 +50,7 @@ export default async function TodayPage({
   searchParams: Promise<{ focus?: string; overdue?: string }>;
 }) {
   const params = await searchParams;
-  const { now, worklist, focus, stale, projectIds, events } = await loadToday();
+  const { now, worklist, focus, stale, projectIds } = await loadToday();
   const { counts } = worklist;
   /** 워크리스트는 projectId를 안 준다 — 프로젝트 이름으로 해소한다 (queries.ts). */
   const idOf = (project: string) => projectIds.get(project) ?? null;
@@ -499,61 +502,6 @@ export default async function TodayPage({
                   </details>
                 ))}
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/*
-       * 4단. 위 세 단은 "내가 해야 하는 것"이고 이 줄은 "알고만 있으면 되는 것"이다 —
-       * 섞어 놓으면 챙길 일 건수를 셀 때 이 둘까지 세게 된다.
-       *
-       * 예전에는 여기가 업무 소식 + 오늘 일정 8:4였다. 소식은 헤더 종으로 올라갔고
-       * (news-bell.tsx), 남은 일정 하나가 폭을 다 쓰면 시각 열 옆이 허허벌판이라
-       * 위 카드들과 같은 8칸에 세워 왼쪽 경계선을 유지한다.
-       */}
-      <div className="mt-6 grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
-        {/* 오늘 일정 (PRD §13 B3). 캘린더는 REST에만 있다 — MCP로는 못 가져왔다 */}
-        <Card
-          className="rise xl:col-span-8"
-          style={{ '--i': 9 } as React.CSSProperties}
-        >
-          <CardHeader>
-            <CardTitle className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <IconCalendar size={16} className="text-primary" />
-              오늘 일정
-              {events && events.length > 0 && (
-                <span className="tabular ml-auto text-xs font-normal text-muted-foreground">
-                  {events.length}건
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {events === null ? (
-              <Unavailable what="오늘 일정" />
-            ) : events.length === 0 ? (
-              <EmptyState
-                icon={<IconCalendar size={18} />}
-                title="오늘은 일정이 없어요"
-              />
-            ) : (
-              <ul className="space-y-2">
-                {events.map((event) => (
-                  <li key={event.eventSrno} className="flex items-start gap-2">
-                    {/* 시각을 폭 고정으로 앞에 세운다 — 일정 이름 길이가 달라도 시각이
-                        한 줄로 맞아서 하루 흐름이 위아래로 읽힌다 */}
-                    <span className="tabular mt-0.5 w-[76px] shrink-0 text-xs text-muted-foreground">
-                      {event.allDayYn === 'Y'
-                        ? '종일'
-                        : `${fmtTime(event.eventStartDateTime)}–${fmtTime(event.eventFinishDateTime)}`}
-                    </span>
-                    <span className="min-w-0 flex-1 text-[13px] leading-snug">
-                      {event.eventName}
-                    </span>
-                  </li>
-                ))}
-              </ul>
             )}
           </CardContent>
         </Card>

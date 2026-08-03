@@ -11,8 +11,8 @@ import { THEME_COOKIE, toTheme } from "@/lib/theme";
  * 로그인한 화면들의 셸. 프록시가 이미 막지만, 여기서도 세션을 확인한다 —
  * 세션이 있어야 사용자 이름을 렌더할 수 있고, 프록시 매처가 바뀌어도 데이터가 새지 않는다.
  *
- * 소식은 여기서 받는다. 오늘 화면에만 있던 카드를 헤더 종으로 올렸으니 (PRD §13 B1·B2)
- * 데이터도 세 화면이 같이 쓰는 자리로 따라 올라온다.
+ * 소식과 오늘 일정은 여기서 받는다. 둘 다 오늘 화면에만 있던 카드인데 헤더 종과 계정 서랍으로
+ * 올렸으니 (PRD §13 B1·B2·B3) 데이터도 화면들이 같이 쓰는 자리로 따라 올라온다.
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -20,8 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // 사진·한마디는 세션에 없다 (§9.3에만 있다). 소식과 나란히 부르니 기다림이 더 늘지 않는다 —
   // 실패해도 빈 문자열이라 계정 블록만 손 그림으로 돌아간다.
-  // 오늘 일정도 여기서 받는다. 계정 팝오버의 서랍이 세 화면 어디서나 같은 하루를 연다 —
-  // 오늘 화면도 같은 `loadTodayEvents()`를 부르는데 `cache()`가 왕복을 하나로 묶는다.
+  // 오늘 일정도 여기서 받는다. 서랍·시트가 어느 화면에서나 열려서 부르는 자리가 여기뿐이다.
   const [news, me, events, cookieStore] = await Promise.all([
     loadNews(session.userId),
     loadMyAccount(session.fullname, session.email),
