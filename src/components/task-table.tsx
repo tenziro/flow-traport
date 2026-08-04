@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { DDay } from "@/components/d-day";
-import { CenterMorphModal } from "@/components/motion/center-morph-modal";
+import { MorphingModal } from "@/components/motion/morphing-modal";
 import { Table, type TableColumn } from "@/components/motion/table";
 import { countStatuses, StatusDot, statusChipClass } from "@/components/status-filter";
 import { StatusPill } from "@/components/status-pill";
-import { TaskDetailModal } from "@/components/task-detail-modal";
+import { descIdOf, TaskDetailModal } from "@/components/task-detail-modal";
 import { diffDays, parseFlowDeadline } from "@/lib/aggregate/date";
 import type { FocusPick, WorklistTask } from "@/lib/flow/queries";
 import { cn, fmtDate } from "@/lib/utils";
@@ -99,25 +99,12 @@ export function TaskTable({
 
   /**
    * 열려 있는 업무. 닫을 때 이 값을 비우지 않는다 — 모달이 접히는 동안 내용이 남아 있어야
-   * 접히는 게 보인다(`CenterMorphModalContent`가 `AnimatePresence`로 내보낸다).
+   * 접히는 게 보인다(`MorphingModal`이 `AnimatePresence`로 내보낸다).
    */
   const [opened, setOpened] = useState<TaskTableRow | null>(null);
   const [open, setOpen] = useState(false);
-  /**
-   * 모달을 연 버튼. 닫을 때 여기로 초점을 돌린다 — `CenterMorphModalTrigger`를 안 써서
-   * 모달이 스스로 찾아갈 트리거 요소가 없다(그쪽 정리 코드는 null에 아무 일도 안 한다).
-   */
-  const trigger = useRef<HTMLElement | null>(null);
 
-  /**
-   * `useCallback`이 필수다. 이게 매 렌더 새 함수면 모달 컨텍스트가 새로 만들어지고, 그
-   * 컨텍스트를 의존성으로 쓰는 초점 이펙트가 열려 있는 동안 계속 다시 돌아 첫 번째
-   * 컨트롤로 초점을 끌어간다 — 댓글을 쓰는 중에 커서가 튄다.
-   */
-  const onOpenChange = useCallback((next: boolean) => {
-    setOpen(next);
-    if (!next) trigger.current?.focus();
-  }, []);
+  const close = useCallback(() => setOpen(false), []);
 
   const shownOf = useCallback(
     (task: TaskTableRow) => {
@@ -138,8 +125,7 @@ export function TaskTable({
       cell: (row) => (
         <button
           type="button"
-          onClick={(event) => {
-            trigger.current = event.currentTarget;
+          onClick={() => {
             setOpened(row);
             setOpen(true);
           }}
@@ -269,8 +255,18 @@ export function TaskTable({
         className="rounded-lg"
       />
 
-      {/* 모달 하나를 표가 돌려 쓴다. 접히는 동안 내용이 남아야 해서 `opened`는 안 비운다 */}
-      <CenterMorphModal open={open} onOpenChange={onOpenChange}>
+      {/* 모달 하나를 표가 돌려 쓴다. 접히는 동안 내용이 남아야 해서 `opened`는 안 비운다.
+          `viewId`가 업무 번호라 다른 줄을 열면 패널이 높이를 맞춰 늘었다 줄어든다.
+          오른쪽 위 닫기 아이콘은 끈다 — 패널 아래 `닫기` 버튼과 이름이 같아서 화면
+          낭독기에 `닫기`가 두 번 읽힌다. 오른쪽 아래 한 자리로 모은다 (TEXT_GUIDE) */}
+      <MorphingModal
+        viewId={open && opened ? String(opened.taskSrno) : null}
+        onClose={close}
+        ariaLabel="업무 상세"
+        ariaDescribedBy={opened ? descIdOf(opened) : undefined}
+        showCloseButton={false}
+        className="max-w-[34rem]"
+      >
         {opened && openedShown && (
           <TaskDetailModal
             task={opened}
@@ -279,10 +275,11 @@ export function TaskTable({
             path={path}
             rank={opened.rank}
             top={top}
+            onClose={close}
             onSaved={(patch) => setLive((prev) => next(prev, opened, patch))}
           />
         )}
-      </CenterMorphModal>
+      </MorphingModal>
     </div>
   );
 }

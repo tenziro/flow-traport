@@ -1,14 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { IconInfo, IconOpen } from "@/components/icons";
 import { Button } from "@/components/motion/button/base";
-import {
-  CenterMorphModal,
-  CenterMorphModalContent,
-  CenterMorphModalTrigger,
-} from "@/components/motion/center-morph-modal";
 import { Input } from "@/components/motion/input";
+import { MorphingModal } from "@/components/motion/morphing-modal";
 import { saveApiKey } from "./actions";
 
 /** flow 개인 API 키 발급 화면. 모달과 로그인 화면 두 곳에서 같은 곳을 가리킨다. */
@@ -37,8 +33,11 @@ const LOGIN_PATH = "/api/auth/login";
  * (`react-hooks/set-state-in-effect`). 서버 액션을 직접 await하면 성공 자리에서 바로 넘어간다.
  */
 export function ApiKeyGate({ hasKey }: { hasKey: boolean }) {
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const close = useCallback(() => setOpen(false), []);
 
   async function submit(form: FormData) {
     setBusy(true);
@@ -61,14 +60,14 @@ export function ApiKeyGate({ hasKey }: { hasKey: boolean }) {
   }
 
   return (
-    <CenterMorphModal>
-      <CenterMorphModalTrigger>
-        <Button type="button" size="lg" className="w-full">
-          flow로 로그인
-        </Button>
-      </CenterMorphModalTrigger>
+    <>
+      <Button type="button" size="lg" className="w-full" onClick={() => setOpen(true)}>
+        flow로 로그인
+      </Button>
 
-      <CenterMorphModalContent
+      <MorphingModal
+        viewId={open ? "api-key" : null}
+        onClose={close}
         ariaLabel="flow API 키 등록"
         ariaDescribedBy="api-key-why"
         className="max-w-[24rem]"
@@ -121,7 +120,7 @@ export function ApiKeyGate({ hasKey }: { hasKey: boolean }) {
             키를 등록해야 로그인할 수 있어요. 한 번 등록하면 다시 묻지 않아요.
           </p>
         </div>
-      </CenterMorphModalContent>
-    </CenterMorphModal>
+      </MorphingModal>
+    </>
   );
 }

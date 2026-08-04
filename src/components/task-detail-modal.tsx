@@ -4,15 +4,14 @@ import { FlowLink } from "@/components/flow-link";
 import { IconComment, IconMention } from "@/components/icons";
 import { Meter } from "@/components/meter";
 import { Button } from "@/components/motion/button/base";
-import {
-  CenterMorphModalClose,
-  CenterMorphModalContent,
-} from "@/components/motion/center-morph-modal";
 import { StatusPill } from "@/components/status-pill";
 import { TaskEditFields } from "@/components/task-actions";
 import { TaskThread } from "@/components/task-thread";
 import type { FocusPick, WorklistTask } from "@/lib/flow/queries";
 import { DDay } from "@/components/d-day";
+
+/** 모달 제목의 id. 패널(`aria-describedby`)과 제목이 같은 값을 봐야 한다. */
+export const descIdOf = (task: { taskSrno: number }) => `task-detail-${task.taskSrno}`;
 
 /**
  * 업무 상세 모달 (PRD §6.1.4). 표에서 업무명을 누르면 이게 열린다.
@@ -34,6 +33,7 @@ export function TaskDetailModal({
   path,
   rank,
   top,
+  onClose,
   onSaved,
 }: {
   task: FocusPick | WorklistTask;
@@ -44,23 +44,17 @@ export function TaskDetailModal({
   path: string;
   rank?: number;
   top?: number;
+  onClose: () => void;
   onSaved?: (patch: { status?: string; endDate?: string }) => void;
 }) {
   const pick = "score" in task ? task : null;
   const regDate = "regDate" in task ? (task.regDate ?? "") : "";
-  const descId = `task-detail-${task.taskSrno}`;
+  const descId = descIdOf(task);
 
   return (
-    /* 오른쪽 위 닫기 아이콘은 끈다 — 아래 `닫기` 버튼과 이름이 같아서 화면 낭독기에
-       `닫기`가 두 번 읽힌다. 오른쪽 아래 한 자리로 모은다 (TEXT_GUIDE).
-       패널 패딩을 안 주고 덩어리마다 각자 갖는다 — 경계선이 패널 폭 끝까지 닿아야
+    /* 패널 패딩을 안 주고 덩어리마다 각자 갖는다 — 경계선이 패널 폭 끝까지 닿아야
        머리·값·이유·댓글이 갈린다 */
-    <CenterMorphModalContent
-      ariaLabel="업무 상세"
-      ariaDescribedBy={descId}
-      showCloseButton={false}
-      className="max-w-[34rem]"
-    >
+    <>
       {/* 머리 — 어느 프로젝트의 어느 업무인지가 먼저다. 표가 뒤로 가려도 대상이 남는다 */}
       <div className="border-b border-border px-5 pt-5 pb-4">
         <p className="truncate text-xs text-muted-foreground">{task.project}</p>
@@ -163,14 +157,12 @@ export function TaskDetailModal({
 
       <div className="flex items-center justify-between px-5 py-3">
         <FlowLink href={task.link} />
-        <CenterMorphModalClose>
-          {/* `취소`가 아니라 `닫기`다 — 하던 일이 취소된다고 읽힌다 (TEXT_GUIDE) */}
-          <Button type="button" size="sm" variant="ghost">
-            닫기
-          </Button>
-        </CenterMorphModalClose>
+        {/* `취소`가 아니라 `닫기`다 — 하던 일이 취소된다고 읽힌다 (TEXT_GUIDE) */}
+        <Button type="button" size="sm" variant="ghost" onClick={onClose}>
+          닫기
+        </Button>
       </div>
-    </CenterMorphModalContent>
+    </>
   );
 }
 

@@ -71,7 +71,7 @@ export function DateField({
         <span className="min-w-0 flex-1 truncate">{value || placeholder}</span>
       </PopoverTrigger>
       {/* 달력 폭에 맞춘다. 기본값(`w-72` + 안쪽 여백)은 7칸짜리 격자보다 넓어 오른쪽이 빈다.
-          `z-[110]`은 바꾸기 모달(`z-[100]` — center-morph-modal)보다 위로 올리는 값이다.
+          `z-[110]`은 바꾸기 모달(`z-[100]` — morphing-modal)보다 위로 올리는 값이다.
           기본 `z-50`이면 모달 안에서 열었을 때 달력이 패널 뒤로 들어간다 */}
       <PopoverContent align="start" className="z-[110] w-auto p-0">
         <Calendar

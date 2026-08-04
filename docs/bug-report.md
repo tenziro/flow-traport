@@ -1375,8 +1375,9 @@ if (!result?.fields) setAsked(false);
 
 호출자마다 `max-h`를 재지 않은 이유는 그게 증상 자리라서다. 잘림은 이 칸 하나에서 나오고,
 그 칸을 앱의 모든 모달이 쓴다 — 여기서 고치면 다 낫는다. 벤더 파일이라
-[center-morph-modal.tsx](../src/components/motion/center-morph-modal.tsx) 머리 주석에
-**이탈 #4**로 적었다.
+[morphing-modal.tsx](../src/components/motion/morphing-modal.tsx) 머리 주석에
+**이탈 5**로 적었다 (v2.2.0에는 `center-morph-modal.tsx`의 이탈 #4였다 — v3.0.0에서 벤더를
+갈면서 이 칸을 그대로 옮겼다).
 
 ---
 

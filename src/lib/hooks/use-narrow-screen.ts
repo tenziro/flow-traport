@@ -20,7 +20,7 @@ const NARROW = "(max-width: 1023.98px)";
  *
  * `useEffect` + `useState`가 아니라 `useSyncExternalStore`인 것은 이게 바로 "밖에 있는 값을
  * 구독하는" 자리라서다 — 이펙트로 하면 첫 그림 뒤에 한 번 더 그리고, 린트도 이펙트 안의
- * setState를 막는다 (center-morph-modal.tsx의 `mounted`와 같은 이유).
+ * setState를 막는다 (morphing-modal.tsx의 `mounted`와 같은 이유).
  */
 export function useNarrowScreen() {
   return useSyncExternalStore(subscribe, isNarrow, ON_SERVER);

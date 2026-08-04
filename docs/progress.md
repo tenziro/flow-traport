@@ -1,6 +1,6 @@
 # 개발 진행 상황
 
-버전 2.2.0 · 2026-08-03 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
+버전 3.0.0 · 2026-08-04 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
 
 ## 요약
 
@@ -1000,7 +1000,7 @@ v0.15의 편집 패널은 셀렉트 네 개를 행 안에 펼쳐 놨다. 지금 
 
 | 붙은 것 | 어디 |
 |---|---|
-| `업무 바꾸기` 모달 | [task-actions.tsx](../src/components/task-actions.tsx) — beUI [center-morph-modal](../src/components/motion/center-morph-modal.tsx) |
+| `업무 바꾸기` 모달 | [task-actions.tsx](../src/components/task-actions.tsx) — beUI [morphing-modal](../src/components/motion/morphing-modal.tsx) |
 | 네 줄 다 텍스트 → `변경` 누른 줄만 컨트롤 | 같은 파일 `Row` / `useSave` |
 | 고르기는 브라우저 기본 `<select>` | 같은 파일 `Pick` — `appearance-none` + 손으로 그린 `IconChevronDown` |
 | 달력은 모달 위로 | [date-field.tsx](../src/components/date-field.tsx) — `PopoverContent`에 `z-[110]` |
@@ -1191,7 +1191,7 @@ duration-300 ease-out`과 `rounded-lg`도 함께 지웠다. 오늘 화면 멘션
 
 **Motion 안에서는 `var(--radius)`를 못 쓴다.** clip-path 문자열과 `borderRadius` 숫자 prop을
 Motion이 숫자로 풀어서 보간하기 때문에 변수를 넣으면 애니메이션이 선다. 그래서
-[center-morph-modal.tsx](../src/components/motion/center-morph-modal.tsx)와
+[morphing-modal.tsx](../src/components/motion/morphing-modal.tsx)와
 [bouncy-accordion.tsx](../src/components/motion/bouncy-accordion.tsx) 두 곳은 8px을 박아 두고
 주석으로 `--radius`와 묶어 뒀다.
 
@@ -1391,6 +1391,41 @@ Tailwind `dark:` 변인은 블록 형태(`@custom-variant dark { … @slot }`)�
 **업무명·프로젝트명은 한 줄에서 자른다** (v1.1.0). 나를 부른 사람들은 제목이 두 줄까지
 흐르고 메타 줄이 접혀서 어떤 줄은 2단, 어떤 줄은 3단이었다. 제목은 `truncate`, 메타 줄은
 `flex-wrap`을 떼고 프로젝트명만 줄어들게 했다. 업무 줄·리스크 보드·방치 업무 스캔도 같다.
+
+### 모달 벤더 교체 — beUI morphing-modal (v3.0.0)
+
+beUI에는 `center-morph-modal`과 `morphing-modal`이 따로 있다. 쓰고 있던 쪽은 앞의 것이라
+이름만 바꿀 수 없었고, 뒤의 것을 새로 벤더링해 호출처 다섯 곳을 다시 짰다.
+
+| 파일 | 무엇 |
+|---|---|
+| `src/components/motion/morphing-modal.tsx` | **신규**. `viewId` 하나로 여닫는 단일 패널. 상류 `layout` 높이 모프 + 블러 교차 |
+| `src/components/motion/center-morph-modal.tsx` | **삭제**. 402줄, 합성 API 네 조각 + `clip-path` 가운데 펼침 |
+| `src/components/task-table.tsx` | `trigger` ref 뭉치가 사라졌다 — 새 모달이 `document.activeElement`로 초점을 되돌린다 |
+| `src/components/task-detail-modal.tsx` | 패널 태그를 벗고 조각(`<>…</>`). `onClose` prop, `descIdOf` 내보내기 |
+| `src/components/mention-table.tsx` | 같은 방식. `MentionDetail`도 조각이 됐다 |
+| `src/app/login/api-key-gate.tsx` | `Trigger` 대신 자기 버튼 + `useState`. 닫기 아이콘은 그대로 켠다(로그인 화면에 남는다) |
+| `src/components/site-footer.tsx` | 같은 방식 |
+| 주석 여섯 곳 | `date-field.tsx`·`motion/bottom-sheet.tsx`·`motion/drawer.tsx`·`motion/bouncy-accordion.tsx`·`lib/hooks/use-narrow-screen.ts`가 파일 이름을 가리키고 있었다 |
+
+| 결정 | 이유 |
+|---|---|
+| 합성 API를 버렸다 | 상류가 `viewId` 하나다. 컨텍스트·`Trigger`·`Close`를 되살리면 벤더 이탈이 셋 더 늘고, 되살릴 값이 호출처 다섯 곳에 `useState` 한 줄씩보다 크지 않다 |
+| 초점은 `document.activeElement`로 | 트리거 DOM을 ref로 넘기던 길이 표 두 곳에 같은 뭉치로 있었다. 열 때 뭐가 눌려 있었는지는 브라우저가 이미 안다 — `Trigger` 없이도 되돌아간다 |
+| 벤더 이탈 일곱 개를 다시 넣었다 | 포털·초점 가두기·Escape·`role="dialog"`·긴 내용 스크롤·`z-[100]`과 모서리·`placement` 제거. 상류에 없는 것들이고, 특히 포털은 표가 가상 스크롤이라 조상 `transform`이 `position: fixed`를 깨서 없으면 모달이 화면에 안 맞는다 |
+| `placement`를 안 가져왔다 | 아래 붙는 패널은 `bottom-sheet.tsx`가 따로 있다. 한 가지를 두 군데서 하는 길을 안 만든다 |
+| 패널 속성은 표로 올렸다 | `ariaLabel`·`ariaDescribedBy`·`showCloseButton`·`className`이 패널 것이고 상세 덩어리는 이제 패널이 아니다. `aria-describedby`가 제목 id와 짝이라 두 파일이 `descIdOf`를 내보낸다 |
+| 메이저 올림 | 앱의 모든 모달이 지나는 부품을 갈고 호출 규약이 바뀌었다 (`구조` = major) |
+
+**렌더 중 ref 쓰기는 React 19 린트가 막는다.** `onClose`를 이펙트 의존성에서 빼려고
+`latest.current = { onClose, dismissible }`를 렌더 본문에 뒀더니 `Cannot access refs during
+render`가 났다 ([morphing-modal.tsx](../src/components/motion/morphing-modal.tsx)). 값을 싣는
+이펙트를 하나 따로 뒀다 — 키 이벤트는 렌더보다 늦게 오니 하는 일은 같다. 이 규칙은
+`react-hooks/set-state-in-effect`와 짝이다: **이펙트에서 setState는 막고, 렌더에서 ref 쓰기도
+막는다.**
+
+**미검증**: 브라우저 확인을 못 했다 — Playwright MCP가 세션 내내 `Browser is already in use`다.
+`tsc`·eslint(0 errors, 벤더 경고 2)·`npm test`(128/128)·`npm run build`(15/15)까지는 통과했다.
 
 ### 답글, 멘션 표 말풍선, 긴 모달 (v2.2.0)
 
@@ -1757,7 +1792,7 @@ Tab 포커스 링이 카드 안쪽에 제대로 그려지는 것(`clip-path`에 
 
 beUI 컴포넌트를 가져올 때 걸리는 린트 규칙이 하나 더 있다. React 19의
 `react-hooks/set-state-in-effect`가 `useEffect(() => setMounted(true), [])` 패턴을 막는다.
-[center-morph-modal.tsx](../src/components/motion/center-morph-modal.tsx)에서는
+[morphing-modal.tsx](../src/components/motion/morphing-modal.tsx)에서는
 `useSyncExternalStore`(서버 스냅샷 false / 클라이언트 true)로 바꿨다 — 하는 일은 같고
 렌더가 한 번 덜 돈다. 포털 대상이 `document.body`라 서버 렌더에서는 null이어야 한다.
 

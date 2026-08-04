@@ -3,7 +3,7 @@
 //
 // beUI 원본에서 고친 것은 다섯이다.
 // 1. 마운트 감지를 `useEffect(() => setMounted(true))`에서 `useSyncExternalStore`로
-//    바꿨다. 원본 패턴이 React 19 린트에 걸린다 — center-morph-modal.tsx와 같은 이유·같은 방식.
+//    바꿨다. 원본 패턴이 React 19 린트에 걸린다 — morphing-modal.tsx와 같은 이유·같은 방식.
 // 2. **Escape로 닫고, 열 때 시트로 포커스를 넣고 닫을 때 열었던 자리로 되돌린다.** 원본에는
 //    셋 다 없다. 이 시트는 좁은 화면에서 Radix 팝오버를 대신하는 자리라(news-bell.tsx),
 //    팝오버가 해 주던 일이 사라지면 같은 기능이 키보드에서만 나빠진다. 탭 트랩은 두지 않는다 —
@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils";
 // backdrop fade so the surface and scrim move as one.
 const DRAWER = { duration: 0.5, ease: EASE_DRAWER } as const;
 
-/** 마운트 감지 (center-morph-modal.tsx와 같다) — 포털 대상이 `document.body`다. */
+/** 마운트 감지 (morphing-modal.tsx와 같다) — 포털 대상이 `document.body`다. */
 const NEVER_CHANGES = () => () => {};
 const ON_CLIENT = () => true;
 const ON_SERVER = () => false;

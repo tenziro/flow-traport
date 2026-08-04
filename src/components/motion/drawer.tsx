@@ -5,7 +5,7 @@
 // 1. `<body>`로 포털한다 (`useSyncExternalStore` + `createPortal`). 여는 자리가 좌측 레일인데
 //    레일은 `overflow-hidden`에 `will-change:transform`을 걸고 폭을 애니메이션한다 —
 //    그 안에서 `position:fixed`는 화면이 아니라 레일을 기준으로 잡힌다. 이 앱의 레이어 셋이
-//    모두 같은 이유로 포털한다 (center-morph-modal.tsx·bottom-sheet.tsx).
+//    모두 같은 이유로 포털한다 (morphing-modal.tsx·bottom-sheet.tsx).
 // 2. 스크림을 `bg-black/40`에서 토큰(`bg-background/40`)으로 바꿨다. 컴포넌트에 색을 직접
 //    적지 않는다 (PRD §7.1) — 어두운 화면에서 검정 위에 검정을 덮는 문제도 같이 사라진다.
 // 3. 스크림의 읽어 주는 이름을 한국어로 바꿨다. 이 앱의 UI 문구는 전부 한국어다.
@@ -20,7 +20,7 @@ import { createPortal } from "react-dom";
 import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
 import { cn } from "@/lib/utils";
 
-/** 마운트 감지 (center-morph-modal.tsx와 같다) — 포털 대상이 `document.body`다. */
+/** 마운트 감지 (morphing-modal.tsx와 같다) — 포털 대상이 `document.body`다. */
 const NEVER_CHANGES = () => () => {};
 const ON_CLIENT = () => true;
 const ON_SERVER = () => false;

@@ -81,6 +81,52 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
 
 ## 변경 이력
 
+### 2026-08-04 — 모달 벤더를 beUI morphing-modal로 갈았다 (v3.0.0)
+
+`구조` **`center-morph-modal.tsx`를 걷고 `morphing-modal.tsx`를 벤더링했다.** beUI에는
+두 컴포넌트가 따로 있다 — 이름만 바꾼 게 아니라 다른 부품이다. 상류 `morphing-modal`은
+`viewId` 하나로 여닫는 단일 패널이고, 값이 바뀌면 패널이 높이를 맞춰 늘었다 줄면서 안쪽
+내용이 블러로 교차한다. 예전 것은 `Modal`/`Trigger`/`Content`/`Close` 네 조각을 조립하는
+합성 API에 가운데서 `clip-path`로 펼치는 모션이었다.
+
+| 걷은 것 | 대신 |
+| --- | --- |
+| `CenterMorphModal` 컨텍스트 + `Trigger` + `Close` | 호출자가 `useState`로 여닫는다. `viewId`가 `null`이면 닫힌 것 |
+| 트리거 DOM을 ref로 넘겨 초점을 되돌리던 길 | 열 때의 `document.activeElement`를 기억한다 — 표 두 곳에서 `trigger` ref 뭉치가 사라졌다 |
+| `clip-path` 가운데 펼침 | 상류 `layout` + `SPRING_PANEL` 높이 모프 |
+| `placement` prop | 아래 붙는 패널은 `bottom-sheet.tsx`가 따로 있다 |
+
+상류에 없는 것 일곱 개(포털·초점 가두기·Escape·`role="dialog"`·긴 내용 스크롤·`z-[100]`과
+모서리·`placement` 제거)는 손으로 다시 넣고 새 파일 머리 주석에 **벤더 이탈 1~7**로 적었다.
+BUG-039의 스크롤 칸은 그대로 옮겨 왔다(이탈 5).
+
+호출처 다섯 곳을 다시 짰다. `task-detail-modal.tsx`·`mention-table.tsx`의 상세 덩어리는
+패널 태그를 벗고 조각(`<>…</>`)이 됐고 `onClose`를 prop으로 받는다 — 패널 속성
+(`ariaLabel`·`ariaDescribedBy`·`showCloseButton`·`className`)은 모달을 들고 있는 표로 올라갔다.
+`aria-describedby`가 제목 id와 같은 값을 봐야 해서 두 파일이 `descIdOf`를 내보낸다.
+`api-key-gate.tsx`·`site-footer.tsx`는 `Trigger` 대신 자기 버튼과 `useState`를 갖는다.
+
+`z-[100]`·모서리 8px은 그대로라 달력 팝오버(`z-[110]` — BUG-026)와 `--radius` 짝은 안 건드렸다.
+파일 이름을 가리키던 주석 여섯 곳(`date-field.tsx`, `motion/bottom-sheet.tsx`,
+`motion/drawer.tsx`, `motion/bouncy-accordion.tsx`, `lib/hooks/use-narrow-screen.ts`)을 새
+이름으로 옮겼다.
+
+> **렌더 중 ref 쓰기는 React 19 린트가 막는다.** `onClose`를 이펙트 의존성에서 빼려고
+> `latest.current = { onClose, dismissible }`를 렌더 본문에 뒀더니
+> `Cannot access refs during render`가 났다. 값을 싣는 이펙트를 하나 따로 뒀다 — 키 이벤트는
+> 렌더보다 늦게 오니 하는 일은 같다.
+
+- 관련: `src/components/motion/morphing-modal.tsx`(신규),
+  `src/components/motion/center-morph-modal.tsx`(삭제), `src/components/task-table.tsx`,
+  `src/components/task-detail-modal.tsx`, `src/components/mention-table.tsx`,
+  `src/app/login/api-key-gate.tsx`, `src/components/site-footer.tsx`,
+  `src/components/date-field.tsx`, `src/components/motion/bottom-sheet.tsx`,
+  `src/components/motion/drawer.tsx`, `src/components/motion/bouncy-accordion.tsx`,
+  `src/lib/hooks/use-narrow-screen.ts`, `docs/PRD.md`, `docs/bug-report.md`,
+  `docs/progress.md`, `src/lib/changelog.ts`, `package.json`
+
+---
+
 ### 2026-08-03 — 답글 남기기, 멘션 표 말풍선 숫자, 긴 모달 잘림 (v2.2.0)
 
 `기능` **댓글에 답글을 남긴다.** 사람 댓글 줄마다 `답글`이 붙고(시스템 기록에는 안 붙인다 —

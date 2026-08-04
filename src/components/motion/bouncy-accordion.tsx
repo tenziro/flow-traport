@@ -11,7 +11,7 @@
 //
 // 세 번째 개조: 묶음 첫·끝 행의 모서리를 28px → 8px. 이 앱의 모서리는 카드 기준 8px이고,
 // 업데이트 로그에서는 이 행들이 8px 모달 안에 든다 — 안쪽이 더 둥글면 두 곡률이 겹쳐 보인다.
-// `--radius`를 못 읽는 자리다: Motion이 숫자로 보간한다 (center-morph-modal.tsx와 같은 이유).
+// `--radius`를 못 읽는 자리다: Motion이 숫자로 보간한다 (morphing-modal.tsx와 같은 이유).
 //
 // 주의 — 행이 `bg-card` + `overflow-hidden` + 라운드 카드다. 이 앱은 이미 Card
 // 안에서 쓰기 때문에 호출부에서 `classNames.item`에 `bg-transparent overflow-visible`을

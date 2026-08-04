@@ -1,15 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { FlowLink } from "@/components/flow-link";
 import { IconLastComment } from "@/components/icons";
 import { MentionActions } from "@/components/mention-actions";
 import { Button } from "@/components/motion/button/base";
-import {
-  CenterMorphModal,
-  CenterMorphModalClose,
-  CenterMorphModalContent,
-} from "@/components/motion/center-morph-modal";
+import { MorphingModal } from "@/components/motion/morphing-modal";
 import { Table, type TableColumn } from "@/components/motion/table";
 import { StatusPill } from "@/components/status-pill";
 import type { MentionGroup } from "@/lib/aggregate";
@@ -44,13 +40,8 @@ export function MentionTable({
   /** 열려 있는 그룹. 모달이 접히는 동안 내용이 남아야 해서 닫을 때 비우지 않는다. */
   const [opened, setOpened] = useState<MentionTableRow | null>(null);
   const [open, setOpen] = useState(false);
-  const trigger = useRef<HTMLElement | null>(null);
 
-  /** `useCallback`이 필수다 — 이유는 `task-table.tsx`의 같은 자리 주석에 있다. */
-  const onOpenChange = useCallback((next: boolean) => {
-    setOpen(next);
-    if (!next) trigger.current?.focus();
-  }, []);
+  const close = useCallback(() => setOpen(false), []);
 
   const columns = useMemo<TableColumn<MentionTableRow>[]>(
     () => [
@@ -62,8 +53,7 @@ export function MentionTable({
         cell: (row) => (
           <button
             type="button"
-            onClick={(event) => {
-              trigger.current = event.currentTarget;
+            onClick={() => {
               setOpened(row);
               setOpen(true);
             }}
@@ -132,12 +122,26 @@ export function MentionTable({
         className="rounded-lg"
       />
 
-      <CenterMorphModal open={open} onOpenChange={onOpenChange}>
-        {opened && <MentionDetail group={opened} path={path} />}
-      </CenterMorphModal>
+      {/* 모달 하나를 표가 돌려 쓴다. `viewId`가 업무 번호라 다른 줄을 열면 패널이 높이를
+          맞춰 늘었다 줄어든다 — 접히고 다시 펼치지 않는다.
+          오른쪽 위 닫기 아이콘은 끈다 — 패널 아래 `닫기` 버튼과 이름이 같아서 화면
+          낭독기에 `닫기`가 두 번 읽힌다 (업무 표와 같다) */}
+      <MorphingModal
+        viewId={open && opened ? opened.taskId : null}
+        onClose={close}
+        ariaLabel="나를 부른 댓글"
+        ariaDescribedBy={opened ? descIdOf(opened) : undefined}
+        showCloseButton={false}
+        className="max-w-[34rem]"
+      >
+        {opened && <MentionDetail group={opened} path={path} onClose={close} />}
+      </MorphingModal>
     </div>
   );
 }
+
+/** 모달 제목의 id. 패널(`aria-describedby`)과 제목이 같은 값을 봐야 한다. */
+const descIdOf = (group: MentionTableRow) => `mention-detail-${group.taskId}`;
 
 /**
  * 멘션 상세 모달. 표 줄은 마지막 말 한 줄만 보여주니, 앞뒤 대화는 여기서 읽는다.
@@ -145,16 +149,19 @@ export function MentionTable({
  * 알림은 **나를 부른 댓글만** 준다 — 부모 댓글은 안 와서 진짜 트리로는 못 세운다.
  * 답글은 한 칸 들여쓰기와 아이콘 색까지가 정직한 선이다.
  */
-function MentionDetail({ group, path }: { group: MentionTableRow; path: string }) {
-  const descId = `mention-detail-${group.taskId}`;
+function MentionDetail({
+  group,
+  path,
+  onClose,
+}: {
+  group: MentionTableRow;
+  path: string;
+  onClose: () => void;
+}) {
+  const descId = descIdOf(group);
 
   return (
-    <CenterMorphModalContent
-      ariaLabel="나를 부른 댓글"
-      ariaDescribedBy={descId}
-      showCloseButton={false}
-      className="max-w-[34rem]"
-    >
+    <>
       <div className="border-b border-border px-5 pt-5 pb-4">
         <p className="truncate text-xs text-muted-foreground">{group.project ?? "프로젝트 미확인"}</p>
         <h2 id={descId} className="mt-1 text-base font-semibold">
@@ -215,12 +222,10 @@ function MentionDetail({ group, path }: { group: MentionTableRow; path: string }
 
       <div className="flex items-center justify-between px-5 py-3">
         <FlowLink href={group.link} />
-        <CenterMorphModalClose>
-          <Button type="button" size="sm" variant="ghost">
-            닫기
-          </Button>
-        </CenterMorphModalClose>
+        <Button type="button" size="sm" variant="ghost" onClick={onClose}>
+          닫기
+        </Button>
       </div>
-    </CenterMorphModalContent>
+    </>
   );
 }
