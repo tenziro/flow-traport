@@ -4,7 +4,6 @@ import { FlowLink } from "@/components/flow-link";
 import { IconComment, IconMention } from "@/components/icons";
 import { Meter } from "@/components/meter";
 import { Button } from "@/components/motion/button/base";
-import { StatusPill } from "@/components/status-pill";
 import { TaskEditFields } from "@/components/task-actions";
 import { TaskThread } from "@/components/task-thread";
 import type { FocusPick, WorklistTask } from "@/lib/flow/queries";
@@ -16,9 +15,9 @@ export const descIdOf = (task: { taskSrno: number }) => `task-detail-${task.task
 /**
  * 업무 상세 모달 (PRD §6.1.4). 표에서 업무명을 누르면 이게 열린다.
  *
- * flow의 업무 상세와 같은 순서로 덩어리를 나눈다: 어느 업무인지(머리) → 누가 냈는지(등록자) →
- * 지금 값(다섯 줄) → 왜 골랐는지(포커스만) → 본문 → 댓글. 표가 업무명·프로젝트·상태·마감일만
- * 보여주니 나머지는 다 여기 있다.
+ * flow의 업무 상세와 같은 순서로 덩어리를 나눈다: 어느 업무인지(머리) → 지금 값(다섯 줄) →
+ * 왜 골랐는지(포커스만) → 본문 → 댓글. 표가 업무명·프로젝트·상태·마감일만 보여주니 나머지는
+ * 다 여기 있다.
  *
  * 본문·댓글이 맨 아래인 이유는 그 둘만 열고 나서 도착한다는 것이다 (`TaskThread`) —
  * 위에 두면 값과 이유가 도착하는 순간 아래로 밀린다.
@@ -75,13 +74,19 @@ export function TaskDetailModal({
           <h2 id={descId} className="text-base font-semibold">
             {task.title}
           </h2>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <StatusPill status={shown.status} />
-            {shown.endDate ? <DDay days={shown.daysLeft} /> : null}
-            {rank !== undefined && (
-              <span className="text-xs text-muted-foreground">오늘 포커스 {rank}순위</span>
-            )}
-          </div>
+          {/* 업무명 아래 줄 — 상태 배지는 여기 두지 않는다. 바로 아래 `상태` 줄이 같은 값을
+              같은 배지로 이미 보여줘서 한 화면에 두 번 나왔다. 그 자리를 등록자가 받는다:
+              이 값은 어디서도 바꿀 수 없어서 고치는 줄들과 섞일 이유가 없고, 원판 없이
+              이름만으로 충분하다 (flow가 이 컬럼에 사진을 안 준다) */}
+          {(shown.endDate || author || rank !== undefined) && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {shown.endDate ? <DDay days={shown.daysLeft} /> : null}
+              {author && <span className="text-xs text-muted-foreground">등록자 {author}</span>}
+              {rank !== undefined && (
+                <span className="text-xs text-muted-foreground">오늘 포커스 {rank}순위</span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -100,26 +105,6 @@ export function TaskDetailModal({
           읽는 자리와 머리·바닥을 면으로 갈라서, 스크롤이 어디서 시작하고 끝나는지가
           선 하나에만 걸리지 않는다. 다크에서도 같은 방향이다 (#1c2537 vs #151c2c) */}
       <div className="max-h-[min(60vh,calc(100dvh-16rem))] overflow-y-auto border-b border-border bg-card [&>*:last-child]:border-b-0">
-        {/* 등록자 — 아래 다섯 줄과 섞지 않고 자기 덩어리를 갖는다. 그 다섯은 지금 값이고
-            바꿀 수 있는 값인데, 등록자는 이 업무가 생긴 자리라 성격이 다르다.
-            원판은 이름 첫 글자다 — flow는 이 컬럼에서 사진을 안 준다(`profilePhoto`가 늘
-            빈 문자열). 부서·직급도 없다: 등록자 대부분이 타사 사용자고 구성원 명단(§9.3)은
-            우리 기관 13명뿐이다 (실측 686건 중 5건만 명단에 있다) */}
-        {author && (
-          <div className="flex items-center gap-2.5 border-b border-border px-5 py-3">
-            <span
-              aria-hidden
-              className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-xs"
-            >
-              {author.slice(0, 1)}
-            </span>
-            <div className="min-w-0">
-              <p className="text-[11px] text-muted-foreground">등록자</p>
-              <p className="truncate text-xs font-medium">{author}</p>
-            </div>
-          </div>
-        )}
-
         {/* 값 — 상태·등록일·마감일·우선순위·담당자 다섯 줄 */}
         {projectId ? (
           <div className="border-b border-border px-5 py-1">
