@@ -1,8 +1,34 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DAY_MS, kstYmd } from "./aggregate/date";
-import { fmtDayLabel, hexColor, splitLinks } from "./utils";
+import { fmtDate, fmtDateTime, fmtDayLabel, fmtTime, hexColor, splitLinks } from "./utils";
 import { EVENT_WINDOW_DAYS } from "./flow/queries";
+
+/* fmtDate · fmtDateTime — 값 칸의 날짜 (등록일·마감일·마지막 수정) */
+
+test("fmtDate·fmtDateTime: 날짜 부분이 글자까지 같다", () => {
+  // 한 표에 나란히 서는 값들이다. 앞 10자가 어긋나면 같은 종류로 안 읽힌다.
+  assert.equal(fmtDate("20260727"), "2026-07-27");
+  assert.equal(fmtDateTime("20260727151600"), "2026-07-27 15:16");
+  assert.equal(fmtDateTime("20260727151600").slice(0, 10), fmtDate("20260727"));
+});
+
+test("fmtDate: 14자리도 받아서 앞 8자리만 쓴다", () => {
+  assert.equal(fmtDate("20260727151600"), "2026-07-27");
+});
+
+test("fmtDate·fmtDateTime: 형식이 어긋나면 원본을 그대로 낸다", () => {
+  // flow는 값이 없으면 `null`이 아니라 `""`로 준다.
+  assert.equal(fmtDate(""), "");
+  assert.equal(fmtDateTime(""), "");
+  assert.equal(fmtDate("2026-07-27"), "2026-07-27");
+  assert.equal(fmtDate("202607"), "202607");
+  assert.equal(fmtDateTime("20260727"), "20260727");
+});
+
+test("fmtTime: 시각만 내는 자리는 이 규칙 밖이다", () => {
+  assert.equal(fmtTime("20260727151600"), "15:16");
+});
 
 /* fmtDayLabel — 나의 일정의 날짜 소제목 */
 

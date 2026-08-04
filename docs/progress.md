@@ -1,6 +1,11 @@
 # 개발 진행 상황
 
-버전 3.3.0 · 2026-08-04 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
+버전 4.6.0 · 2026-08-04 기준. 로드맵 정의는 [PRD.md](PRD.md) §11에 있다.
+
+> **Phase 0~8의 기록은 그때의 사실이다.** v4.0.0에서 데이터 통로가 MCP → REST 한 갈래로
+> 바뀌었으므로(아래 [Phase 9](#phase-9--rest-전면-이관-완료--v400)), 아래 절에 나오는
+> `flow_*` 도구 이름은 **지금 코드에 없다.** 지우지 않는 이유는 왜 그렇게 만들었고 무엇이
+> 무너져서 뒤집었는지가 다음 결정의 재료라서다.
 
 ## 요약
 
@@ -15,10 +20,18 @@
 | 6 | 내 업무 화면 (`/tasks`) | 완료 (v1.2.0) |
 | 7 | 구성원 화면 (`/members`) | 완료 (v1.5.1) |
 | 8 | 하위 업무 들여쓰기 | 완료 (v1.3.0) |
+| 9 | REST 전면 이관 — MCP·OAuth 폐기 | 완료 (v4.0.0) |
+| 10 | 이관 뒤 화면 훑기 — 안 쓰던 값 노출 | 완료 (v4.1.0) |
+| 11 | 답글 읽기 · 멘션 모달 · 날짜 표기 통일 | 완료 (v4.2.0) |
+| 12 | 내 업무 카드에 프로젝트 정보 | 완료 (v4.3.0) |
+| 13 | 접힌 카드는 프로젝트, 펼친 카드는 업무 | 완료 (v4.4.0) |
+| 14 | 나의 일정 줄 펼치기 — 상세 조회 | 완료 (v4.5.0) |
+| 15 | 업무 상세 모달에 관계·첨부 | 완료 (v4.6.0) |
+| 16 | 상위·하위 업무를 모달 안에서 펼치기 | 완료 (v4.7.0) |
 
-기능은 다 붙었다. 쓰기 경로는 실서버에서 확인했다 — 상태는 MCP(`flow_update_task`,
-[BUG-005](bug-report.md#bug-005)), 마감일은 REST(`setTaskEndDate`,
-[BUG-037](bug-report.md#bug-037))로 각각 테스트 업무 하나에서 바꾸고 되돌렸다.
+기능은 다 붙었다. 쓰기 경로는 실서버에서 확인했다 — 상태·마감일·우선순위·담당자 넷 다
+REST 단일 필드 엔드포인트(`PATCH .../tasks/{taskId}/{field}`)로 테스트 업무 하나에서 바꾸고
+되돌렸다.
 
 Phase 2에서 빠져 있던 알림 읽음 처리는 v0.15.0에서 REST 경로로 붙었다 (Tier A2).
 
@@ -1864,13 +1877,419 @@ MCP 구성원 도구(`flow_list_employees`)로는 못 만든다. 전화번호를
 둘 아래로 4건·3건이 붙고 건수는 그대로다(안 끝남 15 + 끝남 22 = 37). 2단(손자)은 실데이터에 아직
 없어서 단위 테스트로만 덮었다.
 
+## Phase 9 — REST 전면 이관 (완료 · v4.0.0)
+
+데이터 통로를 flow REST(`https://api.flow.team/user/*`) 하나로 통일했다. MCP 클라이언트와
+OAuth 로그인을 코드에서 지웠다. 설계 근거는 [PRD.md](PRD.md) §5.1.2·§5.2.1이고, 실제 호출
+순서와 필드 계약은 [api-spec.md](api-spec.md) §6·§12다.
+
+### 무엇이 뒤집혔나
+
+MCP를 남긴 이유 셋(PRD §5.1.1)이 전부 무너졌다.
+
+| 남겼던 이유 | 지금 |
+|-------------|------|
+| 집계 도구 3종이 기성품 | 가중치를 우리가 못 만지는 게 손해였다. `lib/aggregate/`가 순수 함수라 테스트가 붙고, 방치·포커스 기준을 우리가 정한다 |
+| 팀 화면이 REST로는 472회 | **59회다.** `filterRecords`에 같은 `COLUMN_SRNO`로 레코드를 여러 개 실으면 flow가 **OR**로 묶는다 (부서원 8명 → 3건 / 혼자 → 1건, 실측) |
+| OAuth 토큰이 REST에 400 | 토큰을 안 쓰면 없는 문제다. 신원은 `GET /user/employees/me`가 준다 |
+
+`filterRecords`에는 함정이 둘 있다 — 콤마로 이어 붙인 `FILTER_DATA`는 **조용히 0건**을 주고,
+`FILTER_DATA`를 배열로 보내면 **500**이다. 레코드를 여러 개 넣는 게 유일한 형태다.
+
+### 파일
+
+| 파일 | 무엇 |
+|------|------|
+| [src/lib/flow/rest.ts](../src/lib/flow/rest.ts) | 유일한 flow 통로. 읽기 16 · 쓰기 8 함수 (PRD 부록 A) |
+| [src/lib/flow/queries.ts](../src/lib/flow/queries.ts) | `collectTasks`가 프로젝트별 조회를 묶고, 화면 넷이 그 결과를 나눠 쓴다 |
+| [src/lib/aggregate/](../src/lib/aggregate/) | `classifyTasks`·`scoreFocus`·`rollupProjects`·`groupMentions`·`scoreProjectRisk` |
+| [src/lib/auth.ts](../src/lib/auth.ts) | API 키 봉인 쿠키 하나. PKCE·토큰 갱신 삭제 |
+| [src/proxy.ts](../src/proxy.ts) | 로그인 게이트만 남았다 (토큰 갱신 없음) |
+
+**삭제**: `src/lib/flow/mcp.ts` · `src/app/api/auth/login/` · `src/app/api/auth/callback/flow/` ·
+`FLOW_OAUTH_ISSUER`·`FLOW_CLIENT_ID`·`FLOW_CLIENT_SECRET`·`FLOW_REDIRECT_URI` 사용처.
+
+### 얻은 것
+
+- **방치 업무에 상한이 없다.** 마감일과 `EDTR_DTTM`으로 직접 가르니 건수와 목록이 항상 같다.
+  "나머지는 flow에서 확인해요" 안내와 그 분기를 지웠다.
+- **등록자·등록일이 네 화면 전부에** 있다. 업무마다 REST를 한 번 더 부르던 게 없어졌다.
+- 계약이 문서가 됐다 (api-spec.md). MCP는 도구 설명이 계약의 전부였다 (PRD R3 해소).
+
+### 대가 — 분당 120회
+
+오늘 화면 한 번이 **81회**다: 프로필 1 + 프로젝트별 업무 59 + 알림 1 + 게시글 상세 12 +
+상태 옵션 8. 실측으로 59개 중 26개가 429로 떨어지는 걸 봤다
+([BUG-040](bug-report.md#bug-040)).
+
+- 업무 조회 데이터 캐시 60초 → **300초**. 오늘 화면과 내 업무 화면이 **같은 URL**을 부르는 게
+  의도다 — 두 화면이 캐시 한 칸을 나눠 쓴다.
+- 멘션 창 30일 → 7일, 줄 수 20 → 12. 최신 20줄이 글자 하나까지 같았고 30일 쪽만 알림
+  페이지를 두 배로 넘겼다. 게시글 상세에 300초 캐시를 붙여 헤더 소식 종과 나눠 쓴다.
+- 그래도 못 읽은 프로젝트는 **화면에 이름을 적는다**. 숫자가 실제보다 적게 보이는 게 제일 나쁘다.
+
+### 못 하게 된 것
+
+**답글**이다. `POST /user/comments/{postId}`의 Body는 `{ contents }` 하나뿐이고 부모 댓글을
+가리킬 필드가 없다. 답글 버튼은 `@이름`을 미리 채운 최상위 댓글로 바꿨다
+([BUG-041](bug-report.md#bug-041)).
+
+### 실측 대조
+
+실계정으로 프로젝트 **59개 · 업무 946건**을 받아 분류를 대조했다 — 임박 1 · 밀림 7 ·
+방치 12 · 그 외 926. 합이 946으로 맞는다.
+
+## Phase 10 — 이관 뒤 화면 훑기 (완료 · v4.1.0)
+
+Phase 9로 통로를 바꾼 뒤 화면을 다시 훑어, **응답에 이미 있는데 안 쓰던 값**과 **이관이 반쪽만
+끝난 자리**를 찾았다. 고르는 기준은 하나였다 — **추가 REST 호출이 0회인 것**. 분당 120회가
+이 앱의 설계를 지배한다 (Phase 9 "대가").
+
+| 무엇 | 어디서 왔나 | 비용 |
+|------|------------|------|
+| 우선순위 표식 (`높음`·`긴급`) | `tasks/filter`의 `PRIORITY` 컬럼 — 읽고 있지 않았다 | **-1회/업무.** 모달이 열릴 때마다 `getTaskFields`로 같은 값을 따로 받고 있었다 |
+| `마지막 수정` 칸 (방치 표) | 같은 응답의 `EDTR_DTTM` — 방치 판정에 이미 쓰던 값이다 | 0회 |
+| 팀·리스크의 못 읽은 프로젝트 고지 | `collectTasks`가 이미 주던 `truncated`/`failed` | 0회 |
+
+### 왜 이 셋인가
+
+- **우선순위**: 표가 급한 줄을 못 가리켰다. 넷을 다 그리면 거의 모든 줄에 표식이 붙어 신호가
+  죽어서 둘만 그린다. 낭독은 `sr-only`가 맡는다.
+- **마지막 수정**: 방치 표에 "왜 방치인지"를 말하는 값이 없었다. 다른 세 표는 안 켠다 — 자리를
+  늘리면 업무명이 먼저 잘린다 (PRD §6.1). "N일째"가 아니라 날짜인 것은 경과 일수가 렌더 중
+  `Date.now()`를 요구하기 때문이다 (표는 서버에서 그려진다).
+- **팀·리스크 고지**: [BUG-040](bug-report.md#bug-040)을 오늘·내 업무 두 화면에만 붙였었다.
+  부서 전체를 훑어 429가 제일 잘 나는 자리에서만 조용했다는 뜻이다.
+
+### 파일
+
+| 파일 | 무엇 |
+|------|------|
+| [rest.ts](../src/lib/flow/rest.ts) | `FlowTask.priority` — `PRIORITY` 컬럼 파싱 |
+| [queries.ts](../src/lib/flow/queries.ts) | `WorklistTask`에 `editDate`·`priority`, `TeamData`에 `truncated`·`failed` |
+| [task-table.tsx](../src/components/task-table.tsx) | `PriorityFlag` · `showEditDate` 칸 · 하위 업무 화살표 |
+| [task-actions.tsx](../src/components/task-actions.tsx) | 목록이 준 우선순위를 먼저 쓴다 · `마지막 수정` 읽기 전용 줄 |
+| [collect-notice.tsx](../src/components/collect-notice.tsx) | **신규.** 네 화면에 흩어져 있던 같은 고지를 한 곳으로 |
+
+### 검증
+
+```
+npx tsc --noEmit   # clean
+npm run lint       # 0 error / 2 warning (벤더 코드, 아래 참고)
+npm test           # 134/134
+npm run build      # 12 라우트 + proxy
+```
+
+## Phase 11 — 답글 읽기 · 멘션 모달 · 날짜 표기 (완료 · v4.2.0)
+
+`GET /user/comments/{postId}`에 **`?replyYn=Y`** 한 글자를 붙이면 댓글마다 답글이 최대 10건
+같이 온다. 앞선 세션이 "답글을 읽는 경로가 없다"고 적어 둔 것은 **쿼리를 부르고도 응답의
+최상위 키만 비교한** 결과였다 ([BUG-042](bug-report.md#bug-042)). 화면 셋이 그 위에 얹혔다.
+
+### 무엇이 바뀌었나
+
+| 자리 | 전 | 후 |
+|------|-----|-----|
+| 업무 상세 모달 댓글 | 최상위 댓글만, 끝에서 3줄 | 답글이 부모 아래 들여쓰여 붙고, 접었을 때는 **최상위 2개 + 딸린 답글 전부** |
+| `마지막 댓글` | 최상위만 훑어 답으로 끝난 대화를 놓쳤다 | 답글까지 훑는다 (`lastHumanComment`) |
+| 나를 부른 사람들 모달 | 알림 두어 줄 + `댓글 다 보기` | 열자마자 스레드 전량, 나를 부른 줄만 강조. 오는 동안은 골격 |
+| 나를 부른 줄 강조 | 없었다 | 두 모달 다. 판정은 본문의 멘션 마크업 ([BUG-043](bug-report.md#bug-043)) |
+| 날짜 값 칸 | `2026-04-30`과 `07.27`이 섞였다 | 값 칸은 `YYYY-MM-DD`, 시각까지 있으면 `HH:mm`을 붙인다 |
+
+### 호출 수
+
+**0회 늘었다.** 답글은 이미 부르던 댓글 조회에 딸려 온다. `replyHasNext`인 댓글만
+`GET …/replies/{commentId}`를 한 번 더 부르는데(`fillReplies`), 실측 게시글에서 아직 참인
+경우를 못 봤다. 멘션 모달은 열 때 스레드 1회 — 사람 손으로 여는 자리라 분당 상한(120)에
+닿지 않는다.
+
+### 파일
+
+| 파일 | 무엇 |
+|------|------|
+| [rest.ts](../src/lib/flow/rest.ts) | `?replyYn=Y` · `FlowReply` · `listReplies` · `lastHumanComment`가 답글까지 · `mentionsMe`(괄호 안 id가 세션 `userId`면 나를 부른 줄) |
+| [actions.ts](<../src/app/(app)/actions.ts>) | `fillReplies` · `toThread`가 부모 뒤에 답글을 잇는다 |
+| [thread-view.tsx](../src/components/thread-view.tsx) | 답글 들여쓰기 + `↳` · 강조(`ThreadComment.called`) · 시스템 기록은 되감기 아이콘. `ThreadView`는 지웠다 |
+| [mention-table.tsx](../src/components/mention-table.tsx) | 모달이 열릴 때 `loadThread` · 골격 · 실패하면 알림 목록 |
+| [task-thread.tsx](../src/components/task-thread.tsx) | 접힌 기준이 최상위 댓글 2개 (`tail`) |
+| [utils.ts](../src/lib/utils.ts) | `fmtDateTime` 신규, `fmtDate`가 14자리도 받는다 |
+
+### 검증
+
+```
+npx tsc --noEmit   # clean
+npm run lint       # 0 error / 2 warning (벤더 코드)
+npm test           # 144/144
+npm run build      # 12 라우트 + proxy
+```
+
+## Phase 12 — 내 업무 카드에 프로젝트 정보 (완료 · v4.3.0)
+
+업무 표 오른쪽에 그 프로젝트가 어떤 판인지를 세웠다. 설명 · 참여자 수 · 참여자 이름(임직원/외부)
+· 개설자 · 개설일이다.
+
+### 무엇이 바뀌었나
+
+| 자리 | 전 | 후 |
+|------|-----|-----|
+| 펼친 프로젝트 카드 | 업무 표뿐 | 표 왼쪽(`flex-1`) + 프로젝트 정보 패널 오른쪽(`lg:w-64`). 좁은 화면에서는 표 아래 |
+| 참여자 | 볼 자리가 없었다 | 임직원·외부 두 무리로 갈라 이름과 수를 낸다. 막대로 비율도. 임직원은 얼굴 사진 |
+| 프로젝트 상태 | — | **못 낸다.** API가 `STATUS`를 비워서 보낸다 — 그 자리에 개설자·개설일 |
+
+### 호출 수
+
+**카드를 펼칠 때만 3회** (겉면 1 + 참여자 2). 화면에 카드가 실측 38개라 미리 부르면 114회고,
+분당 상한이 120이다. `<details>`는 닫혀도 안쪽이 마운트되므로 `ProjectPanel`이 조상의
+`toggle`을 엿보고 열릴 때 딱 한 번 부른다 — 카드를 클라이언트 컴포넌트로 돌리면 표 · 막대 ·
+끝낸 업무 줄까지 다 끌려오는데 필요한 건 "열렸나" 하나다.
+
+얼굴 사진용 전사 명단(§9.3)은 여기 안 센다. 13명이 한 번에 다 오고 10분 캐시라 카드를 몇 장을
+열든 실제 호출은 그대로 3회다.
+
+### 실측이 막은 것
+
+| 재 본 것 | 값 | 그래서 |
+|---|---|---|
+| `STATUS` 채움률 | **0/20** | 프로젝트 상태를 못 만든다. `OPEN_YN`·`DISABLE_YN`도 값이 `N` 하나뿐 |
+| `CNTN`(설명) 채움률 | 3/20 | 없으면 그 칸을 아예 안 그린다 |
+| `SENDIENCE_CNT` vs 이름을 얻을 수 있는 사람 | 90 : 36 | 수는 API 값으로, 목록은 36명으로. 어긋난다는 사실을 화면이 적는다 |
+| 업무에서 긁은 사람 중 `@traport.com` | 0/5개 프로젝트 | 임직원/외부는 출처가 아니라 `userId` 도메인으로 가른다 |
+
+### 파일
+
+| 파일 | 무엇 |
+|------|------|
+| [rest.ts](../src/lib/flow/rest.ts) | `getProjectBrief`(§5.3의 `PROJECT_SETTING[0]`) · `Participant.outside` |
+| [auth.ts](../src/lib/auth.ts) | `ALLOWED_DOMAIN`을 내보낸다 — 임직원 판정이 로그인 판정과 같은 규칙이다 |
+| [actions.ts](<../src/app/(app)/actions.ts>) | `loadProjectPanel` — 겉면·참여자를 병렬로, 한쪽이 죽어도 나머지로 그린다. 임직원 얼굴은 전사 명단(§9.3)을 이메일로 맞춰 붙인다 |
+| [project-panel.tsx](../src/components/project-panel.tsx) | 패널. 옆 표와 같은 `border`·`text-sm`이고 안쪽은 경계선으로 나뉜다 |
+| [tasks/page.tsx](<../src/app/(app)/tasks/page.tsx>) | 표/패널 두 칸 배치 (`lg:flex-row`) |
+
+### 검증
+
+```
+npx tsc --noEmit   # clean
+npm run lint       # 0 error / 2 warning (벤더 코드)
+npm test           # 147/147
+npm run build      # 12 라우트 + proxy
+```
+
+## Phase 13 — 접힌 카드는 프로젝트, 펼친 카드는 업무 (완료 · v4.4.0)
+
+카드 하나가 두 가지 물음에 답하는데 답이 섞여 있었다. 접힌 줄이 `안 끝남 21 / 28건` + 막대를
+내는데 이건 펼쳤을 때 왼쪽 업무 칸이 하는 말이고, 정작 "이게 어떤 판인가"에는 아무도 답하지
+않았다. 두 답을 각자의 상태로 갈랐다.
+
+### 무엇이 바뀌었나
+
+| 자리 | 전 | 후 |
+|------|-----|-----|
+| 접힌 카드 | 안 끝난 건수 + 진행 막대 | 설명 한 줄 + `중요 · 참여자 90명 · 비공개 · 우창민 · 2025-09-22 개설` |
+| 펼친 카드 왼쪽 | 상태 칩 → 업무 표 | 건수 + 막대 → 상태 칩 → 업무 표. 아래 표가 세는 것과 같은 숫자라 한 줄기로 읽힌다 |
+| 펼친 카드 요약 줄 | — | 사라진다 (`group-open:hidden`) — 참여자는 오른쪽 칸이 이름까지 붙여 더 자세히 낸다 |
+| 오른쪽 패널 | 설명 · 참여자 · 개설 정보 | **참여자만.** 나머지는 접힌 요약이 이미 냈다 |
+
+### 호출 수
+
+겉면(§5.3)이 **미리 받는 값으로 옮겨 갔다** — 접힌 카드가 그려야 해서 펼침을 기다릴 수 없다.
+카드당 1회 × 38장이라 첫 조회가 60회(업무 수집) + 38회 = **98/120회**다. 10분 캐시
+(`PROJECT_TTL`)라 새로 고쳐도 다시 안 부른다. 대신 카드를 펼칠 때는 3회에서 **2회**로 줄었다
+(참여자 목록 + 업무에서 긁기).
+
+### 실측이 막은 것 — "프로젝트 상태"를 다시 팠다
+
+Phase 12의 판정이 20개 표본이었다. 59개 전량으로 다시 재고 `data.project`의 다른 덩어리까지
+열었다.
+
+| 후보 | 값 | 그래서 |
+|---|---|---|
+| `STATUS` | 빈 문자열 **59/59** | 못 쓴다 |
+| `TASK_REPORT_RECORD` | **`null` 59/59** | 못 쓴다. `typeof null === "object"`라 타입만 보면 객체로 보인다 |
+| `CUSTOM_STATUS_TASK_REPORT_RECORD` | **`null` 59/59** | 못 쓴다. 곁의 `TASK_REPORT_VIEW_YN`이 `N`이다 |
+| `HIDDEN_YN` · `OFFICIAL_YN` · `DISABLE_YN` | `N` 59/59 | 값이 안 갈려서 못 쓴다 |
+| `OPEN_YN` | `N` 56 / `Y` 3 | **쓴다** — 공개 프로젝트 |
+| `IMPT_YN` | `Y` 14 / `N` 45 | **쓴다** — 중요 표시. Phase 12에서 못 봤던 값이다 |
+| `CNTN`(설명) | 7/59, 24~72자 | Phase 12의 3/20보다 채움이 낫다. 없으면 그 줄을 안 그린다 |
+
+### 파일
+
+| 파일 | 무엇 |
+|------|------|
+| [rest.ts](../src/lib/flow/rest.ts) | `ProjectBrief.open`·`.important` 추가, `PROJECT_TTL` 10분 |
+| [my-tasks.ts](../src/lib/flow/my-tasks.ts) | `buildMyTasks` 뒤에 프로젝트마다 겉면을 붙인다 — 순수 집계는 그대로 두고 바깥에서 감싼다 |
+| [actions.ts](<../src/app/(app)/actions.ts>) | `loadProjectPanel`이 참여자만 본다 |
+| [project-panel.tsx](../src/components/project-panel.tsx) | 겉면을 prop으로 받는다. 설명·개설 정보 줄 삭제 |
+| [tasks/page.tsx](<../src/app/(app)/tasks/page.tsx>) | `ProjectSummary` 추가, 건수·막대를 카드 본문 맨 위로 |
+
+### 검증
+
+```
+npx tsc --noEmit   # clean
+npm run lint       # 0 error / 2 warning (벤더 코드)
+npm test           # 148/148
+npm run build      # 12 라우트 + proxy
+```
+
+화면은 눈으로 확인하지 못했다 — Playwright 브라우저를 다른 세션이 잡고 있다.
+
+## Phase 14 — 일정 줄을 펼치면 속내가 나온다 (완료 · v4.5.0)
+
+나의 일정이 시각과 이름만 냈다. 목록(§8.2)이 주는 것을 다 쓰고 있었기 때문인데, 정작 "어디서
+하나", "누가 오나", "얼마나 자주 하나"는 상세(§8.5)에만 있었다.
+
+### 상세 응답 실측 (2026-08-04, ±180일 창의 일정 8건 전량)
+
+| 필드 | 채움 | 그래서 |
+|---|---|---|
+| `attendances[]` | **8/8** (4~11명) | **쓴다** — 이름만. 얼굴(`attendanceProfile`)은 `platform.bizplay.co.kr` 호스트라 `next.config.ts` 허용 목록 밖이다 |
+| `rgsrNm`(만든 사람) | **8/8** | **쓴다** |
+| `repeatEvents[]` | **5/8** | **쓴다** — `WEEKLY`/`1`/`FR`/`endDateTime`을 `매주 금요일 · 2026-09-04까지`로 |
+| `eventBody`(설명) | **3/8** | **쓴다.** 목록 응답의 같은 필드는 **8/8 빈 문자열**이다 — 상세를 부르는 주된 이유 |
+| `location` | 1/8 | **쓴다.** 곁의 `locationUrl`·`locationCoordinates`는 0/8이라 지도 링크는 안 단다 |
+| `colaboSrno`·`colaboCommtSrno` | 3/8 | **목록에도 온다** — 상세를 안 불러도 되는 값이다 |
+| `notifications[]`·`attachments[]`·`vcRecords[]` | **0/8** | 안 읽는다. `vcRecords`에는 회의 링크 필드 자체가 없다(`vcSrno`/`vcTtl`/`videoOrg`/시각뿐) |
+| `repeatSrno`·`attendanceStatus`(최상위) | 0/8 | 상세에서는 빈다 — **내 참석 응답은 목록 값만 믿는다** |
+
+### 호출 수
+
+**0회 늘었다.** 상세는 줄을 펼칠 때만 나가고(일정 한 건에 1회), 한 번 받으면 다시 안 부른다.
+미리 받으면 서랍을 열 때마다 그날 일정 수(실측 8)만큼 붙는데, 실제로 펼치는 줄은 보통 하나다.
+
+딥링크는 호출 없이 좋아졌다 — `colaboCommtSrno`(= postId)가 목록 응답에 이미 있어서
+프로젝트 첫 화면(`flowProjectUrl`) 대신 그 일정 글(`flowPostUrl`)로 보낸다.
+
+### 파일
+
+| 파일 | 무엇 |
+|------|------|
+| [rest.ts](../src/lib/flow/rest.ts) | `getEvent`·`EventDetail`·`repeatLabel` 추가, `FlowEvent.colaboCommtSrno` |
+| [actions.ts](<../src/app/(app)/actions.ts>) | `loadEvent` — 펼칠 때 부르는 읽기 액션 |
+| [app-shell.tsx](../src/components/app-shell.tsx) | `ScheduleList`의 `<li>` → `EventRow`(`<details>`). 색 막대를 왼쪽에 세우고 시각·이름을 한 줄씩 쌓았다 |
+| [rest.test.ts](../src/lib/flow/rest.test.ts) | 반복 문구 4건 + 상세 매핑 3건 |
+
+### 검증
+
+```
+npx tsc --noEmit   # clean
+npm run lint       # 0 error / 2 warning (벤더 코드)
+npm test           # 155/155
+npm run build      # 12 라우트 + proxy
+```
+
+매핑은 실서버 8건으로 확인했다 — 반복 문구가 `매주 금요일 · 2026-09-04까지`로 나오고,
+설명 3건·장소 1건·참석자 8건이 실측표와 맞는다. **화면은 눈으로 확인하지 못했다** —
+Playwright 브라우저를 다른 세션이 잡고 있다.
+
+## Phase 15 — 업무 상세 모달에 관계·첨부 (완료 · v4.6.0)
+
+모달이 본문과 댓글만 냈다. 그런데 본문이 비고 파일만 붙은 업무가 흔해서, 그런 업무를 열면
+모달이 텅 비어 보였다. 게시글 상세(§6.3)는 그 파일 목록을 **이미 주고 있었다** — 제목·상태
+세 줄만 읽고 나머지를 버리고 있었다.
+
+### 상세 응답 실측 (2026-08-04, 업무 글 20건)
+
+| 배열 | 채움 | 그래서 |
+|---|---|---|
+| `upLinkTasks` | **11/20** | **쓴다** — 상위 업무 한 줄. 늘 1건이고 `COLABO_SRNO`+`COLABO_COMMT_SRNO`로 그쪽 글 딥링크를 만든다 |
+| `imageAttachments` | 6/20 | **쓴다** — `THUM_IMG_PATH` 썸네일 격자. 호스트가 `flow.team/flowImg/**`라 `next.config.ts` 허용 목록에 이미 있다 |
+| `attachments` | 5/20 | **쓴다** — 이름 + 크기 한 줄. `ATCH_URL`의 겹친 슬래시를 하나로 줄인다 |
+| `subTasks` | 1/20 | **쓴다** — 이름·상태·진행률. `STTS`는 `tasks[0]`과 같이 `"0"` 고정이라 `TASK_COLUMN_REC`에서 읽는다 |
+| `todos`·`schedules`·`votes` | **0/20** | 안 읽는다 |
+
+### 호출 수
+
+**0회 늘었다.** `getPostBrief`가 이미 게시글 상세를 통째로 받고 있었다 — 제목·링크·본문·상태만
+꺼내 쓰고 나머지를 버리던 응답에서 네 배열을 더 꺼냈을 뿐이다. 딥링크도 호출이 없다:
+상위·하위가 자기 프로젝트·글 번호를 같이 준다.
+
+### 화면 순서
+
+`상위 업무 → 본문 → 첨부 → 하위 업무 → 댓글`. 상위는 "이 업무가 어디 딸린 것인가"라 내용을
+읽기 전에 알아야 해서 본문 위에 한 줄로 두고, 하위는 다 읽고 나서 보는 것이라 뒤에 둔다.
+상위·하위 이름은 v4.6.0까지 **flow로 보냈다**. v4.7.0에서 모달 안 펼치기로 바꿨다 (Phase 16).
+
+### 파일
+
+| 파일 | 무엇 |
+|------|------|
+| [rest.ts](../src/lib/flow/rest.ts) | `getPostBrief`에 `parent`·`subTasks`·`files`. `PostLink`·`PostFile` 타입, `tidy`(슬래시), `postLink`(딥링크) |
+| [actions.ts](<../src/app/(app)/actions.ts>) | `TaskPostResult`에 세 필드 — `loadTaskPost`가 그대로 넘긴다 |
+| [task-thread.tsx](../src/components/task-thread.tsx) | 섹션 셋 + `TaskRow`(v4.6.0 `TaskLink`)·`FileRow`·`fmtSize` |
+| [icons.tsx](../src/components/icons.tsx) | `IconUpTask`(ArrowUpSquare) · `IconDownTask`(ArrowDownSquare) · `IconAttach`(Paperclip) |
+| [rest.test.ts](../src/lib/flow/rest.test.ts) | 관계·첨부 매핑 6건 |
+
+### 검증
+
+```
+npx tsc --noEmit   # clean
+npm run lint       # 0 error / 2 warning (벤더 코드)
+npm test           # 161/161
+npm run build      # 12 라우트 + proxy
+```
+
+첨부 URL은 실서버에서 확인했다 — 슬래시를 줄인 주소도 원본과 같이 200이고 크기가 같다.
+썸네일도 로그인 없이 200으로 열린다. **화면은 눈으로 확인하지 못했다** — Playwright 브라우저를
+다른 세션이 잡고 있다.
+
+## Phase 16 — 상위·하위 업무를 모달 안에서 펼치기 (완료 · v4.7.0)
+
+v4.6.0이 이름을 냈지만 누르면 flow로 나갔다. 모달을 열어 둔 채로 딸린 업무를 확인할 수 없다.
+
+### 왜 되나
+
+`upLinkTasks`·`subTasks`의 **`COLABO_COMMT_SRNO`가 곧 그 업무의 글 번호**다. `loadTaskPost`를
+글 번호 하나로 돌게 고치면 새 엔드포인트 없이 그 업무의 상세를 그대로 받는다.
+
+### 왜 미리보기까지인가
+
+두 배열 어디에도 **`TASK_SRNO`가 없다**. `loadTaskFields`(담당자·마감일·우선순위)는 업무 ID로
+도는데 그걸 못 만든다 — 모달 대상을 갈아타면 그 세 줄이 영영 빈 채로 남는다. 그래서 갈아타지
+않고 **본문 여섯 줄 + 첨부 + 댓글 수**까지만 그 자리에 편다. 더 보려면 `flow에서 열기 ↗`다.
+
+펼친 업무의 상위·하위는 다시 안 그린다 — 하위 업무의 상위는 지금 열어 둔 그 업무다.
+
+### 호출
+
+누를 때만 부른다. 한 번에 `1 + 1 + n`회(상세·댓글·답글)로 미리보기가 쓰는 것보다 많이
+가져오지만, 사람이 누르는 속도라 120/분 천장에 한참 못 미친다 (`ponytail:` 주석으로 남겼다).
+
+### 리스크 카드 손질 (같은 배포)
+
+| 무엇 | 왜 |
+|---|---|
+| 프로젝트 앞 순위 숫자 삭제 | 카드가 이미 위험도순이다. 숫자가 그걸 한 번 더 말했다 |
+| 프로젝트명 `text-base` | `내 업무` 프로젝트 카드와 같은 자리(카드의 제목)라 크기를 맞췄다 |
+| `잠잠한 프로젝트 N개도 볼까요?`를 카드 밖으로 | 면을 깔면 그 줄 자체가 카드로 보여 위험 카드와 같은 무게가 됐다. 맨바닥 한 줄로 두고 펼칠 때 카드가 나온다 |
+| 바깥 `<details>`에 `group/calm` | 이름 없는 `group`은 가장 가까운 것만 잡지 않는다 — 바깥이 열리면 안쪽 카드 셰브론까지 같이 돌았다 |
+
+### 파일
+
+| 파일 | 무엇 |
+|------|------|
+| [rest.ts](../src/lib/flow/rest.ts) | `PostLink`에 `postId` |
+| [actions.ts](<../src/app/(app)/actions.ts>) | `loadTaskPost`가 `postId` 하나로 돈다 (프로젝트·업무 ID는 선택) |
+| [task-thread.tsx](../src/components/task-thread.tsx) | `TaskLink` → `TaskRow`(여닫는 줄), `FileRow` 분리 |
+| [risk/page.tsx](<../src/app/(app)/risk/page.tsx>) | 순위 삭제 · 제목 크기 · 잠잠 블록 |
+| [rest.test.ts](../src/lib/flow/rest.test.ts) | `postId` 매핑 3건 |
+
+### 검증
+
+```
+npx tsc --noEmit   # clean
+npm run lint       # 0 error / 2 warning (벤더 코드)
+npm test           # 161/161
+npm run build      # 12 라우트 + proxy
+```
+
+**화면은 눈으로 확인하지 못했다** — Playwright 브라우저를 다른 세션이 잡고 있다.
+
 ## 검증
 
 ```
 npx tsc --noEmit   # clean
 npm run lint       # 0 error / 2 warning (아래 참고)
-npm test           # 124/124
-npm run build      # 15 라우트 + proxy
+npm test           # 147/147
+npm run build      # 12 라우트 + proxy
 ```
 
 **v0.15.0은 실화면으로 봤다.** 로그인 세션이 여전히 없어서, 셸에 목업 소식 6건을 넣은 임시

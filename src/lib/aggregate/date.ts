@@ -1,7 +1,9 @@
 /**
  * flow 날짜 문자열 파싱 — KST(UTC+9) 고정.
  *
- * flow는 날짜를 `YYYYMMDD`(8자리), 일시를 `YYYYMMDDHHmmss`(14자리) 문자열로 준다.
+ * flow는 날짜를 `YYYYMMDD`(8자리), 일시를 `YYYYMMDDHHmm`(12자리) 또는
+ * `YYYYMMDDHHmmss`(14자리) 문자열로 준다. 마감일(`END_DT`)은 초를 뗀 12자리로 오는 경우가
+ * 섞여 있어서 초는 선택으로 둔다 — 12자리를 못 읽으면 그 업무는 마감이 없는 것처럼 보인다.
  * `new Date("20260727")` 같은 암묵 파싱은 런타임/로케일마다 결과가 달라지므로 쓰지 않는다.
  * 모든 파싱은 자릿수를 직접 잘라 `Date.UTC` + 고정 오프셋으로 계산한다.
  */
@@ -12,10 +14,10 @@ export const DAY_MS = 86_400_000;
 /** 기준 시각 인자로 받을 수 있는 형태. `Date.now()`는 이 레이어에서 절대 호출하지 않는다. */
 export type NowInput = number | Date | string;
 
-const FLOW_DATE_RE = /^(\d{4})(\d{2})(\d{2})(?:(\d{2})(\d{2})(\d{2}))?$/;
+const FLOW_DATE_RE = /^(\d{4})(\d{2})(\d{2})(?:(\d{2})(\d{2})(\d{2})?)?$/;
 
 /**
- * `YYYYMMDD` 또는 `YYYYMMDDHHmmss` → epoch ms.
+ * `YYYYMMDD` / `YYYYMMDDHHmm` / `YYYYMMDDHHmmss` → epoch ms.
  * 8자리는 그날 00:00:00 KST. 형식 불일치·존재하지 않는 날짜(20260231)는 null.
  */
 export function parseFlowDate(value: string | null | undefined): number | null {

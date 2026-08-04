@@ -12,6 +12,8 @@ export {
   AlertTriangle as IconRisk,
   Users as IconTeam,
   Folder as IconProject,
+  /** 내 업무의 프로젝트 카드 머리. flow에서 프로젝트 홈 탭이 `FEED`다 (api-spec §5.3) */
+  Feed as IconFeed,
   Clock as IconImminent,
   Hourglass as IconDelay,
   MoonSleep as IconStale,
@@ -24,6 +26,16 @@ export {
   Copy as IconCopy,
   ChatLine as IconLastComment,
   ArrowUpRight as IconOpen,
+  /** 하위 업무 표시 (↳). 표 안에서 들여쓰기 대신 업무명 앞에 선다. */
+  Forward2 as IconSubTask,
+  /** 모달의 상위 업무 (⬆). 아래 하위 업무(⬇)와 위아래로 짝을 이룬다. */
+  ArrowUpSquare as IconUpTask,
+  /** 모달의 하위 업무 (⬇). 표의 `IconSubTask`(↳)와 달리 들여쓰기 구실은 안 한다. */
+  ArrowDownSquare as IconDownTask,
+  /** 첨부 파일. */
+  Paperclip as IconAttach,
+  /** 시스템이 남긴 변경 기록. 댓글 목록에서 사람 말(말풍선)과 가른다. */
+  History as IconHistory,
   InfoCircle as IconInfo,
   Loader as IconLoader,
   X as IconClose,

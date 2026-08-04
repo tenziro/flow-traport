@@ -1,14 +1,17 @@
-import { DoneTaskRow } from "@/components/done-task-row";
+import { CollectNotice } from "@/components/collect-notice";
 import { EmptyState } from "@/components/empty-state";
 import { FlowLink } from "@/components/flow-link";
-import { IconChevronDown, IconMyTasks, IconNormal, IconRisk } from "@/components/icons";
+import { IconChevronDown, IconFeed, IconMyTasks, IconNormal, IconRisk } from "@/components/icons";
 import { Kpi } from "@/components/kpi";
 import { Meter } from "@/components/meter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/motion/tabs";
+import { ProjectPanel } from "@/components/project-panel";
 import { StatHint } from "@/components/stat-hint";
 import { TaskTable } from "@/components/task-table";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadMyTasks, type MyTasksData, type MyTasksProject } from "@/lib/flow/my-tasks";
+import type { WorklistTask } from "@/lib/flow/queries";
+import { fmtDate } from "@/lib/utils";
 
 export const metadata = { title: "내 업무 · flow Cockpit" };
 
@@ -124,16 +127,7 @@ export default async function TasksPage() {
       )}
 
       {/* 못 가져온 것은 숨기지 않는다 — 건수가 실제보다 적게 보이는 게 제일 나쁘다 */}
-      {truncated.length > 0 && (
-        <p className="mt-6 text-xs text-muted-foreground">
-          {truncated.join(", ")}는 담당 업무가 300건을 넘어서 앞의 300건만 가져왔어요.
-        </p>
-      )}
-      {failed.length > 0 && (
-        <p className="mt-2 text-xs text-muted-foreground">
-          {failed.join(", ")}는 지금 조회가 막혀서 빠져 있어요. 잠시 뒤에 새로 고쳐 보세요.
-        </p>
-      )}
+      <CollectNotice truncated={truncated} failed={failed} />
     </>
   );
 }
@@ -178,6 +172,90 @@ function QuietList({ projects }: { projects: MyTasksData["quiet"] }) {
   );
 }
 
+/**
+ * 접힌 카드가 내는 프로젝트 요약 (PRD §6.5).
+ *
+ * 펼치기 전 카드가 답해야 하는 물음은 "이게 어떤 판인가"다 — 업무 건수는 펼친 다음 표 위에서
+ * 답한다. 설명 한 줄과 중요 표시 · 참여자 수 · 공개 여부 · 개설자 · 개설일을 낸다.
+ *
+ * **진행 단계 같은 프로젝트 상태는 API에 없다.** `STATUS`가 실측 59개 전량에서 빈 문자열이고
+ * 업무 리포트 두 덩어리는 `null`이다 (api-spec §5.3). 값이 갈리는 상태성 필드는 공개 여부와
+ * 중요 표시 둘뿐이라 그 둘만 낸다 — 지어내지 않고 있는 값만 낸다.
+ *
+ * 펼치면 사라진다(`group-open:hidden`) — `<details>`가 열리면 카드의 본문은 아래 업무 표고,
+ * 여기 있는 참여자 수는 오른쪽 칸이 이름까지 붙여 더 자세히 낸다.
+ */
+function ProjectSummary({ brief }: { brief?: MyTasksProject["brief"] }) {
+  if (!brief) return null;
+  return (
+    <span className="mt-1 block group-open:hidden">
+      {/* 설명은 실측 59개 중 7개만 채워져 있다 (24~72자). 없으면 이 줄을 안 그린다 */}
+      {brief.desc && (
+        <span className="block truncate text-sm text-muted-foreground" title={brief.desc}>
+          {brief.desc}
+        </span>
+      )}
+      {/* 짧은 것들을 가운뎃점으로 잇는다 — 각각 줄을 따로 주면 카드만 길어진다.
+          설명과는 한 칸 띄운다 — 위는 프로젝트가 하는 말이고 아래는 우리가 붙인 값이라
+          붙여 놓으면 두 줄이 한 문단으로 읽힌다 */}
+      <span className="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+        {/* 실측 59개 중 14개다. 색이 아니라 `중요`라는 글자가 뜻을 지고, 색은 거들기만 한다 */}
+        {brief.important && (
+          <>
+            <span className="font-medium text-warning-foreground">중요</span>
+            <span aria-hidden>·</span>
+          </>
+        )}
+        <span className="tabular">참여자 {brief.count}명</span>
+        {/* 실측 59개 중 3개만 공개다. 색이 아니라 글자로 가른다 */}
+        <span aria-hidden>·</span>
+        <span>{brief.open ? "공개 프로젝트" : "비공개 프로젝트"}</span>
+        {brief.owner && (
+          <>
+            <span aria-hidden>·</span>
+            <span className="truncate">{brief.owner}</span>
+          </>
+        )}
+        {brief.opened && (
+          <>
+            <span aria-hidden>·</span>
+            <span className="tabular">{fmtDate(brief.opened)} 개설</span>
+          </>
+        )}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * 이 카드의 업무 표. 안 끝난 것과 끝낸 것이 **같은 표**다 — 끝낸 쪽만 다른 생김새를 주면
+ * 한 카드 안에 표가 두 종류가 되고, 상태·마감일·담당자를 읽는 눈이 자리를 다시 찾아야 한다.
+ *
+ * 카드가 이미 한 프로젝트라 프로젝트 칸은 끈다. 대신 등록일이 있다 — 필터 응답에만 오는
+ * 값이고(rest.ts), 이 화면이 그 응답을 쓰는 유일한 곳이다.
+ */
+function Rows({
+  tasks,
+  projectId,
+}: {
+  // 안 끝난 줄에만 계층이 있다 (`nest`) — 끝낸 줄은 마감 순으로 평평하게 세운다
+  tasks: (WorklistTask & { depth?: number })[];
+  projectId: string;
+}) {
+  return (
+    <TaskTable
+      rows={tasks.map((task) => ({ ...task, depth: task.depth ?? 0, projectId }))}
+      path={PATH}
+      showProject={false}
+      showAuthor
+      showRegDate
+      filterable
+      // 한 프로젝트에 실측 최대 300건이다. 12줄까지 펼치고 그 아래는 표가 스크롤한다
+      maxRows={12}
+    />
+  );
+}
+
 function ProjectCard({ project, i }: { project: MyTasksProject; i: number }) {
   const total = project.open.length + project.done.length;
 
@@ -188,33 +266,50 @@ function ProjectCard({ project, i }: { project: MyTasksProject; i: number }) {
         <details className="disclose group">
           <summary className="flex cursor-pointer list-none items-start gap-3">
             <span className="min-w-0 flex-1">
-              <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className="min-w-0 flex-1 basis-full truncate font-medium sm:basis-auto">
-                  {project.name}
-                </span>
-                <span className="tabular flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
-                  <StatHint hint="안 끝난 업무 — 상태가 완료가 아니에요">
-                    <span className="flex items-center gap-1">
-                      {/* 위 `안 끝난 업무` 카드와 같은 색이다 — 같은 숫자를 세는 곳이라
-                          색까지 같아야 한 쌍으로 읽힌다. `text-primary`였을 때는 밝은
-                          화면에서 `#171717`이라 옆 글자와 구별이 안 됐다 */}
-                      <IconRisk size={12} className="text-warning-foreground" />
-                      <span className="sr-only">안 끝난 업무 </span>
-                      {project.open.length}건
-                    </span>
-                  </StatHint>
-                  <span>전체 {total}건</span>
-                </span>
+              {/* 카드 머리는 본문(14px)보다 한 급 크다 — 이 줄이 카드의 제목이고,
+                  38장이 늘어선 화면에서 눈이 먼저 잡는 자리다. 앞의 아이콘은 접힌 줄에서
+                  "여기부터 새 카드"를 표시한다 */}
+              <span className="flex min-w-0 items-center gap-2 text-base font-medium">
+                <IconFeed size={17} className="shrink-0 text-muted-foreground" />
+                <span className="truncate">{project.name}</span>
               </span>
+              {/* 접혔을 때만 나오는 프로젝트 요약. 펼치면 아래 업무 쪽이 카드의 내용이고
+                  참여자는 오른쪽 칸이 더 자세히 낸다 — 같은 말을 두 번 하지 않는다 */}
+              <ProjectSummary brief={project.brief} />
+            </span>
+            <IconChevronDown
+              size={16}
+              className="mt-0.5 shrink-0 text-muted-foreground transition-transform duration-300 group-open:rotate-180"
+            />
+          </summary>
+
+          {/* 업무 표 왼쪽, 참여자 오른쪽. 좁은 화면에서는 표 아래로 내려간다 —
+              참여자 목록은 업무를 볼 때 곁눈으로 보는 것이라 표를 밀어내면 안 된다 */}
+          <div className="mt-3 flex flex-col gap-4 lg:flex-row">
+            <div className="min-w-0 flex-1">
+              {/* 건수와 막대는 상태 칩 바로 위다 — 아래 표가 세는 것과 같은 숫자라
+                  붙여 두면 `전체 300건 → 대기 10 · 진행 5 …`가 한 줄기로 읽힌다 */}
+              <p className="tabular mb-1.5 flex items-center gap-3 text-xs text-muted-foreground">
+                <StatHint hint="안 끝난 업무 — 상태가 완료가 아니에요">
+                  <span className="flex items-center gap-1">
+                    {/* 위 `안 끝난 업무` 카드와 같은 색이다 — 같은 숫자를 세는 곳이라
+                        색까지 같아야 한 쌍으로 읽힌다. `text-primary`였을 때는 밝은
+                        화면에서 `#171717`이라 옆 글자와 구별이 안 됐다 */}
+                    <IconRisk size={12} className="text-warning-foreground" />
+                    <span className="sr-only">안 끝난 업무 </span>
+                    {project.open.length}건
+                  </span>
+                </StatHint>
+                <span>전체 {total}건</span>
+              </p>
               {/*
-               * 다 끝난 프로젝트를 펼치지 않고도 알아보려면 비율이 필요하다. 두 칸을 다 칠해서
-               * 막대 전체가 이 프로젝트의 업무 전량이 된다 — 끝낸 쪽만 칠하면 남은 회색이
-               * "안 끝난 40건"인지 "아직 안 센 것"인지 구별이 안 됐다. 안 끝난 칸은 위
-               * `⚠ 40건`과 같은 계열 색이라 숫자와 막대가 한 쌍으로 읽힌다.
+               * 두 칸을 다 칠해서 막대 전체가 이 프로젝트의 업무 전량이 된다 — 끝낸 쪽만
+               * 칠하면 남은 회색이 "안 끝난 40건"인지 "아직 안 센 것"인지 구별이 안 됐다.
+               * 안 끝난 칸은 위 `⚠ 40건`과 같은 계열 색이라 숫자와 막대가 한 쌍으로 읽힌다.
                */}
               <Meter
                 total={total}
-                className="mt-1.5"
+                className="mb-3"
                 segments={[
                   {
                     value: project.done.length,
@@ -228,34 +323,19 @@ function ProjectCard({ project, i }: { project: MyTasksProject; i: number }) {
                   },
                 ]}
               />
-            </span>
-            <IconChevronDown
-              size={16}
-              className="mt-0.5 shrink-0 text-muted-foreground transition-transform duration-300 group-open:rotate-180"
-            />
-          </summary>
-
-          {/* 카드가 이미 한 프로젝트라 프로젝트 칸은 끈다. 대신 등록일이 있다 —
-              필터 응답에만 오는 값이고(rest.ts), 이 화면이 그 응답을 쓰는 유일한 곳이다 */}
-          {project.open.length > 0 && (
-            <div className="mt-3">
-              <TaskTable
-                rows={project.open.map((task) => ({
-                  ...task,
-                  projectId: project.projectId,
-                }))}
-                path={PATH}
-                showProject={false}
-                showAuthor
-                showRegDate
-                filterable
-                // 한 프로젝트에 실측 최대 300건이다. 12줄까지 펼치고 그 아래는 표가 스크롤한다
-                maxRows={12}
-              />
+              {project.open.length > 0 ? (
+                <Rows tasks={project.open} projectId={project.projectId} />
+              ) : (
+                // 안 끝난 게 없으면 끝낸 업무가 곧 이 카드의 본문이다 — 접어 둘 게 없다
+                <Rows tasks={project.done} projectId={project.projectId} />
+              )}
             </div>
-          )}
+            <ProjectPanel projectId={project.projectId} brief={project.brief} />
+          </div>
 
-          {project.done.length > 0 && (
+          {/* 안 끝난 게 있을 때만 접는다. 818건이 완료라 기본 시야에서 빼되, 펼치면
+              위 표와 같은 표다 — 한 카드 안에서 두 목록이 다르게 보이면 안 된다 */}
+          {project.open.length > 0 && project.done.length > 0 && (
             <details className="disclose group/done mt-3 border-t border-border pt-3">
               <summary className="flex cursor-pointer list-none items-center gap-2 px-2 text-xs text-muted-foreground">
                 끝낸 업무 {project.done.length}건
@@ -264,14 +344,9 @@ function ProjectCard({ project, i }: { project: MyTasksProject; i: number }) {
                   className="shrink-0 transition-transform duration-300 group-open/done:rotate-180"
                 />
               </summary>
-              {/* 안 끝난 목록과 같은 구분선 — 한 카드 안에서 두 목록이 다르게 보이면 안 된다 */}
-              <ul className="mt-2 space-y-0.5">
-                {project.done.map((task) => (
-                  <li key={task.taskSrno} className="border-b border-border/60 last:border-0">
-                    <DoneTaskRow task={task} />
-                  </li>
-                ))}
-              </ul>
+              <div className="mt-2">
+                <Rows tasks={project.done} projectId={project.projectId} />
+              </div>
             </details>
           )}
         </details>

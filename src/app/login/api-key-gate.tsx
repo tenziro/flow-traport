@@ -5,28 +5,22 @@ import { IconInfo, IconOpen } from "@/components/icons";
 import { Button } from "@/components/motion/button/base";
 import { Input } from "@/components/motion/input";
 import { MorphingModal } from "@/components/motion/morphing-modal";
-import { saveApiKey } from "./actions";
+import { signIn } from "./actions";
 
 /** flow 개인 API 키 발급 화면. 모달과 로그인 화면 두 곳에서 같은 곳을 가리킨다. */
 const ISSUE_URL = "https://api.flow.team/account/api-keys";
 
-/** 로그인 시작 경로. 모달을 지나면 결국 여기로 간다. */
-const LOGIN_PATH = "/api/auth/login";
-
 /**
  * 로그인 버튼 + 최초 1회 API 키 모달.
  *
- * 키를 이미 등록한 사람(`hasKey`)에게는 모달을 띄우지 않는다 — 버튼이 예전처럼 form GET
- * 하나다. 링크가 아니라 form인 이유는 프리페치로 인증 플로가 먼저 시작되지 않게 하려는
- * 것이고(page.tsx 주석), 그 이유는 모달이 붙어도 그대로다.
+ * **키가 곧 로그인이다** — 소유자를 flow에 물어 그 사람으로 세션을 연다 (`actions.ts`).
+ * 그래서 키를 건너뛰는 길이 없다. 반쪽으로 서는 상태를 만들지 않는다.
  *
- * 키는 **필수다.** 모달을 지나는 길은 하나뿐이고, 유효한 키를 저장한 직후에만 로그인으로
- * 넘어간다. 키를 건너뛰게 두면 멘션 본문이 빈 화면으로 로그인되는데, 사용자는 로그인이
- * 된 줄 알아서 왜 비었는지 못 찾는다 — 앱이 반쪽으로 서는 상태를 만들지 않는다.
- * 닫으면(X·Escape) 모달만 닫히고 로그인 화면에 남는다. 다시 누르면 된다.
+ * 키를 이미 등록한 사람(`hasKey`)에게는 모달을 띄우지 않는다 — 누르면 그 키로 바로 들어간다.
+ * 그 키가 죽어 있으면 그때 모달이 열려 새 키를 받는다.
  *
- * 넘길 때 `window.location`을 쓴다. `/api/auth/login`은 페이지가 아니라 Route Handler라
- * 라우터 내비게이션으로는 갈 수 없다 — 브라우저가 직접 요청해야 307을 따라간다.
+ * 넘길 때 `window.location`을 쓴다. 서버 액션이 세션 쿠키를 새로 심었으므로 라우터 캐시를
+ * 들고 이동하면 안 된다 — 브라우저가 첫 화면을 새로 받아야 한다.
  *
  * `useActionState`를 쓰지 않는다. 그 훅은 결과를 상태로만 주고 콜백이 없어서, 성공을 보고
  * 이동하려면 이펙트에서 결과를 다시 읽어야 한다 — React 19 린트가 막는 모양이다
@@ -42,28 +36,30 @@ export function ApiKeyGate({ hasKey }: { hasKey: boolean }) {
   async function submit(form: FormData) {
     setBusy(true);
     setError(null);
-    const result = await saveApiKey(form);
+    const result = await signIn(form);
     // 성공이면 `busy`를 풀지 않는다 — 이 자리에서 페이지가 떠난다.
-    if (result.ok) return window.location.assign(LOGIN_PATH);
+    if (result.ok) return window.location.assign("/");
     setError(result.message);
     setBusy(false);
-  }
-
-  if (hasKey) {
-    return (
-      <form action={LOGIN_PATH} method="get">
-        <Button type="submit" size="lg" className="w-full">
-          flow로 로그인
-        </Button>
-      </form>
-    );
+    // 등록해 둔 키로 들어가려다 막혔으면 새 키를 받아야 한다.
+    if (!form.get("apiKey")) setOpen(true);
   }
 
   return (
     <>
-      <Button type="button" size="lg" className="w-full" onClick={() => setOpen(true)}>
-        flow로 로그인
-      </Button>
+      {hasKey ? (
+        // 등록해 둔 키로 바로 들어간다. 폼에 입력이 없어서 서버가 쿠키의 키를 쓴다.
+        <form action={submit}>
+          <Button type="submit" size="lg" className="w-full" disabled={busy}>
+            {busy ? "확인하는 중…" : "flow로 로그인"}
+          </Button>
+          {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+        </form>
+      ) : (
+        <Button type="button" size="lg" className="w-full" onClick={() => setOpen(true)}>
+          flow로 로그인
+        </Button>
+      )}
 
       <MorphingModal
         viewId={open ? "api-key" : null}
@@ -81,8 +77,8 @@ export function ApiKeyGate({ hasKey }: { hasKey: boolean }) {
           </h2>
 
           <p id="api-key-why" className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            멘션 댓글 본문을 읽고 업무에 댓글을 쓰려면 개인 키가 필요해요. 키는 암호화해서
-            이 브라우저에만 두고, flow 밖으로 보내지 않아요.
+            이 키가 로그인이에요. 키 주인이 누구인지 flow에 물어보고 그 사람으로 들어가요.
+            키는 암호화해서 이 브라우저에만 두고, flow 밖으로 보내지 않아요.
           </p>
 
           <a

@@ -44,8 +44,14 @@ describe('date (KST 고정 파싱)', () => {
     assert.equal(parseFlowDate('20260101')! % DAY_MS, (15 * 60 * 60 * 1000) % DAY_MS);
   });
 
+  // ★ `END_DT`가 초 없이 12자리로 오는 업무가 있다 (실측 34건 중 2건). 이걸 안 받으면
+  //   그 업무는 마감일이 없는 것으로 떨어져 임박·지연 어느 쪽에도 안 잡힌다.
+  it('12자리는 분 단위까지 KST', () => {
+    assert.equal(parseFlowDate('202607271516'), Date.UTC(2026, 6, 27, 6, 16, 0));
+  });
+
   it('잘못된 입력은 null', () => {
-    for (const bad of ['', '2026072', '202607271516', 'abc', '20260231', '20261301', null, undefined]) {
+    for (const bad of ['', '2026072', '2026072715', 'abc', '20260231', '20261301', null, undefined]) {
       assert.equal(parseFlowDate(bad as string), null, `expected null for ${String(bad)}`);
     }
   });

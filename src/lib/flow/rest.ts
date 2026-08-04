@@ -1,41 +1,36 @@
 /**
- * flow REST — MCP로 못 가져오는 것만 (PRD §5.1.1 하이브리드, §13 확장 후보).
+ * flow REST — 이 앱이 flow와 말하는 **유일한** 통로다 (api-spec.md, PRD §5.1).
  *
- * flow 접근의 기본은 MCP다(`mcp.ts`). 집계 한 번에 화면 하나가 서는 도구들이 거기 있고,
- * REST로 같은 화면을 만들면 호출이 178~470회로 늘어난다(PRD §5.1.1). REST는 **MCP에 길이
- * 없는 것**만 맡는다:
+ * 예전에는 MCP(`flow.team/ai/mcp`)로 집계를 받고 REST는 구멍만 메웠다. 지금은 전부 REST다:
+ * MCP가 주던 워크리스트·포커스·스탠드업은 프로젝트별 업무 필터 조회 하나로 다시 만들고
+ * (`listWorkerTasks` → `lib/aggregate/*`), 그 대가로 호출이 늘어난 만큼 데이터 캐시로 막는다
+ * (`TASK_TTL`). 분당 120회가 상한이다 (api-spec §1).
  *
- * - **멘션 댓글 본문**: `flow_get_my_worklist`가 주는 멘션에는 본문이 없고(발신자·시각·제목뿐),
- *   MCP `flow_list_alarms`는 서버측 스키마 검증이 `alarmType: null`에서 터진다
- *   (docs/bug-report.md BUG-001). REST 알림은 `content`와 `postId`·`replyId`를 함께 준다.
- * - **`taskSrno` → `postId`**: `resolvePostId` 주석 참고. `flow_list_project_items`는
- *   `postId`만 주고 `taskId`가 응답에 아예 없어서 두 ID를 이어 붙일 수 없다 (실측).
- * - **전체 댓글 스레드**: 게시글 상세(`flow_get_post`)는 14건 중 2건만 준다.
- *   `GET /user/comments/{postId}`는 14건 전부 준다 (api-spec §13, PRD §13 A1).
- * - **알림 읽음 처리**: MCP `flow_mark_alarm_read`가 알림 ID를 요구하는데 워크리스트 멘션에
- *   ID가 없다. REST 알림은 `alarmId`를 준다 (PRD §13 A2).
- * - **업무 단일 필드 수정**: `flow_update_task`는 상태만 바꾼다. 마감일·우선순위·담당자는
- *   REST에만 길이 있다 (api-spec §6.4, PRD §13 A4).
- * - **부서원 일정**: `userId`가 `/user/*`에 남은 유일한 타인 조회 파라미터다 (PRD §13 B3).
+ * 바꾼 이유는 세 가지다:
+ * - MCP는 자기 집계를 완성된 형태로만 준다 — `overdueActive`는 건수만 오고 목록이 없어서
+ *   활동 창을 180일로 넓혀 한 번 더 부르는 우회가 있었다. REST는 `EDTR_DTTM`(마지막 수정)을
+ *   업무마다 주므로 밀린 업무와 방치된 업무를 우리가 직접 가른다 (`classifyTasks`).
+ * - 알림·댓글·단일 필드 수정은 애초에 MCP에 길이 없었다 (bug-report BUG-001, PRD §13 A1·A2·A4).
+ * - 인증이 하나로 준다. OAuth 토큰은 `resource=https://flow.team/ai/mcp`로 발급되어 REST와
+ *   audience가 달라(BUG-004) 두 자격증명을 동시에 들고 다녀야 했다.
  *
- * 인증은 `x-flow-api-key`다. 세션 OAuth 토큰은 못 쓴다 — `Authorization: Bearer`로 보내면
- * 401이고(실측), 애초에 그 토큰은 `resource=https://flow.team/ai/mcp`로 발급되어 REST와
- * audience가 다르다 (bug-report BUG-004).
+ * 인증은 `x-flow-api-key` 하나다.
  *
  * **API Key는 소유자 한 명 기준이다** (알림 응답의 `receiverId`가 소유자로 고정된다).
  * 그래서 `mergeMentionComments`에서 `receiverId`가 **지금 로그인한 사람**과 같은 것만
  * 받아들인다 — 남의 멘션이 새는 경로를 남기지 않는다.
  *
- * 키는 두 출처다 (`get`). 로그인할 때 **자기 키를 등록한 사람**은 소유자가 자기 자신이라
- * 이 파일 전체가 자기 기준으로 돌고, 등록하지 않은 사람은 환경변수의 공용 키로 돈다 —
- * 그때는 알림이 0건이 되어 본문 없는 화면이 뜨고, `resolvePostId`는 공용 키 소유자가
- * 멤버인 프로젝트에서만 답을 준다. 키 등록을 권하는 이유가 이것이다.
+ * 키는 두 출처다 (`call`). 로그인한 사람은 자기 키로 돌고(그게 곧 로그인이다 — `lib/auth.ts`),
+ * 세션 밖에서 부르는 자리(크론·`getMe` 검증)는 환경변수의 공용 키로 돈다.
  */
 
 import { DAY_MS, kstYmd } from "@/lib/aggregate/date";
-import { getApiKey } from "@/lib/auth";
+import { ALLOWED_DOMAIN, getApiKey, type FlowProfile } from "@/lib/auth";
 import type { FlowSearchEmployeesData } from "@/lib/flow/types";
+import { flowPostUrl } from "@/lib/flow/urls";
 import type { TaskPriority } from "@/lib/task-priority";
+import type { TaskStatus } from "@/lib/task-status";
+import { fmtDate } from "@/lib/utils";
 
 const BASE = process.env.FLOW_API_BASE ?? "https://api.flow.team";
 
@@ -118,8 +113,8 @@ export class FlowRestError extends Error {
  * REST는 모든 응답을 `response.data`로 한 겹 싼다. 그 겹을 벗기고 실패는 던진다.
  *
  * 키는 **개인 키 → 환경변수** 순이다. 이 한 줄이 이 파일의 모든 호출을 덮는다 —
- * 로그인한 사람이 자기 키를 등록해 뒀으면 전부 그 사람 기준으로 돌고, 없으면 예전처럼
- * 발급자 키로 돈다(파일 상단 주석의 열화 그대로).
+ * 로그인한 사람은 자기 키가 곧 세션이라 전부 자기 기준으로 돌고, 세션 밖에서 부르는 자리만
+ * 환경변수의 공용 키로 떨어진다.
  *
  * `apiKey`를 직접 넘기는 건 **등록 직전 검증**용이다 (`app/login/actions.ts`). 그때는
  * 아직 쿠키에 넣기 전이라 쿠키에서 읽을 수 없다.
@@ -231,7 +226,7 @@ export async function listAlarms(
  * 창을 90일로 잡는다. 워크리스트 멘션이 어느 시점까지 거슬러 오는지는 flow가 밝히지
  * 않아서, 실측 창(최근 14일 28건)보다 넉넉하게 두고 커서로 덮는다.
  */
-export const listMentionAlarms = () => listAlarms("MENTION", { days: 90 });
+export const listMentionAlarms = (days = 90) => listAlarms("MENTION", { days });
 
 /**
  * 담당 업무·내가 올린 글 알림 (PRD §13 B1·B2). 첫 페이지 한 장만 본다 —
@@ -255,56 +250,70 @@ export async function markAllAlarmsRead(projectId?: string): Promise<void> {
   });
 }
 
-/* ── 내 정보 (api-spec §3.1, PRD §13 B6) ───────────────────────────────── */
+/* ── 내 정보·부서 (api-spec §3·§4) ─────────────────────────────────────── */
 
-/** api-spec §3.1. 키 소유자 확인에 쓰는 것만 적었다. */
-export interface FlowMe {
-  userId: string;
-  fullname: string;
-  email: string;
+/**
+ * API Key 소유자. **키가 누구 것인지 알아내는 유일한 길이고, 그래서 이게 로그인이다.**
+ *
+ * 키를 등록할 때 이걸 불러 소유자를 확인하고(`app/login/actions.ts`) 그 사람으로 세션을
+ * 만든다. `FlowProfile`의 모든 필드가 이 응답 하나에서 나온다 (api-spec §3.1).
+ */
+export const getMe = (apiKey?: string) =>
+  get<FlowProfile>("/user/employees/me", "내 정보 조회", apiKey);
+
+/** api-spec §4.1. 부서 탭이 쓰는 것만 적었다. */
+export interface FlowDivision {
+  divisionCode: string;
+  upperDivisionCode: string;
   divisionName: string;
 }
 
-/**
- * API Key 소유자. **키가 누구 것인지 알아내는 유일한 길이다.**
- *
- * 키를 등록할 때(`app/login/actions.ts`)와 로그인할 때(OAuth 콜백) 이걸 불러
- * `userId`가 로그인한 사람과 같은지 본다. 다르면 남의 알림·업무가 보이는 화면이 된다.
- */
-export const getMe = (apiKey?: string) => get<FlowMe>("/user/employees/me", "내 정보 조회", apiKey);
+/** 전사 부서 목록 (api-spec §4.1). 페이지네이션이 없어서 한 번에 다 온다. */
+export const listDivisions = async () =>
+  (await get<{ divisions?: FlowDivision[] }>("/user/divisions", "부서 조회")).divisions ?? [];
+
+/** api-spec §3.1 `Employee`. 스탠드업이 쓰는 것만 적었다. */
+export interface FlowEmployee {
+  userId: string;
+  fullname: string;
+  divisionName: string;
+  /** 직책. 비어 있을 수 있다. */
+  responsibility?: string;
+}
 
 /** 구성원 목록 스캔 상한. 100명 × 3 = 300명. */
 const EMPLOYEE_MAX_PAGES = 3;
 
 /**
- * 한 부서의 **이름 → userId** (api-spec §3.2). 팀원 일정 조회가 `userId`를 요구하는데
- * 스탠드업은 이름만 준다 (PRD §13 B3).
+ * 한 부서의 구성원 (api-spec §3.2). 스탠드업의 명단이자, 그 사람들 업무를 필터로 긁는
+ * `userId`의 출처다.
  *
  * ponytail: 부서 필터가 없어서 전사 목록을 받아 `divisionName`으로 고른다. 300명에서 끊는다 —
- * 더 큰 회사에서는 뒷쪽 부서원의 일정이 빠지고, 그때 `GET /user/divisions` 기준 조회를
- * 찾아보면 된다.
+ * 더 큰 회사에서는 뒷쪽 부서원이 명단에서 빠진다.
  */
-export async function listEmployeeIds(divisionName: string): Promise<Map<string, string>> {
-  const ids = new Map<string, string>();
+export async function listEmployees(divisionName: string): Promise<FlowEmployee[]> {
+  const found: FlowEmployee[] = [];
+  const seen = new Set<string>();
   let cursor = 0;
 
   for (let page = 0; page < EMPLOYEE_MAX_PAGES; page++) {
     const data = await get<{
-      employees?: { userId: string; fullname: string; divisionName: string }[];
+      employees?: FlowEmployee[];
       hasNext?: boolean;
       lastCursor?: number;
     }>(`/user/employees?cursor=${cursor}`, "구성원 조회");
 
     for (const e of data.employees ?? []) {
-      // 동명이인은 먼저 나온 쪽이 이긴다 — 스탠드업도 이름으로만 주니 구분할 재료가 없다.
-      if (e.divisionName === divisionName && !ids.has(e.fullname)) ids.set(e.fullname, e.userId);
+      if (e.divisionName !== divisionName || seen.has(e.userId)) continue;
+      seen.add(e.userId);
+      found.push(e);
     }
 
-    if (!data.hasNext || data.lastCursor === undefined) break;
+    if (!data.hasNext || data.lastCursor === undefined || data.lastCursor < 0) break;
     cursor = data.lastCursor;
   }
 
-  return ids;
+  return found;
 }
 
 /**
@@ -323,14 +332,31 @@ export async function listEmployeeIds(divisionName: string): Promise<Map<string,
  * ponytail: 100명에서 끊는다. 지금 13명이라 남는다 — 넘치면 `hasNext`가 참으로 오고,
  * 그때 `listEmployeeIds`처럼 커서를 돌면 된다.
  */
-export const searchEmployees = (sessionSearchWord?: string) =>
+export const searchEmployees = (sessionSearchWord?: string, ttl?: number) =>
   get<FlowSearchEmployeesData>(
     `/user/search/employees?pageSize=${SIZE}` +
       (sessionSearchWord ? `&searchWord=${encodeURIComponent(sessionSearchWord)}` : ""),
     "구성원 명단 조회",
+    undefined,
+    ttl,
   );
 
 /* ── 댓글 (api-spec §13, PRD §13 A1·B4) ───────────────────────────────── */
+
+/**
+ * 답글 한 줄 (api-spec §13.3). 댓글과 같은 모양인데 id 공간이 다르다 — `replyId`는
+ * 7자리대, `commentId`는 9자리대라 섞으면 서로를 못 찾는다.
+ */
+export interface FlowReply {
+  replyId: string;
+  parentCommentId: string;
+  contents: string;
+  systemCode?: string | null;
+  registerId: string;
+  registerName: string;
+  /** `YYYYMMDDHHmmss` */
+  registeredDateTime: string;
+}
 
 /** api-spec §13.1 `Comment`. 화면에 쓰는 것만 적었다. */
 export interface FlowComment {
@@ -346,31 +372,62 @@ export interface FlowComment {
   registerName: string;
   /** `YYYYMMDDHHmmss` */
   registeredDateTime: string;
+  /** `replyYn=Y`로 부르면 댓글마다 **최대 10건**이 붙어 온다. `replyId` 오름차순이다. */
+  replies?: FlowReply[];
+  /** 답글이 10건을 넘으면 참. 나머지는 `listReplies`로 받는다. */
+  replyHasNext?: boolean;
 }
 
 /**
- * 게시글 댓글 전량 (PRD §13 A1).
+ * 게시글 댓글 전량 + 답글 (PRD §13 A1).
  *
  * `flow_get_post`의 `remarks`는 같은 게시글에서 14건 중 2건만 줬다 (api-spec §13.1).
  * 여기는 14건이 다 온다.
  *
- * **답글은 안 온다** (실측 2026-08-03, api-spec §13.1). 이건 최상위 댓글만 주는 목록이다 —
- * 게시글 79974281은 댓글 2건인데 그중 하나의 `REPLY_CNT`가 3이고, 그 답글 셋은 응답에 없다.
- * 답글 id(알림의 `replyId`)는 댓글 id와 자리수부터 다른 별개 공간이고, 답글을 읽는 경로는
- * `/user/*`에 없다 (경로·쿼리 후보 11개 전부 404 또는 `VALIDATION_ERROR`). 그래서 화면의
- * 스레드에는 답글이 없고, 답글 계층을 아는 자리는 알림뿐이다 (`MentionAlarm.replyId`).
+ * **`replyYn=Y`가 답글을 같이 준다** (실측 2026-08-04, api-spec §13.3). 댓글마다 `replies[]`가
+ * 최대 10건 붙고 넘치면 `replyHasNext`가 참이다 — **추가 호출은 0회다**. 이걸 알기 전에는
+ * 답글을 읽는 경로가 없다고 적어 뒀는데(2026-08-03), 그때는 이 쿼리를 붙이고도 응답의
+ * `replies` 칸을 안 봤다. 실측 게시글 82396719는 댓글 4건 중 3건에 답글이 달려 있었고,
+ * 그 대화가 화면에서 통째로 빠져 있었다.
  *
  * ponytail: 첫 페이지만 본다. `hasNext`·`lastCursor`는 오는데 커서 파라미터 이름이
  * 문서화되지 않았다 — 한 게시글의 댓글이 한 페이지를 넘기면 그때 확인하면 된다.
  */
 export async function listComments(postId: string, ttl?: number): Promise<FlowComment[]> {
   const data = await get<{ comments?: FlowComment[] }>(
-    `/user/comments/${postId}`,
+    `/user/comments/${postId}?replyYn=Y`,
     "댓글 조회",
     undefined,
     ttl,
   );
   return data.comments ?? [];
+}
+
+/**
+ * 한 댓글의 답글 전량 (api-spec §13.3). **`replyHasNext`가 참일 때만 부른다** — 그 외에는
+ * `listComments`가 이미 다 줬다.
+ *
+ * ponytail: 100건 한 장이다. 실측에서 `replyHasNext`가 참인 댓글을 아직 못 봤고, 댓글 하나에
+ * 답글이 100건을 넘으면 그때 `hasNext`·`lastCursor`로 커서를 돌면 된다.
+ */
+export async function listReplies(postId: string, commentId: string): Promise<FlowReply[]> {
+  const data = await get<{ replies?: FlowReply[] }>(
+    `/user/comments/${postId}/replies/${commentId}?size=${SIZE}`,
+    "답글 조회",
+  );
+  return data.replies ?? [];
+}
+
+/**
+ * 댓글 작성 (api-spec §13.2).
+ *
+ * 본문 한 줄만 받는다 — 스키마가 엄격해서 `contents` 말고는 아무것도 안 들어간다
+ * `(실측 2026-08-04)`. `replyToRemarkId`·`files`·`imageFiles`를 얹으면 전부 거절이고,
+ * 답글 전용 하위 경로도 없다. **REST로는 답글을 못 단다** — 답글 UI는 상대 이름을 앞에
+ * 붙인 최상위 댓글로 보낸다 (`createComment` 호출부).
+ */
+export async function createComment(postId: string, contents: string): Promise<void> {
+  await call(`/user/comments/${postId}`, "댓글 작성", { method: "POST", body: { contents } });
 }
 
 /**
@@ -383,18 +440,27 @@ export async function listComments(postId: string, ttl?: number): Promise<FlowCo
 export const isChangeLog = (systemCode?: string | null) => Boolean(systemCode?.includes("^^"));
 
 /**
- * 목록에서 **사람이 쓴 마지막 댓글**. 피드백 업무에 내가 마지막으로 답했는지 볼 때 쓴다
+ * 스레드에서 **사람이 쓴 마지막 말**. 피드백 업무에 내가 마지막으로 답했는지 볼 때 쓴다
  * (`answeredByMe` — queries.ts).
  *
- * 응답은 오래된 것부터 온다 — 뒤에서 찾는다. 변경 로그(`담당자를 바꿨어요` 같은 기록)는
- * 건너뛴다: 실측 15건 중 7건이 그것이라 그냥 최신 한 건을 집으면 대부분의 줄이 로그로 채워진다.
+ * **답글도 센다.** 답글이 댓글보다 뒤에 붙는 게 보통이라 (실측 게시글 82396719: 마지막 세 말이
+ * 전부 답글), 최상위 댓글만 보면 "내가 답했는데도 안 답한 것으로" 잡힌다. 그래서 시각으로
+ * 고르고, 댓글이 오래된 것부터 오는 것에 기대지 않는다.
+ *
+ * 변경 로그(`담당자를 바꿨어요` 같은 기록)는 건너뛴다: 실측 15건 중 7건이 그것이라 그냥 최신
+ * 한 건을 집으면 대부분의 줄이 로그로 채워진다.
  */
-export function lastHumanComment(comments: FlowComment[]): FlowComment | null {
-  for (let i = comments.length - 1; i >= 0; i--) {
-    const comment = comments[i];
-    if (!isChangeLog(comment.systemCode)) return comment;
+export function lastHumanComment(comments: FlowComment[]): FlowComment | FlowReply | null {
+  let last: FlowComment | FlowReply | null = null;
+  for (const comment of comments) {
+    // 시각이 같으면 뒤에 본 것이 이긴다 — 목록 순서(오래된 것부터)가 그대로 남고,
+    // 부모와 답글이 같은 초에 걸리면 답글이 나중 말이다.
+    for (const said of [comment, ...(comment.replies ?? [])]) {
+      if (isChangeLog(said.systemCode)) continue;
+      if (!last || said.registeredDateTime >= last.registeredDateTime) last = said;
+    }
   }
-  return null;
+  return last;
 }
 
 /**
@@ -405,6 +471,16 @@ export function lastHumanComment(comments: FlowComment[]): FlowComment | null {
  */
 export const stripMentions = (contents: string) =>
   contents.replace(/@\[([^\]]*)\]\([^)]*\)/g, "$1");
+
+/**
+ * 이 댓글이 **나를 불렀나**. 괄호 안의 id가 세션의 `userId`와 같은 값이다 (실측 2026-08-04:
+ * `@[이종석](jongseok.lee@traport.com)`).
+ *
+ * 이름은 안 본다 — 동명이인이 있고, 전원 호출(`@[ALL](ALL)`)은 나를 부른 게 아니다.
+ * 알림으로 맞추지 않는 이유는 `toThread`에 적었다.
+ */
+export const mentionsMe = (contents: string, me: string) =>
+  !!me && contents.toLowerCase().includes(`](${me.toLowerCase()})`);
 
 /** 관측한 시스템 코드 (api-spec §13.1). 전체 코드표는 flow가 공개하지 않았다. */
 const SYSTEM_FIELD: Record<string, string> = {
@@ -447,7 +523,7 @@ export function describeSystemComment(systemCode: string): string {
 /**
  * 프로젝트 이름 → projectId 전량 (api-spec §5.2).
  *
- * MCP `flow_list_projects`가 죽어 있어서(BUG-007) 같은 목록을 REST로 받는다. 개수도 같다
+ * 이 맵이 화면의 뿌리다 — 업무 조회가 프로젝트별이라 여기 없는 프로젝트는 아예 안 보인다
  * (실측 59개). 이게 없으면 이름을 검색으로 하나씩 해소하는 수밖에 없는데(`search.ts`),
  * 검색은 **화면에 이미 뜬 이름**만 풀 수 있어서 멘션 줄의 프로젝트명이 비었다 — 멘션 알림은
  * 이름 없이 `projectId`만 준다.
@@ -610,6 +686,29 @@ interface PostTask {
   }[];
 }
 
+/** api-spec §6.3 `subTasks[]`. 상태 칸이 `tasks[]`와 같은 모양이라 `taskStatus`를 같이 쓴다. */
+interface RawSubTask extends PostTask {
+  TASK_NM?: string;
+  PROGRESS?: string;
+  COLABO_SRNO?: string;
+  COLABO_COMMT_SRNO?: string;
+}
+
+/** api-spec §6.3 `upLinkTasks[]`. 상태 칸은 안 온다 — 이름과 어디 있는지뿐이다. */
+interface RawUpLink {
+  UP_LINK_TASK_NM?: string;
+  COLABO_SRNO?: string;
+  COLABO_COMMT_SRNO?: string;
+}
+
+interface RawAttachment {
+  FILE_NAME?: string;
+  ORCP_FILE_NM?: string;
+  FILE_SIZE?: string;
+  ATCH_URL?: string;
+  THUM_IMG_PATH?: string;
+}
+
 /**
  * 업무의 상태 라벨. 프로젝트가 커스텀 상태(`STATUS`, api-spec §2.1)를 쓰면 라벨이 그대로
  * 오고, 안 쓰면 base 상태(`STTS`) 코드만 온다 — 그때만 대응표를 쓴다.
@@ -647,24 +746,106 @@ function taskStatus(task?: PostTask): string | null {
  * (`taskNews`가 `receiverId`로 걸러 낸다) 남의 글 제목이 새지 않는다.
  */
 export async function getPostBrief(postId: string, ttl?: number) {
-  const d = await get<{ title?: string; connectUrl?: string; tasks?: PostTask[] }>(
-    `/user/posts/${postId}`,
-    "게시글 조회",
-    undefined,
-    ttl,
-  );
+  const d = await get<{
+    title?: string;
+    connectUrl?: string;
+    outContent?: string;
+    tasks?: PostTask[];
+    upLinkTasks?: RawUpLink[];
+    subTasks?: RawSubTask[];
+    attachments?: RawAttachment[];
+    imageAttachments?: RawAttachment[];
+  }>(`/user/posts/${postId}`, "게시글 조회", undefined, ttl);
+  const up = d.upLinkTasks?.[0];
   return {
     title: d.title?.trim() || null,
     url: d.connectUrl?.trim() || null,
+    /** 본문 평문(`outContent`). HTML 쪽(`content`)은 안 쓴다 — 그릴 때 태그를 다시 지워야 한다. */
+    body: d.outContent?.trim() ?? "",
     // 업무가 아닌 글(공지·회의록)은 `tasks`가 비어 있다 — 그때는 상태가 없다.
     status: taskStatus(d.tasks?.[0]),
+    /** 이 업무를 품은 상위 업무. 실측 20건 중 11건이고 늘 **한 건**이다. */
+    parent: up
+      ? ({
+          name: up.UP_LINK_TASK_NM?.trim() ?? "",
+          postId: up.COLABO_COMMT_SRNO?.trim() ?? "",
+          url: postLink(up),
+          status: null,
+          progress: null,
+        } satisfies PostLink)
+      : null,
+    subTasks: (d.subTasks ?? []).map<PostLink>((s) => ({
+      name: s.TASK_NM?.trim() ?? "",
+      postId: s.COLABO_COMMT_SRNO?.trim() ?? "",
+      url: postLink(s),
+      status: taskStatus(s),
+      // 빈 문자열이 오는 경우가 있어 `Number("")`(=0)와 갈라 준다
+      progress: s.PROGRESS ? Number(s.PROGRESS) : null,
+    })),
+    files: [
+      ...(d.attachments ?? []).map(toFile),
+      ...(d.imageAttachments ?? []).map((a) => ({ ...toFile(a), thumb: tidy(a.THUM_IMG_PATH) })),
+    ].filter((f) => f.name && f.url),
   };
+}
+
+/** 상위·하위 업무가 가리키는 **그쪽 글**의 딥링크. 둘 다 프로젝트·글 번호를 같이 준다. */
+function postLink(t: { COLABO_SRNO?: string; COLABO_COMMT_SRNO?: string }): string {
+  return t.COLABO_SRNO && t.COLABO_COMMT_SRNO
+    ? flowPostUrl(t.COLABO_SRNO, t.COLABO_COMMT_SRNO)
+    : "";
+}
+
+/**
+ * 첨부 URL의 겹친 슬래시를 하나로 줄인다 — flow가 `https://flow.team//FLOW_DOWNLOAD_R001.act`
+ * 꼴로 준다. 호스트 바로 뒤만 손대고 경로 안쪽은 안 건드린다.
+ */
+const tidy = (url = "") => url.trim().replace(/^(https?:\/\/[^/]+)\/+/, "$1/");
+
+/** 일반 첨부는 `FILE_NAME`, 이미지 첨부는 `ORCP_FILE_NM`으로 이름이 온다. */
+function toFile(a: RawAttachment) {
+  return {
+    name: (a.FILE_NAME || a.ORCP_FILE_NM || "").trim(),
+    size: Number(a.FILE_SIZE) || 0,
+    url: tidy(a.ATCH_URL),
+    thumb: undefined as string | undefined,
+  };
+}
+
+/** 게시글에 붙은 파일 하나. `thumb`가 있으면 이미지다. */
+export type PostFile = ReturnType<typeof toFile>;
+
+/** 상위·하위로 이어진 업무 하나. `status`·`progress`는 하위 업무만 준다. */
+export interface PostLink {
+  name: string;
+  /**
+   * 그쪽 **글** 번호(`COLABO_COMMT_SRNO`). 이게 있으면 모달 안에서 그 업무를 펼쳐 볼 수 있다
+   * (`loadTaskPost`가 글 번호 하나로 돈다). 못 받으면 빈 문자열이다.
+   */
+  postId: string;
+  /** flow 딥링크. 프로젝트·글 번호가 다 와야 만든다 — 못 만들면 빈 문자열이다. */
+  url: string;
+  status: string | null;
+  /** 0~100. */
+  progress: number | null;
 }
 
 /* ── 업무 단일 필드 수정 (api-spec §6.4, PRD §13 A4) ───────────────────── */
 
 const taskField = (projectId: string, taskId: string, field: string) =>
   `/user/posts/projects/${projectId}/tasks/${taskId}/${field}`;
+
+/**
+ * 업무 상태. base 상태(`request`…`hold`)만 넘긴다 — 업무 2.0 커스텀 상태는 `optionSrno`를
+ * 요구하는데 둘은 **동시 전송 불가**다 (api-spec §6.4). 커스텀 상태 프로젝트에서 이걸 부르면
+ * flow가 거절하고 그 사유가 그대로 화면에 올라온다.
+ */
+export async function setTaskStatus(projectId: string, taskId: string, status: TaskStatus) {
+  await call(taskField(projectId, taskId, "status"), "상태 수정", {
+    method: "PATCH",
+    body: { status },
+  });
+}
 
 /** 마감일. `YYYYMMDD`. 시작일보다 빠르면 flow가 거절하고, 그 사유가 그대로 올라온다. */
 export async function setTaskEndDate(projectId: string, taskId: string, endDate: string) {
@@ -696,10 +877,95 @@ export async function setTaskWorkers(projectId: string, taskId: string, workerId
   });
 }
 
+/**
+ * 업무 등록 (api-spec §6.4).
+ *
+ * `contents`가 필수라 본문이 비면 제목을 그대로 넣는다 — 빈 문자열은 flow가 거절한다.
+ * 상태는 base enum만 받는다: 업무 2.0 커스텀 상태는 생성 API에 못 넣고 만든 뒤 상태 수정으로
+ * 바꿔야 한다. 새 업무는 늘 `request`(요청)로 시작하므로 여기서는 문제가 안 된다.
+ */
+export async function createTask(
+  projectId: string,
+  task: { title: string; contents: string; status: TaskStatus; endDate?: string },
+): Promise<void> {
+  await call(`/user/posts/projects/${projectId}/tasks`, "업무 등록", {
+    method: "POST",
+    body: { ...task, contents: task.contents || task.title },
+  });
+}
+
+/** api-spec §5.3. 내 업무 카드의 오른쪽 패널이 쓰는 것만 적었다. */
+export interface ProjectBrief {
+  /** 설명(`CNTN`). 실측 59개 중 7개만 채워져 있어서, 비면 화면이 그 줄을 안 그린다. */
+  desc: string;
+  /** 참여자 수(`SENDIENCE_CNT`). **이름을 알 수 있는 사람은 이보다 적다** (`listParticipants`). */
+  count: number;
+  /** 그중 외부 사람(`OUT_SENDIENCE_CNT`). 실측 36명 중 26명, 110명 중 95명. */
+  outside: number;
+  /** 공개 프로젝트(`OPEN_YN`). 실측 59개 중 3개가 공개다. */
+  open: boolean;
+  /** 중요 표시(`IMPT_YN`). 실측 59개 중 14개다 — flow에서 내가 별을 단 프로젝트다. */
+  important: boolean;
+  /** 개설자(`RGSR_NM`). */
+  owner: string;
+  /** 개설일(`RGSN_DTTM`, 14자리). */
+  opened: string;
+}
+
+/**
+ * 겉면 캐시(초). 설명·공개 여부·개설자는 거의 안 바뀌고 참여자 수도 천천히 는다. 내 업무
+ * 화면이 접힌 카드마다 이걸 부르므로(실측 38장) 캐시가 없으면 새로 고칠 때마다 38회다.
+ */
+const PROJECT_TTL = 600;
+
+/**
+ * 프로젝트 한 개의 겉면 (api-spec §5.3). 값은 `data.project.PROJECT_SETTING[0]`에 OpenGate
+ * 원형(UPPER_SNAKE)으로 온다.
+ *
+ * **진행 단계 같은 프로젝트 상태는 여기 없다.** `STATUS` 키는 59개 전부에 있는데 값이 전량
+ * 빈 문자열이고, `TASK_REPORT_RECORD`·`CUSTOM_STATUS_TASK_REPORT_RECORD`는 둘 다 `null`이다
+ * `(실측 2026-08-04, 59개 전량)`. `HIDDEN_YN`·`OFFICIAL_YN`·`DISABLE_YN`도 59개 모두 `N`
+ * 하나뿐이라 구별에 못 쓴다. 값이 갈리는 상태성 필드는 `OPEN_YN`(N 56 / Y 3)과
+ * `IMPT_YN`(Y 14 / N 45) 둘이고, 그 둘만 낸다. 나머지 자리는 개설자·개설일이다.
+ */
+export async function getProjectBrief(projectId: string): Promise<ProjectBrief> {
+  const data = await get<{ project?: { PROJECT_SETTING?: Record<string, string>[] } }>(
+    `/user/projects/${projectId}`,
+    "프로젝트 조회",
+    undefined,
+    PROJECT_TTL,
+  );
+  const s = data.project?.PROJECT_SETTING?.[0] ?? {};
+  return {
+    desc: (s.CNTN ?? "").trim(),
+    count: Number(s.SENDIENCE_CNT) || 0,
+    outside: Number(s.OUT_SENDIENCE_CNT) || 0,
+    open: s.OPEN_YN === "Y",
+    important: s.IMPT_YN === "Y",
+    owner: (s.RGSR_NM ?? "").trim(),
+    opened: (s.RGSN_DTTM ?? "").trim(),
+  };
+}
+
 /** api-spec §5.4. 담당자 후보 목록이다. */
 export interface Participant {
   userId: string;
   name: string;
+  /**
+   * 우리 기관 사람이 아니다 (`userId`가 `@traport.com`으로 안 끝난다).
+   *
+   * 참여자 API(§5.4)가 주는 사람은 전원 우리 기관이고, 업무에서 긁어 온 사람은 실측 5개
+   * 프로젝트에서 **한 명도** 우리 기관이 아니었다. 그래도 출처가 아니라 id로 가른다 —
+   * 언젠가 §5.4가 외부 사람을 주기 시작해도 판정이 안 틀린다.
+   */
+  outside?: boolean;
+  /**
+   * 얼굴 사진. **우리 기관 사람만** 채운다 — 참여자 API에는 없는 값이라 전사 명단(§9.3)에서
+   * 이메일로 맞춰 붙인다 (`loadProjectPanel`). 타사 사용자는 그 명단에 없다.
+   *
+   * 없는 사람이 있다 (13명 중 4명). 비면 화면이 이름 첫 글자 원판을 그린다.
+   */
+  photo?: string;
 }
 
 /**
@@ -735,6 +1001,9 @@ export async function listParticipants(projectId: string): Promise<Participant[]
     ).catch(() => ({ tasks: [] as FilterTask[] })),
   ]);
 
+  const mark = (p: Participant): Participant =>
+    p.userId.toLowerCase().endsWith(ALLOWED_DOMAIN) ? p : { ...p, outside: true };
+
   const listed = data.participants ?? [];
   const seen = new Set(listed.map((p) => p.userId));
   const extra = new Map<string, Participant>();
@@ -751,7 +1020,7 @@ export async function listParticipants(projectId: string): Promise<Participant[]
   return [
     ...listed,
     ...[...extra.values()].sort((a, b) => a.name.localeCompare(b.name, "ko")),
-  ];
+  ].map(mark);
 }
 
 /* ── 방치된 업무 (api-spec §5.6·§6.1, PRD §13 B5) ─────────────────────── */
@@ -780,21 +1049,35 @@ export interface StaleTask {
   workers: string[];
 }
 
-/** 내가 담당인 업무 한 건 (PRD §6.5). */
-export interface MyTask {
+/** 담당자가 걸린 업무 한 건 (PRD §6.5). 오늘·내 업무·팀 화면이 전부 이 한 줄에서 선다. */
+export interface FlowTask {
   /** raw `TASK_SRNO` — 상태·마감일 바꾸기가 이 값을 요구한다. */
   taskId: string;
   /** `colabo_commt_srno` — flow 딥링크를 이걸로 만든다. */
   postId: string;
   title: string;
-  /** `YYYYMMDD`. 미설정이면 빈 문자열 — 실측 880건 중 720건이 그렇다. */
+  /** `YYYYMMDD` 또는 `YYYYMMDDHHmm`. 미설정이면 빈 문자열 — 실측 880건 중 720건이 그렇다. */
   endDate: string;
   /** 등록일 `YYYYMMDD`. 없으면 빈 문자열이다. */
   regDate: string;
+  /**
+   * 마지막 수정 `YYYYMMDDHHmmss`. **밀린 업무와 방치된 업무를 가르는 유일한 재료다**
+   * (`classifyTasks`) — 실측 채움률 100%.
+   */
+  editDate: string;
   /** 등록자 실명 (`authorOf`). 이름뿐이다 — 부서·직급·사진은 못 온다. */
   author: string;
+  /** 담당자. 여러 명일 수 있다. `userId`는 우리 기관 사람이면 이메일이다. */
+  workers: { userId: string; name: string }[];
   /** 상태 라벨. 못 풀면 빈 문자열이다. */
   status: string;
+  /**
+   * `low`\|`normal`\|`high`\|`urgent`. 미설정이면 빈 문자열이다.
+   *
+   * **같은 응답에 이미 들어 있다** — 예전에는 모달이 열릴 때 `getTaskFields`로 따로 받았는데
+   * (업무 한 건에 REST 1회), 목록이 주는 걸 안 읽고 있었다. 여기서 꺼내면 표가 공짜로 쓴다.
+   */
+  priority: string;
   /** 완료 상태인가. */
   done: boolean;
   /**
@@ -810,34 +1093,58 @@ export interface MyTask {
 const WORKER_COLUMN = "1";
 
 /** 프로젝트당 페이지 상한. 100건 × 3 = 300건. 넘치면 `hasMore`로 알린다. */
-const MY_TASKS_MAX_PAGES = 3;
-
-/** 내 업무 응답을 데이터 캐시에 두는 시간(초). REST 분당 120회 중 이 화면 한 번이 ~60회다. */
-const MY_TASKS_TTL = 60;
+const TASK_MAX_PAGES = 3;
 
 /**
- * 한 프로젝트에서 **내가 담당인** 업무 전부 (PRD §6.5).
+ * 업무 응답을 데이터 캐시에 두는 시간(초). 오늘·내 업무·팀 화면이 전부 이 조회로 서고
+ * 화면 하나가 프로젝트 수만큼(실측 59회) 부른다 — 분당 120회 안에 있으려면 캐시가 필요하다.
  *
- * 담당자 필터는 서버가 적용한다 — `filterRecords`에 `WORKER_ID IN <userId>`를 넣으면 내
- * 업무만 온다. 전량 받아 클라이언트에서 거르는 길도 있지만 한 프로젝트가 600건이라
+ * 캐시 키는 URL이라 **같은 담당자 조합이면 화면끼리 캐시를 나눠 쓴다** — 오늘 화면과 내 업무
+ * 화면이 똑같은 URL을 부르는 게 그래서 의도다.
+ *
+ * 60초였다. 오늘 화면 한 번이 59회 + 알림·본문·댓글로 100회 가까이 쓰는데, 그 상태로 팀
+ * 화면을 열면 같은 분에 다시 59회라 뒷쪽 프로젝트가 통째로 429로 떨어졌다 `(실측 2026-08-04
+ * — 59개 중 26개)`. 5분으로 늘리면 화면을 오가는 동안 첫 조회 한 번으로 끝난다. 대가는
+ * 신선도인데, 업무 목록이 초 단위로 바뀌는 화면이 아니고 쓰기는 `revalidatePath`가 뚫는다.
+ */
+const TASK_TTL = 300;
+
+/**
+ * 한 프로젝트에서 **넘긴 담당자들이** 맡은 업무 전부 (PRD §6.5).
+ *
+ * 담당자 필터는 서버가 적용한다 — `filterRecords`에 `WORKER_ID IN <userId>` 레코드를 넣으면
+ * 그 사람 업무만 온다. 전량 받아 클라이언트에서 거르는 길도 있지만 한 프로젝트가 600건이라
  * 페이지가 여섯 장이고, 필터를 걸면 같은 프로젝트가 한 장으로 끝난다.
  *
- * `userId`는 **반드시 로그인 세션에서 채운다** (PRD §8.1). 공용 API 키에 남의 ID를 넣으면
- * 그 사람 업무가 그대로 나온다 — 요청에서 받은 값을 여기 넘기면 그게 유출 경로다.
+ * **여러 명은 레코드를 여러 개 넣는다 — 같은 컬럼의 레코드끼리는 OR다** `(실측 2026-08-04)`.
+ * 한 명씩 1건·2건이던 프로젝트가 둘을 함께 넣으니 3건이 왔다. 콤마로 이어 붙인
+ * `FILTER_DATA`는 0건이고, 배열로 주면 500이다 — 레코드를 늘리는 게 유일한 길이다.
+ * 부서원 여덟 명의 업무를 프로젝트당 한 번으로 받는 게 이 덕분이다 (팀 화면).
+ *
+ * `userIds`는 **반드시 세션이나 부서 명단에서 채운다** (PRD §8.1). 공용 API 키에 남의 ID를
+ * 넣으면 그 사람 업무가 그대로 나온다 — 요청에서 받은 값을 여기 넘기면 그게 유출 경로다.
  *
  * 완료 판정은 `optionCategory === "2"`다. 프로젝트가 커스텀 상태(`STATUS`)를 쓰면 라벨이
  * `optionName`으로 오고 base 상태(`STTS`)는 코드만 오는데, 두 체계가 공통으로 주는 값이
  * 이 카테고리 하나뿐이다.
  */
-export async function listMyTasks(
+export async function listWorkerTasks(
   projectId: string,
-  userId: string,
-): Promise<{ tasks: MyTask[]; hasMore: boolean }> {
+  userIds: readonly string[],
+): Promise<{ tasks: FlowTask[]; hasMore: boolean }> {
+  if (userIds.length === 0) return { tasks: [], hasMore: false };
+
   const filter = encodeURIComponent(
-    JSON.stringify([{ COLUMN_SRNO: WORKER_COLUMN, OPERATOR_TYPE: "IN", FILTER_DATA: userId }]),
+    JSON.stringify(
+      userIds.map((userId) => ({
+        COLUMN_SRNO: WORKER_COLUMN,
+        OPERATOR_TYPE: "IN",
+        FILTER_DATA: userId,
+      })),
+    ),
   );
 
-  const tasks: MyTask[] = [];
+  const tasks: FlowTask[] = [];
   let hasMore = false;
   // **`cursor`는 오프셋이 아니라 페이지 번호다** (0, 1, 2…). `cursor=100`을 넣으면 100번째
   // 페이지를 달라는 뜻이라 빈 배열 + `hasNext: false`가 오고, 그러면 2쪽부터 조용히
@@ -845,12 +1152,12 @@ export async function listMyTasks(
   // 다음 번호는 응답의 `lastCursor`가 준다 (끝이면 `-1`).
   let cursor = 0;
 
-  for (let page = 0; page < MY_TASKS_MAX_PAGES; page++) {
+  for (let page = 0; page < TASK_MAX_PAGES; page++) {
     const data = await get<{ tasks?: FilterTask[]; hasNext?: boolean; lastCursor?: number }>(
       `/user/posts/projects/${projectId}/tasks/filter?pageSize=${SIZE}&cursor=${cursor}&filterRecords=${filter}`,
-      "내 업무 조회",
+      "업무 조회",
       undefined,
-      MY_TASKS_TTL,
+      TASK_TTL,
     );
 
     for (const task of data.tasks ?? []) {
@@ -863,15 +1170,20 @@ export async function listMyTasks(
         title: columnData(task, "TASK_NM")[0]?.customColumnData ?? "제목 없는 업무",
         endDate: columnData(task, "END_DT")[0]?.customColumnData ?? "",
         regDate: regDateOf(task),
+        editDate: columnData(task, "EDTR_DTTM")[0]?.customColumnData ?? "",
         author: authorOf(task),
+        workers: columnData(task, "WORKER_ID")
+          .map((d) => ({ userId: d.customColumnData ?? "", name: d.userName ?? "" }))
+          .filter((w) => w.userId),
         status: cell?.optionName?.trim() || STTS_LABEL[cell?.customColumnData ?? ""] || "",
+        priority: columnData(task, "PRIORITY")[0]?.customColumnData ?? "",
         done: cell?.optionCategory === "2",
         upTaskId: task.upTaskId || "-1",
       });
     }
 
     if (!data.hasNext || data.lastCursor === undefined || data.lastCursor < 0) break;
-    if (page === MY_TASKS_MAX_PAGES - 1) hasMore = true;
+    if (page === TASK_MAX_PAGES - 1) hasMore = true;
     cursor = data.lastCursor;
   }
 
@@ -956,6 +1268,12 @@ export interface FlowEvent {
   allDayYn: string;
   /** 프로젝트에서 만든 일정이면 projectId가 들어 있다. */
   colaboSrno?: string;
+  /**
+   * 그 일정이 딸린 **게시글 ID**. `colaboSrno`와 늘 짝으로 온다 (실측 8건 중 3건).
+   *
+   * 이게 있으면 프로젝트 첫 화면이 아니라 그 글로 바로 보낼 수 있다 (`flowPostUrl`).
+   */
+  colaboCommtSrno?: string;
   /** 일정에 따로 준 색. `#` 없는 6자리다. 실측에선 늘 비어서 `calendarColor`로 떨어졌다. */
   eventColor?: string;
   /** 달력 색. `#` 없는 6자리(`"D0DA09"`). 일정 색이 없을 때 이걸 쓴다. */
@@ -1006,6 +1324,120 @@ export async function listEvents(
   return (data.events ?? []).sort((a, b) =>
     a.eventStartDateTime.localeCompare(b.eventStartDateTime),
   );
+}
+
+/* ── 일정 상세 (api-spec §8.5) ────────────────────────────────────────── */
+
+/** 반복 주기 → [1주기일 때 말, N주기일 때 단위]. */
+const REPEAT_KO: Record<string, [string, string]> = {
+  DAILY: ["매일", "일"],
+  WEEKLY: ["매주", "주"],
+  MONTHLY: ["매달", "개월"],
+  YEARLY: ["매년", "년"],
+};
+
+const REPEAT_DAY_KO: Record<string, string> = {
+  MO: "월", TU: "화", WE: "수", TH: "목", FR: "금", SA: "토", SU: "일",
+};
+
+interface RawRepeat {
+  repeatType?: string;
+  /** 몇 주기마다인지. `"1"`이면 매주·매달이다. */
+  repeatPeriod?: string;
+  /** 주간 반복의 요일. `"MO,FR"`처럼 쉼표로 온다. */
+  repeatDays?: string;
+  /** 반복이 끝나는 날(`YYYYMMDDHHmmss`). 무기한이면 빈 문자열이다. */
+  endDateTime?: string;
+}
+
+/**
+ * 반복 규칙을 사람 말로 (`매주 금요일 · 2026-09-04까지`).
+ *
+ * 목록(§8.2)은 `repeatSrno` 하나로 "반복이다"까지만 알려 준다. 주기는 상세에만 있어서
+ * 화면이 지금은 반복 아이콘만 그린다 — 이 함수가 그 아이콘을 문장으로 바꾼다.
+ *
+ * 모르는 주기는 빈 문자열이다. `WEEKLY` 같은 코드를 그대로 화면에 흘리느니 안 적는 게 낫다.
+ */
+export function repeatLabel(repeat?: RawRepeat): string {
+  const pair = REPEAT_KO[repeat?.repeatType ?? ""];
+  if (!pair) return "";
+
+  const every = Number(repeat?.repeatPeriod) || 1;
+  const days = (repeat?.repeatDays ?? "")
+    .split(",")
+    .map((d) => REPEAT_DAY_KO[d.trim()])
+    .filter(Boolean);
+  const end = repeat?.endDateTime ?? "";
+
+  return [
+    every > 1 ? `${every}${pair[1]}마다` : pair[0],
+    days.length ? ` ${days.join("·")}요일` : "",
+    /^\d{8}/.test(end) ? ` · ${fmtDate(end)}까지` : "",
+  ].join("");
+}
+
+/**
+ * 일정 하나의 속내 (api-spec §8.5). **목록(§8.2)에 없는 것만** 담는다 — 이름·시각·색·
+ * 프로젝트는 부르는 쪽이 이미 목록 항목으로 들고 있다.
+ */
+export interface EventDetail {
+  /**
+   * 설명(`eventBody`). 목록 응답에도 같은 이름 필드가 있지만 **거기서는 늘 빈 문자열이다**
+   * (실측 8건 전량). 상세를 부르는 이유의 절반이 이 값이다.
+   */
+  body: string;
+  /**
+   * 장소(`location`). 실측 8건 중 1건. 곁의 `locationUrl`·`locationCoordinates`는 8건 전량
+   * 비어서 안 읽는다 — 지도 링크를 다는 건 그 값을 한 번 본 뒤 일이다.
+   */
+  place: string;
+  /** 참석자 이름(`attendances[].attendanceName`). 실측 8건 전량, 4~11명. */
+  attendees: string[];
+  /** 만든 사람(`rgsrNm`). */
+  owner: string;
+  /** 반복 주기를 사람 말로. 반복이 아니면 빈 문자열이다. */
+  repeat: string;
+}
+
+/**
+ * 일정 상세 (PRD §13 B3).
+ *
+ * 실측(2026-08-04, ±180일 8건 전량) 채움률은 참석자 8/8 · 등록자 8/8 · 반복 5/8 ·
+ * 설명 3/8 · 장소 1/8이다. `notifications`·`attachments`·`vcRecords`는 8건 전량 비어서
+ * 아예 안 읽는다 — 우리 기관이 안 쓰는 기능이다.
+ *
+ * 시각 둘은 필수다. 반복 일정은 회차가 다 같은 `eventSrno`를 쓰기 때문에 이걸로 어느
+ * 회차인지 짚는다. 안 주면 flow가 원본 회차를 준다.
+ *
+ * ponytail: 일정 한 건에 REST 한 번이라 **펼칠 때만** 부른다 (`ScheduleList`). 미리 부르면
+ * 화면을 열 때마다 그날 일정 수만큼 호출이 늘어난다.
+ */
+export async function getEvent(
+  eventSrno: string,
+  eventStartDateTime: string,
+  eventFinishDateTime: string,
+): Promise<EventDetail> {
+  const query = new URLSearchParams({ eventStartDateTime, eventFinishDateTime });
+  const data = await get<{
+    event?: {
+      eventBody?: string;
+      location?: string;
+      attendances?: { attendanceName?: string }[];
+      rgsrNm?: string;
+      repeatEvents?: RawRepeat[];
+    };
+  }>(`/user/calendars/events/${eventSrno}?${query}`, "일정 상세 조회");
+
+  const event = data.event ?? {};
+  return {
+    body: event.eventBody?.trim() ?? "",
+    place: event.location?.trim() ?? "",
+    attendees: (event.attendances ?? [])
+      .map((a) => a.attendanceName?.trim() ?? "")
+      .filter(Boolean),
+    owner: event.rgsrNm?.trim() ?? "",
+    repeat: repeatLabel(event.repeatEvents?.[0]),
+  };
 }
 
 /* ── 검색 (api-spec §9.1~9.2, PRD §6.4) ───────────────────────────────── */

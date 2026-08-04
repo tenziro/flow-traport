@@ -3,16 +3,17 @@ import { describe, it } from 'node:test';
 
 process.env.SESSION_SECRET ??= 'test-secret';
 
-import { createPkce, isTraport, seal, unseal } from './auth';
+import { isTraport, seal, unseal } from './auth';
 
 describe('세션 봉인', () => {
   it('봉인한 값이 그대로 돌아온다', async () => {
-    const session = { userId: 'a@traport.com', accessToken: 'tok', expiresAt: 1 };
+    const session = { userId: 'a@traport.com', fullname: '이종석' };
     assert.deepEqual(await unseal(await seal(session)), session);
   });
 
+  // ★ 이 쿠키에 API 키가 들어간다 (`sealKey`). 평문이 새면 그게 곧 계정 탈취다.
   it('평문이 쿠키에 남지 않는다', async () => {
-    assert.ok(!(await seal({ accessToken: 'super-secret-token' })).includes('super-secret-token'));
+    assert.ok(!(await seal('super-secret-key')).includes('super-secret-key'));
   });
 
   it('같은 값이라도 매번 다른 문자열이 된다 (IV 재사용 금지)', async () => {
@@ -27,18 +28,6 @@ describe('세션 봉인', () => {
     assert.equal(await unseal(tampered), null);
     assert.equal(await unseal('not-base64!!'), null);
     assert.equal(await unseal(''), null);
-  });
-});
-
-describe('PKCE', () => {
-  it('verifier와 challenge가 다르고 매번 새로 생긴다', async () => {
-    const a = await createPkce();
-    const b = await createPkce();
-    assert.notEqual(a.verifier, a.challenge);
-    assert.notEqual(a.verifier, b.verifier);
-    assert.notEqual(a.state, b.state);
-    // S256 결과는 base64url 43자
-    assert.match(a.challenge, /^[A-Za-z0-9_-]{43}$/);
   });
 });
 

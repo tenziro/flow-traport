@@ -15,7 +15,8 @@ import { Card, CardContent } from "@/components/ui/card";
  * 레이아웃 자신이 던지는 건 못 받지만, 레이아웃이 쓰는 건 세션 쿠키와 `loadNews`(실패하면
  * `null`)뿐이라 터질 자리가 없다.
  *
- * 원인은 대개 flow 토큰 만료(MCP 401)라 고치는 길은 다시 로그인이다. 그런데 운영 빌드에서
+ * 원인은 대개 API 키가 죽었거나(REST 401) flow가 잠깐 안 받는 것이라 고치는 길은 다시
+ * 로그인이다. 그런데 운영 빌드에서
  * `error.message`는 지워지고 `digest`만 온다 — 원인으로 갈라 말할 수 없으니 두 길을 다
  * 열어 둔다.
  *

@@ -1,3 +1,4 @@
+import { CollectNotice } from '@/components/collect-notice';
 import {
   IconFocus,
   IconImminent,
@@ -37,7 +38,8 @@ export const metadata = { title: '오늘 · flow Cockpit' };
  * 화면마다 다르게 생기면 같은 것인지 알아보는 데 시간이 든다.
  */
 export default async function TodayPage() {
-  const { now, worklist, focus, stale, projectIds } = await loadToday();
+  const { now, worklist, focus, stale, projectIds, truncated, failed } =
+    await loadToday();
   const { counts } = worklist;
   /** 워크리스트는 projectId를 안 준다 — 프로젝트 이름으로 해소한다 (queries.ts). */
   const idOf = (project: string) => projectIds.get(project) ?? null;
@@ -228,9 +230,9 @@ export default async function TodayPage() {
         </Card>
 
         {/*
-         * 방치된 업무는 워크리스트가 목록 없이 건수만 준다 — 활동 창을 180일로 넓혀
-         * 한 번 더 부르고 30일 창과의 차집합으로 만든다 (queries.ts). 그래도 못 가져온
-         * 건수는 아래에 그대로 밝힌다.
+         * 방치는 마감이 지난 뒤 30일 넘게 손 안 댄 업무다. 업무마다 오는 마지막 수정
+         * 시각으로 우리가 직접 가르기 때문에 (classifyTasks) 건수와 목록이 항상 맞는다 —
+         * 위 카운트에서 뺀 나머지가 아니다.
          */}
         <Card className="rise" style={{ '--i': 8 } as React.CSSProperties}>
           <CardHeader>
@@ -249,24 +251,21 @@ export default async function TodayPage() {
             {stale === null && counts.overdueStale > 0 ? (
               <Unavailable what="방치된 업무" />
             ) : (
-              <>
-                <TaskTable
-                  rows={(stale ?? []).map(withId)}
-                  path="/"
-                  filterable
-                  emptyState="방치된 업무가 없어요"
-                />
-                {stale && stale.length < counts.overdueStale && (
-                  <p className="tabular mt-2 text-xs text-muted-foreground">
-                    180일 넘게 손 안 댄 {counts.overdueStale - stale.length}건은
-                    flow에서 직접 확인해요.
-                  </p>
-                )}
-              </>
+              <TaskTable
+                rows={(stale ?? []).map(withId)}
+                path="/"
+                filterable
+                /* 이 표만 마지막 수정을 낸다 — 여기 있는 이유가 그 날짜다 */
+                showEditDate
+                emptyState="방치된 업무가 없어요"
+              />
             )}
           </CardContent>
         </Card>
       </div>
+
+      {/* 못 가져온 것은 숨기지 않는다 — 건수가 실제보다 적게 보이는 게 제일 나쁘다 */}
+      <CollectNotice truncated={truncated} failed={failed} />
     </>
   );
 }

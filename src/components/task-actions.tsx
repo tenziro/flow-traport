@@ -34,7 +34,7 @@ import { type ReplyTarget } from "@/components/thread-view";
 import { StatusPill } from "@/components/status-pill";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { WorkerPicker } from "@/components/worker-picker";
-import { cn, fmtDate } from "@/lib/utils";
+import { cn, fmtDate, fmtDateTime } from "@/lib/utils";
 
 /**
  * 업무 상세 모달의 쓰기 줄 (PRD §6.1.4, §13 A4).
@@ -56,8 +56,8 @@ import { cn, fmtDate } from "@/lib/utils";
  * 댓글도 확인 단계를 두지 않는다. 내용을 직접 타이핑하는 것 자체가 확인이고, 댓글은
  * 파괴적이지 않다 (§8.1의 "확인 또는 실행 취소" 중 확인에 해당).
  *
- * 상태만 MCP로 나가고 나머지 셋은 REST다. REST 쓰기는 개인 API 키가 있어야 한다 —
- * 없으면 서버가 거절하고 키를 등록하라고 답한다 (`restRun` — actions.ts).
+ * 넷 다 REST로 나간다. 쓰기는 개인 API 키가 있어야 한다 — 없으면 서버가 거절하고
+ * 키를 등록하라고 답한다 (`restRun` — actions.ts).
  */
 
 /* ── 행 눈금 ───────────────────────────────────────────────────────────────
@@ -86,9 +86,12 @@ const PICK =
 /**
  * 상태·등록일·마감일·우선순위·담당자 다섯 줄 (PRD §6.1.4).
  *
- * 우선순위·담당자·등록일은 워크리스트에 없다. **이 덩어리가 붙을 때 한 번만** 부른다 —
- * 업무 한 줄에 REST 한 번이라, 표의 모든 행이 미리 부르면 열 줄에 열 번이다. 상세 모달이
- * 열릴 때만 붙으니 실제로는 보고 있는 업무 하나만 부른다.
+ * 담당자는 워크리스트에 없다. **이 덩어리가 붙을 때 한 번만** 부른다 — 업무 한 줄에
+ * REST 한 번이라, 표의 모든 행이 미리 부르면 열 줄에 열 번이다. 상세 모달이 열릴 때만
+ * 붙으니 실제로는 보고 있는 업무 하나만 부른다.
+ *
+ * 우선순위는 이제 목록 응답에 있어서(`FlowTask.priority`) 그 조회를 안 기다린다 — 값이
+ * 있는 줄은 모달이 열리는 첫 그림부터 값이 서 있다.
  */
 export function TaskEditFields({
   projectId,
@@ -97,6 +100,8 @@ export function TaskEditFields({
   status,
   endDate = "",
   regDate = "",
+  priority = "",
+  editDate = "",
   path,
   onSaved,
 }: {
@@ -110,6 +115,10 @@ export function TaskEditFields({
   endDate?: string;
   /** 목록이 아는 등록일 `YYYYMMDD`. 오늘·팀 화면은 안 줘서 REST 응답을 기다린다. */
   regDate?: string;
+  /** 목록이 아는 우선순위 코드(`high`…). 마감일과 같이 공짜라 REST를 안 기다린다. */
+  priority?: string;
+  /** 목록이 아는 마지막 수정 `YYYYMMDDHHmmss`. flow에 바꾸는 경로가 없어 읽기만 한다. */
+  editDate?: string;
   /** 성공 후 다시 불러올 경로. */
   path: string;
   /**
@@ -148,6 +157,8 @@ export function TaskEditFields({
     loading ? "불러오는 중…" : fields ? value || "아직 없어요" : "지금 값을 못 가져왔어요";
   const dueDate = fields?.endDate || endDate;
   const created = regDate || fields?.regDate || "";
+  /** 목록 값이 먼저다 — 조회를 기다릴 이유가 없다. 둘 다 없을 때만 "불러오는 중…"으로 간다. */
+  const level = priority || fields?.priority || "";
 
   return (
     /* 줄 사이에 선을 둔다. 결과 문구가 값 열 아래로 접히면 그게 다음 줄의 값처럼
@@ -182,10 +193,23 @@ export function TaskEditFields({
       <PriorityField
         projectId={projectId}
         taskId={taskId}
-        now={restNow(TASK_PRIORITY[fields?.priority as TaskPriority] ?? "")}
+        now={level ? (TASK_PRIORITY[level as TaskPriority] ?? level) : restNow("")}
         loading={loading}
         path={path}
       />
+      {/* 마지막 수정도 읽기다 — 등록일과 같이 flow에 바꾸는 경로가 없다. 방치 판정이
+          이 값 하나로 갈리는데(30일 넘게 안 바뀜) 어디에도 안 보여서, 표에서 "왜 여기
+          있지" 싶은 업무를 열면 답이 여기 있게 한다 */}
+      {editDate && (
+        <div className={ROW}>
+          <span className={LABEL}>마지막 수정</span>
+          <div className={FIELD}>
+            <span className="min-w-0 flex-1 truncate text-xs leading-8">
+              {fmtDateTime(editDate)}
+            </span>
+          </div>
+        </div>
+      )}
       <WorkerField
         projectId={projectId}
         taskId={taskId}
@@ -315,7 +339,7 @@ function PickMark({ pending }: { pending: boolean }) {
  * 말한다 — 아래·수평·위·경보. 아는 라벨이 아니면(`불러오는 중…`·`아직 없어요`·
  * `지금 값을 못 가져왔어요`) 글자만 낸다. 없는 값에 그림을 붙이면 값이 있는 것처럼 읽힌다.
  */
-const PRIORITY_MARK: Record<string, { Icon: typeof IconArrowDown; tone: string }> = {
+export const PRIORITY_MARK: Record<string, { Icon: typeof IconArrowDown; tone: string }> = {
   낮음: { Icon: IconArrowDown, tone: "text-muted-foreground" },
   보통: { Icon: IconMinus, tone: "text-success-foreground" },
   높음: { Icon: IconArrowUp, tone: "text-warning-foreground" },
@@ -688,9 +712,8 @@ function WorkerField({
 /**
  * 댓글·답글 한 줄 남기기. 상세 모달의 댓글 칸이 이걸 쓴다.
  *
- * `replyTo`가 있으면 그 댓글에 달리는 답글이다. **남긴 답글은 위 목록에 안 나타난다** —
- * flow API에 답글을 읽는 경로가 없다 (`createComment` 주석). 그래서 성공 문구가 어디서
- * 볼 수 있는지까지 말한다.
+ * `replyTo`가 있으면 답글이다. 다만 REST에 답글이 없어서 **`@이름`을 앞에 붙인 최상위
+ * 댓글**로 나간다 (`createComment` 주석) — 스레드로 묶이지는 않지만 위 목록에 바로 보인다.
  */
 export function CommentForm({
   projectId,
@@ -735,7 +758,8 @@ export function CommentForm({
       <TaskRef projectId={projectId} taskId={taskId} path={path} />
       {/* 업무명은 `postId`를 찾는 검색어다 — 서버가 이걸로 프로젝트 업무를 줄인다 (rest.ts) */}
       <input type="hidden" name="title" value={title} />
-      {replyTo && <input type="hidden" name="replyToRemarkId" value={replyTo.id} />}
+      {/* REST에 답글이 없어서 이름만 넘긴다 — 서버가 `@이름`을 앞에 붙인 댓글로 보낸다 */}
+      {replyTo && <input type="hidden" name="replyToName" value={replyTo.from} />}
 
       {/* 누구에게 답하는지 한 줄로 세운다 — 입력칸 하나로 댓글과 답글을 다 받으니
           이 줄이 없으면 지금 어느 쪽인지 알 수 없다. `w-full`로 제 줄을 차지한다 */}

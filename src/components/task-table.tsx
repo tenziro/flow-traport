@@ -2,13 +2,16 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { DDay } from "@/components/d-day";
+import { IconSubTask } from "@/components/icons";
 import { MorphingModal } from "@/components/motion/morphing-modal";
 import { Table, type TableColumn } from "@/components/motion/table";
 import { countStatuses, StatusDot, statusChipClass } from "@/components/status-filter";
 import { StatusPill } from "@/components/status-pill";
+import { PRIORITY_MARK } from "@/components/task-actions";
 import { descIdOf, TaskDetailModal } from "@/components/task-detail-modal";
 import { diffDays, parseFlowDeadline } from "@/lib/aggregate/date";
 import type { FocusPick, WorklistTask } from "@/lib/flow/queries";
+import { TASK_PRIORITY, type TaskPriority } from "@/lib/task-priority";
 import { cn, fmtDate } from "@/lib/utils";
 
 /**
@@ -33,8 +36,41 @@ const ROW_HEIGHT = 44;
 /**
  * 하위 업무 들여쓰기. `my-tasks.ts`가 3단까지 준다. 표 안이라 세로선은 안 그린다 —
  * 칸 경계선과 겹쳐서 선이 두 겹으로 읽혔다.
+ *
+ * **1단은 들여쓰지 않는다.** 업무명 앞에 서는 `IconSubTask`(↳)가 그 일을 대신한다 —
+ * 여백만으로는 폭이 좁을 때 상위 업무와 구분이 안 됐고, 화살표는 폭과 무관하다.
+ * 그래서 배열이 한 칸 밀려 있다: `depth 1` → `""`, `depth 2` → `pl-3`.
  */
-const INDENT = ["", "pl-3", "pl-6"];
+const INDENT = ["", "", "pl-3"];
+
+/**
+ * 표에 표식을 세우는 우선순위. **높음·긴급만이다.**
+ *
+ * 목록 응답이 네 단계를 다 주지만(`FlowTask.priority`) 넷을 다 그리면 거의 모든 줄에
+ * 표식이 서서 정작 급한 줄이 안 튄다 — 표식은 "여기 봐"라고 말하는 자리다. 낮음·보통은
+ * 상세 모달의 우선순위 줄에 그대로 있다.
+ */
+const MARKED_PRIORITY = new Set<string>(["high", "urgent"]);
+
+/**
+ * 업무명 앞의 우선순위 표식. 모달의 우선순위 줄과 **같은 그림·같은 색**을 쓴다
+ * (`PRIORITY_MARK`) — 표에서 본 경보등이 모달에서 다른 그림이면 같은 값인지 다시 확인해야 한다.
+ *
+ * 색만으로 말하지 않는다 (WCAG 1.4.1). 화면에는 모양이 단계를 말하고(위·경보), 읽어 주는
+ * 쪽에는 `sr-only`가 라벨을 준다 — 표에는 라벨을 놓을 칸이 없다.
+ */
+function PriorityFlag({ level }: { level: string }) {
+  const label = TASK_PRIORITY[level as TaskPriority] ?? "";
+  const mark = PRIORITY_MARK[label];
+  if (!mark) return null;
+
+  return (
+    <>
+      <span className="sr-only">우선순위 {label} </span>
+      <mark.Icon size={13} aria-hidden className={cn("shrink-0", mark.tone)} />
+    </>
+  );
+}
 
 /**
  * 업무 표 (PRD §6.1). 업무명 · 프로젝트 · 등록자 · 진행상태 · 등록일 · 마감일 여섯 칸이고,
@@ -55,6 +91,7 @@ export function TaskTable({
   path,
   showProject = true,
   showRegDate = false,
+  showEditDate = false,
   showOwner = false,
   showAuthor = false,
   top,
@@ -67,13 +104,18 @@ export function TaskTable({
   path: string;
   /** 프로젝트 칸. 카드가 이미 한 프로젝트인 화면(내 업무·리스크)은 끈다. */
   showProject?: boolean;
-  /** 등록일 칸. 워크리스트·포커스 응답에는 등록일이 없어서 오늘·팀 화면은 끈다. */
+  /** 등록일 칸. 화면이 좁은 곳(오늘·팀)은 끈다 — 값은 어느 화면에나 온다. */
   showRegDate?: boolean;
+  /**
+   * 마지막 수정 칸. 방치 표만 켠다 — 그 표에서만 이 값이 "왜 이 줄이 여기 있나"의 답이다.
+   * 다른 표에서는 마감일이 그 자리를 이미 갖고 있다.
+   */
+  showEditDate?: boolean;
   /** 담당자 칸. 리스크 화면만 쓴다 — 남의 업무가 섞여 있어서 누구 것인지가 정보다. */
   showOwner?: boolean;
   /**
-   * 등록자 칸. 등록일과 같은 응답에서 와서(`MyTask.author`) 내 업무 화면만 켠다 —
-   * 오늘·팀·리스크는 MCP 응답이라 등록자가 없다 (`WorklistTask.author`).
+   * 등록자 칸. 값(`WorklistTask.author`)은 어느 화면에나 오지만 내 업무 화면만 켠다 —
+   * 다른 화면은 이미 칸이 꽉 차서 업무명이 먼저 잘린다.
    */
   showAuthor?: boolean;
   /** 1위 점수. 포커스 표에서 점수 막대의 분모로 쓴다. */
@@ -128,7 +170,7 @@ export function TaskTable({
       header: "업무명",
       sortable: true,
       // 남는 폭을 다 준다 — 제목이 제일 길고, 잘리면 어느 업무인지 못 알아본다.
-      width: titleWidth(showProject, showRegDate, showOwner, showAuthor),
+      width: titleWidth({ showProject, showRegDate, showEditDate, showOwner, showAuthor }),
       cell: (row) => (
         <button
           type="button"
@@ -143,6 +185,20 @@ export function TaskTable({
             INDENT[row.depth ?? 0],
           )}
         >
+          {/* 하위 업무는 화살표를 앞에 세운다. 낭독은 `sr-only`가 맡는다 (팀·리스크 화면과
+              같은 방식) — 화면에서는 화살표가 계층을 말하지만 읽어 주는 쪽에는 평평한
+              목록으로만 가서, 그림만 두면 상위 업무와 구별이 사라진다 */}
+          {(row.depth ?? 0) > 0 && (
+            <>
+              <span className="sr-only">하위 업무 </span>
+              <IconSubTask size={14} aria-hidden className="shrink-0 text-muted-foreground" />
+            </>
+          )}
+          {/* 우선순위는 하위 업무 화살표 다음이다 — 화살표는 "이 업무가 어디 붙었나"고
+              우선순위는 "얼마나 급한가"다. 계층이 먼저 읽혀야 줄을 찾는다 */}
+          {row.priority && MARKED_PRIORITY.has(row.priority) && (
+            <PriorityFlag level={row.priority} />
+          )}
           {/* 라임은 1위 한 곳에만 쓴다. 다섯 칸을 다 채우면 "지금 이거"가 안 읽힌다 */}
           {row.rank !== undefined && (
             <span
@@ -199,6 +255,21 @@ export function TaskTable({
     if (showOwner) {
       list.push({ key: "owner", header: "담당자", sortable: true, width: "13%" });
     }
+    if (showEditDate) {
+      list.push({
+        key: "editDate",
+        header: "마지막 수정",
+        sortable: true,
+        width: "14%",
+        // 방치 표만 켠다. 마감일 칸의 D+가 "얼마나 늦었나"를 말하는 것과 달리 이 칸은
+        // "그동안 아무도 안 건드렸다"를 말한다 — 방치 판정이 이 값 하나로 갈린다.
+        sortValue: (row) => ("editDate" in row ? (row.editDate ?? "") : ""),
+        cell: (row) => {
+          const edited = "editDate" in row ? row.editDate : "";
+          return <span className="tabular">{edited ? fmtDate(edited) : "—"}</span>;
+        },
+      });
+    }
     if (showRegDate) {
       list.push({
         key: "regDate",
@@ -230,7 +301,7 @@ export function TaskTable({
       },
     });
     return list;
-  }, [showProject, showRegDate, showOwner, showAuthor, shownOf]);
+  }, [showProject, showRegDate, showEditDate, showOwner, showAuthor, shownOf]);
 
   const openedShown = opened ? shownOf(opened) : null;
 
@@ -348,14 +419,26 @@ function next(
   };
 }
 
-/** 업무명 칸이 남는 폭을 다 먹는다 — 나머지 칸 폭을 100%에서 뺀 값이다. */
-function titleWidth(project: boolean, regDate: boolean, owner: boolean, author: boolean): string {
+/**
+ * 업무명 칸이 남는 폭을 다 먹는다 — 나머지 칸 폭을 100%에서 뺀 값이다.
+ *
+ * 켤 수 있는 칸이 다섯이라 자리 인자를 그만뒀다 — `titleWidth(true, false, false, true, false)`는
+ * 어느 불리언이 어느 칸인지 셀 수가 없다.
+ */
+function titleWidth(f: {
+  showProject: boolean;
+  showRegDate: boolean;
+  showEditDate: boolean;
+  showOwner: boolean;
+  showAuthor: boolean;
+}): string {
   const rest =
-    (project ? (regDate ? 18 : 20) : 0) +
-    (author ? 13 : 0) +
+    (f.showProject ? (f.showRegDate ? 18 : 20) : 0) +
+    (f.showAuthor ? 13 : 0) +
     13 +
-    (owner ? 13 : 0) +
-    (regDate ? 14 : 0) +
-    (regDate ? 18 : 20);
+    (f.showOwner ? 13 : 0) +
+    (f.showEditDate ? 14 : 0) +
+    (f.showRegDate ? 14 : 0) +
+    (f.showRegDate ? 18 : 20);
   return `${100 - rest}%`;
 }

@@ -8,12 +8,19 @@ export function cn(...inputs: ClassValue[]) {
 /* ── flow 날짜 문자열 표시 ─────────────────────────────────────────────────
  * flow는 날짜를 `YYYYMMDD`(8자리) 또는 `YYYYMMDDHHmmss`(14자리) 문자열로 준다.
  * 형식이 어긋나면 원본을 그대로 낸다 — 화면에서 빈 자리를 만들지 않는다.
+ *
+ * 값 칸에 찍히는 날짜는 **`YYYY-MM-DD`** 하나다 (`fmtDate`). 시각까지 있으면 뒤에
+ * `HH:mm`을 붙일 뿐이다 (`fmtDateTime`) — 등록일·마감일·마지막 수정이 한 표에 나란히
+ * 서는데 하나만 `07.27` 꼴이면 같은 종류의 값으로 안 읽힌다.
+ *
+ * 날짜가 이미 소제목으로 확정된 자리(`fmtDayLabel`·`fmtTime`)는 이 규칙 밖이다 —
+ * 거기서는 시각만, 또는 `8.3 (월)`처럼 짧게 낸다.
  */
 
-/** `20260727151600` → `07.27 15:16` */
+/** `20260727151600` → `2026-07-27 15:16` */
 export function fmtDateTime(value: string): string {
   return /^\d{14}$/.test(value)
-    ? `${value.slice(4, 6)}.${value.slice(6, 8)} ${value.slice(8, 10)}:${value.slice(10, 12)}`
+    ? `${fmtDate(value)} ${value.slice(8, 10)}:${value.slice(10, 12)}`
     : value;
 }
 
@@ -83,9 +90,12 @@ export function splitLinks(text: string): { text: string; url?: string }[] {
   return parts;
 }
 
-/** `20260430` → `2026-04-30` */
+/**
+ * `20260430` → `2026-04-30`. 14자리(`YYYYMMDDHHmmss`)도 받아서 앞 8자리만 쓴다 —
+ * 호출부마다 `.slice(0, 8)`을 손으로 하면 한 곳만 빠뜨려도 조용히 원본이 찍힌다.
+ */
 export function fmtDate(value: string): string {
-  return /^\d{8}$/.test(value)
-    ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6)}`
+  return /^\d{8}(\d{6})?$/.test(value)
+    ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`
     : value;
 }

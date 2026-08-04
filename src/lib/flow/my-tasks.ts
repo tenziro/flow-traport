@@ -5,20 +5,21 @@
  * 실측(2026-07-28)으로 내가 담당인 업무는 38개 프로젝트에 걸쳐 880건이고, 그중 864건은
  * 어느 화면에도 없었다. 이 파일이 그 864건을 데려온다.
  *
- * 길은 REST 하나뿐이다. MCP `flow_list_projects_by_participant`는 프로젝트를 1개만 주고,
- * `flow_list_project_items`는 담당자·마감일·업무 ID를 안 준다 (PRD §6.5 실측표).
- * `flow_list_projects`는 서버측 스키마 검증에서 터진다 (bug-report BUG-007) — 그래서
- * 프로젝트 목록도 REST `listProjects`로 받는다.
+ * 긁어 오는 일은 오늘 화면과 똑같다 — `collectTasks`가 그 하나다 (queries.ts). 이 파일은
+ * 받은 것을 프로젝트·계층으로 접는 일만 한다.
  *
- * 호출은 프로젝트 수만큼이다(실측 59회 + 목록 1회). REST 분당 상한이 120회라 화면 한 번이
- * 절반을 쓴다 — `listMyTasks`가 응답마다 60초 캐시를 걸고, 여기서는 동시 10으로 묶는다.
+ * **오늘 화면과 같은 URL을 부르는 게 의도다.** 호출이 프로젝트 수만큼이라(실측 59회 + 목록
+ * 1회) 화면 하나가 분당 상한(120회)의 절반을 쓰는데, 같은 URL이면 두 화면이 60초 캐시 한
+ * 칸을 나눠 쓴다 (`listWorkerTasks`의 `TASK_TTL`).
  */
 
 import { diffDays, parseFlowDeadline } from "@/lib/aggregate/date";
 import { getSession } from "@/lib/auth";
-import { type WorklistTask } from "@/lib/flow/queries";
+import { collectTasks, type ProjectTasks, type WorklistTask } from "@/lib/flow/queries";
 import { flowPostUrl, flowProjectUrl } from "@/lib/flow/urls";
-import { listMyTasks, listProjects, type MyTask } from "@/lib/flow/rest";
+import { getProjectBrief, type FlowTask, type ProjectBrief } from "@/lib/flow/rest";
+
+export type { ProjectTasks };
 
 /**
  * 화면 한 줄. `depth`가 0보다 크면 하위 업무고, 그만큼 들여쓴다 (PRD §13 D1).
@@ -35,6 +36,11 @@ export interface MyTasksProject {
   open: MyTaskRow[];
   /** 끝난 업무. 최근 마감 순. 화면에서 접어 두고 읽기만 한다. */
   done: WorklistTask[];
+  /**
+   * 프로젝트 겉면 (api-spec §5.3). **접힌 카드가 이걸로 요약을 그린다** — 펼치기 전에 보여야
+   * 해서 `buildMyTasks` 뒤에 붙인다. 조회가 실패하면 없고, 그러면 요약 줄을 안 그린다.
+   */
+  brief?: ProjectBrief;
 }
 
 export interface MyTasksData {
@@ -57,16 +63,6 @@ export interface MyTasksData {
   failed: string[];
 }
 
-/** `buildMyTasks` 입력 — 프로젝트 한 개의 조회 결과. */
-export interface ProjectTasks {
-  projectId: string;
-  name: string;
-  tasks: MyTask[];
-}
-
-/** 프로젝트를 몇 개씩 동시에 훑을지. */
-const CONCURRENCY = 10;
-
 /**
  * 안 끝난 업무 정렬. 마감일 있는 것이 먼저고, 그 안에서 많이 지난 것부터다
  * (`daysLeft`는 음수가 지남). 마감일 없는 720건이 앞을 다 차지하면 지난 업무가 안 보인다.
@@ -78,7 +74,7 @@ const byUrgency = (a: WorklistTask, b: WorklistTask) =>
 const byRecent = (a: WorklistTask, b: WorklistTask) => b.endDate.localeCompare(a.endDate);
 
 /** 화면 한 줄로 바꾼다. `TaskTable`이 오늘·팀 화면에서 쓰는 모양 그대로다. */
-function toRow(row: ProjectTasks, task: MyTask, now: number): WorklistTask {
+function toRow(row: ProjectTasks, task: FlowTask, now: number): WorklistTask {
   const deadline = parseFlowDeadline(task.endDate);
   return {
     taskSrno: Number(task.taskId),
@@ -88,6 +84,8 @@ function toRow(row: ProjectTasks, task: MyTask, now: number): WorklistTask {
     endDate: task.endDate,
     regDate: task.regDate,
     author: task.author,
+    editDate: task.editDate || undefined,
+    priority: task.priority || undefined,
     // 댓글을 나중에 불러오는 데 쓴다 (`TaskThread`). 여기서 미리 부르지 않는다 —
     // 업무 한 줄에 REST 한 번이라 951줄이면 951번이고, 분당 상한이 120번이다.
     postId: task.postId,
@@ -110,7 +108,7 @@ const MAX_DEPTH = 2;
  * 형제 순서는 먼저 걸어 둔 마감 순(`byUrgency`)이 그대로 남는다 — 정렬한 배열을 순서대로 훑기
  * 때문이다. 부모가 자기 자식보다 급하지 않아도 부모가 위에 온다. 계층이 그런 것이다.
  */
-function nest(tasks: MyTask[], row: ProjectTasks, now: number): MyTaskRow[] {
+function nest(tasks: FlowTask[], row: ProjectTasks, now: number): MyTaskRow[] {
   const rows = tasks
     .map((task) => ({ task, row: { ...toRow(row, task, now), depth: 0 } }))
     .sort((a, b) => byUrgency(a.row, b.row));
@@ -199,30 +197,20 @@ export async function loadMyTasks(): Promise<MyTasksData> {
   // 필터 값은 **여기서** 세션으로 채운다. 요청에서 받으면 공용 키로도 남의 업무가 나온다.
   if (!session) throw new Error("세션 없음");
 
-  const projects = [...(await listProjects())].map(([name, projectId]) => ({ name, projectId }));
-
-  const rows: ProjectTasks[] = [];
-  const truncated: string[] = [];
-  const failed: string[] = [];
-
-  // ponytail: 풀 대신 10개씩 잘라 돈다. 느린 프로젝트가 자기 묶음만 붙잡는데,
-  // 실측 2.1초라 그 손해를 신경 쓸 이유가 없다.
-  for (let i = 0; i < projects.length; i += CONCURRENCY) {
-    const batch = await Promise.all(
-      projects.slice(i, i + CONCURRENCY).map(async (p) => {
-        // 한 프로젝트가 막혀도(권한·429) 나머지 58개는 보여 준다.
-        const got = await listMyTasks(p.projectId, session.userId).catch(() => null);
-        if (!got) {
-          failed.push(p.name);
-          return null;
-        }
-        if (got.hasMore) truncated.push(p.name);
-        return { projectId: p.projectId, name: p.name, tasks: got.tasks };
-      }),
-    );
-    for (const row of batch) if (row) rows.push(row);
-  }
+  const { rows, truncated, failed } = await collectTasks([session.userId]);
 
   const now = Date.now();
-  return { now, truncated, failed, ...buildMyTasks(rows, now) };
+  const data = buildMyTasks(rows, now);
+
+  // 접힌 카드가 프로젝트 요약을 그리려면 겉면이 미리 있어야 한다 — 카드당 1회고 실측 38장이다.
+  // 위 수집이 이미 60회를 쓰므로(59 + 목록 1) 합이 98회, 분당 상한이 120회다. 겉면은 10분
+  // 캐시라(`PROJECT_TTL`) 새로 고쳐도 다시 안 부른다. 실패한 프로젝트는 요약 없이 그린다.
+  const projects = await Promise.all(
+    data.projects.map(async (project) => ({
+      ...project,
+      brief: await getProjectBrief(project.projectId).catch(() => undefined),
+    })),
+  );
+
+  return { now, truncated, failed, ...data, projects };
 }

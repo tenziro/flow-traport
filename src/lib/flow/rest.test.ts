@@ -2,13 +2,17 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  getEvent,
   getPostBrief,
+  getProjectBrief,
   isChangeLog,
   lastHumanComment,
-  listMyTasks,
+  listWorkerTasks,
   listParticipants,
   mergeMentionComments,
+  repeatLabel,
   resolvePostId,
+  mentionsMe,
   stripMentions,
   type FlowComment,
   type MentionAlarm,
@@ -257,7 +261,7 @@ describe('내 업무 조회', () => {
 
   it('담당자 필터를 WORKER_ID(1번 컬럼)에 그 사람 ID로 걸어 보낸다', async () => {
     const urls = stub([page([])]);
-    await listMyTasks('2236827', 'jongseok.lee@traport.com');
+    await listWorkerTasks('2236827', ['jongseok.lee@traport.com']);
 
     const filter = new URL(`https://x${urls[0]}`).searchParams.get('filterRecords');
     assert.deepEqual(JSON.parse(filter ?? '[]'), [
@@ -283,7 +287,7 @@ describe('내 업무 조회', () => {
       ]),
     ]);
 
-    const { tasks } = await listMyTasks('2916576', 'me');
+    const { tasks } = await listWorkerTasks('2916576', ['me']);
     assert.equal(tasks[0].status, '진행');
     assert.equal(tasks[0].done, false);
   });
@@ -301,9 +305,23 @@ describe('내 업무 조회', () => {
       ]),
     ]);
 
-    const { tasks } = await listMyTasks('2916576', 'me');
+    const { tasks } = await listWorkerTasks('2916576', ['me']);
     assert.equal(tasks[0].status, '배포됨');
     assert.equal(tasks[0].done, true, 'optionCategory 2면 이름이 뭐든 완료다');
+  });
+
+  it('우선순위를 같은 응답에서 꺼낸다 — 모달이 따로 부르던 값이다', async () => {
+    stub([
+      page([
+        filterTask([
+          NAME_COL,
+          { defaultColumnType: 'PRIORITY', columnData: [{ customColumnData: 'urgent' }] },
+        ]),
+      ]),
+    ]);
+
+    const { tasks } = await listWorkerTasks('2916576', ['me']);
+    assert.equal(tasks[0].priority, 'urgent');
   });
 
   it('base 상태는 코드표로 라벨을 만든다 — optionName이 빈 문자열로 온다', async () => {
@@ -320,7 +338,7 @@ describe('내 업무 조회', () => {
       ]),
     ]);
 
-    const { tasks } = await listMyTasks('2639815', 'me');
+    const { tasks } = await listWorkerTasks('2639815', ['me']);
     assert.deepEqual(tasks, [
       {
         taskId: '42689935',
@@ -329,9 +347,15 @@ describe('내 업무 조회', () => {
         endDate: '20260731',
         // 픽스처에 등록일 칸(`RGSN_DTTM`)이 없다 — 표에서는 `—`로 나온다.
         regDate: '',
+        // 수정일 칸(`EDTR_DTTM`)도 없다. 이게 비면 그 업무는 방치로 떨어진다 (classifyTasks).
+        editDate: '',
         // 등록자 칸(`RGSR_ID`)도 없다. 실제 응답은 100% 채워 오지만 없으면 `—`다.
         author: '',
+        // 담당자 칸(`WORKER_ID`)도 없다 — 필터로 걸러 온 업무라 실제로는 항상 온다.
+        workers: [],
         status: '완료',
+        // 우선순위 칸(`PRIORITY`)도 없다 — 표는 이게 비면 표식을 안 그린다.
+        priority: '',
         done: true,
         // 픽스처에 `upTaskId`가 없다 — 필드가 안 오면 최상위로 둔다.
         upTaskId: '-1',
@@ -352,19 +376,19 @@ describe('내 업무 조회', () => {
       ]),
     ]);
 
-    const { tasks } = await listMyTasks('2639815', 'me');
+    const { tasks } = await listWorkerTasks('2639815', ['me']);
     assert.equal(tasks[0].author, '홍성우');
   });
 
   it('부모 업무 ID를 그대로 넘긴다 (columns 밖 최상위 필드다 — BUG-034)', async () => {
     stub([page([{ ...filterTask([NAME_COL]), upTaskId: '41200005' }])]);
-    const { tasks } = await listMyTasks('2709879', 'me');
+    const { tasks } = await listWorkerTasks('2709879', ['me']);
     assert.equal(tasks[0].upTaskId, '41200005');
   });
 
   it('마감일·상태 컬럼이 없으면 빈 값으로 둔다 (실측 880건 중 720건이 마감일이 없다)', async () => {
     stub([page([filterTask([NAME_COL])])]);
-    const { tasks } = await listMyTasks('2236827', 'me');
+    const { tasks } = await listWorkerTasks('2236827', ['me']);
     assert.equal(tasks[0].endDate, '');
     assert.equal(tasks[0].status, '');
     assert.equal(tasks[0].done, false);
@@ -376,7 +400,7 @@ describe('내 업무 조회', () => {
    */
   it('다음 페이지는 lastCursor가 준 번호로 받는다 — 건수를 곱하지 않는다', async () => {
     const urls = stub([page([filterTask([NAME_COL])], 1), page([filterTask([NAME_COL])])]);
-    const { tasks, hasMore } = await listMyTasks('2236827', 'me');
+    const { tasks, hasMore } = await listWorkerTasks('2236827', ['me']);
 
     assert.equal(tasks.length, 2);
     assert.equal(hasMore, false);
@@ -387,13 +411,13 @@ describe('내 업무 조회', () => {
 
   it('lastCursor가 -1이면 hasNext와 무관하게 멈춘다', async () => {
     const urls = stub([{ response: { success: true, data: { tasks: [], hasNext: true, lastCursor: -1 } } }]);
-    await listMyTasks('2236827', 'me');
+    await listWorkerTasks('2236827', ['me']);
     assert.equal(urls.length, 1);
   });
 
   it('상한(3페이지)을 넘기면 hasMore로 알린다 — 조용히 자르지 않는다', async () => {
     const urls = stub([page([filterTask([NAME_COL])], 1)]);
-    const { tasks, hasMore } = await listMyTasks('2236827', 'me');
+    const { tasks, hasMore } = await listWorkerTasks('2236827', ['me']);
 
     assert.equal(urls.length, 3);
     assert.equal(tasks.length, 3);
@@ -443,6 +467,51 @@ describe('업무 줄에 붙는 마지막 댓글', () => {
     assert.equal(got?.contents, '업데이트해서 전달드립니다.');
   });
 
+  /**
+   * 실측 게시글 82396719 — 마지막 세 말이 전부 답글이었다. 최상위 댓글만 보면 "내가 답글로
+   * 답했는데도 안 답한 것"으로 잡혀서, 피드백 업무가 계속 오늘 화면에 남는다.
+   */
+  it('답글이 더 나중이면 답글을 집는다', () => {
+    const got = lastHumanComment([
+      {
+        ...comment('부모 댓글'),
+        registeredDateTime: '20260803192302',
+        replies: [
+          {
+            replyId: '6085136',
+            parentCommentId: '부모 댓글',
+            contents: '총 6건',
+            registerId: 'aiden.0603',
+            registerName: '지승용',
+            registeredDateTime: '20260803214457',
+          },
+        ],
+      },
+    ]);
+    assert.equal(got?.contents, '총 6건');
+    assert.equal(got?.registerId, 'aiden.0603');
+  });
+
+  it('답글이 변경 로그면 답글도 건너뛴다', () => {
+    const got = lastHumanComment([
+      {
+        ...comment('사람 말'),
+        replies: [
+          {
+            replyId: '1',
+            parentCommentId: '사람 말',
+            contents: '마감일을 바꿨습니다',
+            systemCode: 'S48^^2026-07-16@$%',
+            registerId: 'bot',
+            registerName: '봇',
+            registeredDateTime: '20260803214457',
+          },
+        ],
+      },
+    ]);
+    assert.equal(got?.contents, '사람 말');
+  });
+
   it('값이 붙은 코드는 변경 로그다', () => {
     assert.equal(isChangeLog('S45^^0^^1'), true);
     assert.equal(isChangeLog('S83^^이성우'), true);
@@ -477,9 +546,88 @@ describe('댓글에서 부른 이름 걷어 내기', () => {
   });
 });
 
+describe('나를 부른 댓글 가려내기', () => {
+  const ME = 'jongseok.lee@traport.com';
+
+  it('괄호 안 id가 나면 부른 것이다 — 대소문자는 안 가린다', () => {
+    assert.equal(mentionsMe(`@[이종석](${ME}) 이사님, 확인 부탁드려요`, ME), true);
+    assert.equal(mentionsMe(`@[이종석](${ME.toUpperCase()}) 확인이요`, ME), true);
+  });
+
+  it('남을 부른 댓글은 아니다 — 내 이름이 본문에 있어도 그렇다', () => {
+    assert.equal(mentionsMe('@[장혜진](wkd41051) 이종석 이사님께 전달 부탁해요', ME), false);
+  });
+
+  it('전원 호출은 나를 부른 게 아니다', () => {
+    assert.equal(mentionsMe('@[ALL](ALL) 오늘 회식입니다', ME), false);
+  });
+
+  it('세션이 없으면(빈 id) 아무 줄도 안 잡는다', () => {
+    assert.equal(mentionsMe(`@[이종석](${ME}) 확인이요`, ''), false);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // 담당자 후보 — 참여자 목록 + 업무에 이름이 있는 사람 (PRD §13 A4)
 // ---------------------------------------------------------------------------
+
+describe('프로젝트 겉면 읽기', () => {
+  const stub = (setting: unknown) => {
+    process.env.FLOW_API_KEY = 'test-key';
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({
+        response: { success: true, data: { project: { PROJECT_SETTING: setting } } },
+      }),
+    })) as unknown as typeof fetch;
+  };
+
+  it('건수는 문자열로 오고 숫자로 낸다', async () => {
+    stub([
+      {
+        CNTN: ' 1차 7월 오픈 ',
+        SENDIENCE_CNT: '90',
+        OUT_SENDIENCE_CNT: '77',
+        OPEN_YN: 'Y',
+        IMPT_YN: 'Y',
+        RGSR_NM: '우창민',
+        RGSN_DTTM: '20250922170857',
+      },
+    ]);
+
+    assert.deepEqual(await getProjectBrief('2639815'), {
+      desc: '1차 7월 오픈',
+      count: 90,
+      outside: 77,
+      open: true,
+      important: true,
+      owner: '우창민',
+      opened: '20250922170857',
+    });
+  });
+
+  it('설정이 통째로 비어도 0과 빈 문자열로 낸다 — 화면이 그 줄을 안 그린다', async () => {
+    stub([]);
+    assert.deepEqual(await getProjectBrief('2639815'), {
+      desc: '',
+      count: 0,
+      outside: 0,
+      open: false,
+      important: false,
+      owner: '',
+      opened: '',
+    });
+  });
+
+  // `Y`만 참이다 — flow는 `N`을 주지만 값이 비어 오는 필드가 흔해서(`STATUS`가 그렇다)
+  // 빈 문자열이 공개나 중요로 새지 않는지 못박아 둔다
+  it('공개·중요는 `Y`일 때만 참이다', async () => {
+    stub([{ OPEN_YN: '', IMPT_YN: 'N' }]);
+    const brief = await getProjectBrief('2639815');
+    assert.equal(brief.open, false);
+    assert.equal(brief.important, false);
+  });
+});
 
 describe('담당자 후보 모으기', () => {
   /** URL마다 다른 응답이 필요하다 — 참여자 조회와 업무 조회를 같이 부른다. */
@@ -511,8 +659,28 @@ describe('담당자 후보 모으기', () => {
       // 우리 기관 사람이 먼저다
       { userId: 'jongseok.lee@traport.com', name: '이종석' },
       // 타사 담당자의 `customColumnData`가 곧 `workerId`다 (로그인 ID꼴)
-      { userId: 'hong67', name: '홍성우' },
+      { userId: 'hong67', name: '홍성우', outside: true },
     ]);
+  });
+
+  it('우리 기관 사람이 아니면 외부로 표시한다 — 내 업무 카드가 이걸로 목록을 가른다', async () => {
+    stub(
+      [
+        { userId: 'jongseok.lee@traport.com', name: '이종석' },
+        // 참여자 API가 언젠가 외부 사람을 주더라도 출처가 아니라 id로 가른다
+        { userId: 'park99', name: '박다솜' },
+      ],
+      [],
+    );
+
+    const people = await listParticipants('2639815');
+    assert.deepEqual(
+      people.map((p) => [p.name, p.outside ?? false]),
+      [
+        ['이종석', false],
+        ['박다솜', true],
+      ],
+    );
   });
 
   it('같은 사람이 여러 업무에 있어도 한 번만, 등록자도 후보다', async () => {
@@ -527,8 +695,8 @@ describe('담당자 후보 모으기', () => {
 
     assert.deepEqual(await listParticipants('2639815'), [
       // 이름순이다 — 업무에 나온 순서가 아니다
-      { userId: 'kim12', name: '김가영' },
-      { userId: 'hong67', name: '홍성우' },
+      { userId: 'kim12', name: '김가영', outside: true },
+      { userId: 'hong67', name: '홍성우', outside: true },
     ]);
   });
 
@@ -546,5 +714,215 @@ describe('담당자 후보 모으기', () => {
     assert.deepEqual(await listParticipants('2639815'), [
       { userId: 'a@traport.com', name: '이종석' },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 일정 상세 — 목록에 없는 값만 골라 낸다 (api-spec §8.5, PRD §13 B3)
+// ---------------------------------------------------------------------------
+
+describe('반복 주기를 사람 말로', () => {
+  it('1주기는 "매주", 여러 주기는 "N주마다"다', () => {
+    assert.equal(
+      repeatLabel({ repeatType: 'WEEKLY', repeatPeriod: '1', repeatDays: 'FR' }),
+      '매주 금요일',
+    );
+    assert.equal(
+      repeatLabel({ repeatType: 'WEEKLY', repeatPeriod: '2', repeatDays: 'MO,FR' }),
+      '2주마다 월·금요일',
+    );
+  });
+
+  it('끝나는 날이 있으면 뒤에 붙인다', () => {
+    assert.equal(
+      repeatLabel({
+        repeatType: 'WEEKLY',
+        repeatPeriod: '1',
+        repeatDays: 'FR',
+        endDateTime: '20260904000000',
+      }),
+      '매주 금요일 · 2026-09-04까지',
+    );
+  });
+
+  // 실측에서 `repeatCount`가 늘 비어 있듯 `endDateTime`도 빌 수 있다 — 빈 값이
+  // `NaN까지`로 새면 화면에 그대로 뜬다
+  it('무기한 반복은 날짜를 안 적는다', () => {
+    assert.equal(repeatLabel({ repeatType: 'DAILY', repeatPeriod: '1', endDateTime: '' }), '매일');
+  });
+
+  it('반복이 아니거나 모르는 주기면 빈 문자열이다', () => {
+    assert.equal(repeatLabel(undefined), '');
+    assert.equal(repeatLabel({ repeatType: '' }), '');
+    assert.equal(repeatLabel({ repeatType: 'HOURLY', repeatPeriod: '1' }), '');
+  });
+});
+
+describe('일정 상세 읽기', () => {
+  const stub = (event: unknown) => {
+    process.env.FLOW_API_KEY = 'test-key';
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({ response: { success: true, data: { event } } }),
+    })) as unknown as typeof fetch;
+  };
+
+  it('설명·장소·참석자·등록자를 골라 낸다', async () => {
+    stub({
+      eventName: '주간 회의',
+      eventBody: '  안건 정리  ',
+      location: ' 3층 회의실 ',
+      attendances: [
+        { attendanceName: '이종석' },
+        { attendanceName: ' 장혜진 ' },
+        // 이름이 없는 참석자가 섞여 온다 — 빈 칩이 되면 안 된다
+        { attendanceName: '' },
+      ],
+      rgsrNm: '우창민',
+      repeatEvents: [{ repeatType: 'WEEKLY', repeatPeriod: '1', repeatDays: 'FR' }],
+    });
+
+    assert.deepEqual(await getEvent('123', '20260807090000', '20260807100000'), {
+      body: '안건 정리',
+      place: '3층 회의실',
+      attendees: ['이종석', '장혜진'],
+      owner: '우창민',
+      repeat: '매주 금요일',
+    });
+  });
+
+  // 실측 8건 중 설명은 3건, 장소는 1건뿐이다 — 없는 값이 `undefined`로 새면 화면이
+  // "undefined"를 그린다
+  it('비어 있는 일정은 빈 문자열과 빈 배열로 낸다', async () => {
+    stub({ eventName: '휴가' });
+    assert.deepEqual(await getEvent('123', '20260807090000', '20260807100000'), {
+      body: '',
+      place: '',
+      attendees: [],
+      owner: '',
+      repeat: '',
+    });
+  });
+
+  it('일정이 통째로 없어도 안 깨진다', async () => {
+    stub(undefined);
+    const detail = await getEvent('123', '20260807090000', '20260807100000');
+    assert.deepEqual(detail.attendees, []);
+    assert.equal(detail.body, '');
+  });
+});
+
+describe('게시글 상세에서 관계·첨부 읽기', () => {
+  const stub = (data: unknown) => {
+    process.env.FLOW_API_KEY = 'test-key';
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({ response: { success: true, data } }),
+    })) as unknown as typeof fetch;
+  };
+
+  it('상위 업무는 그쪽 글로 링크한다 — 이 글이 아니라', async () => {
+    stub({
+      upLinkTasks: [
+        {
+          UP_LINK_TASK_NM: ' 상위 업무 ',
+          COLABO_SRNO: '2639815',
+          COLABO_COMMT_SRNO: '81412845',
+        },
+      ],
+    });
+    const brief = await getPostBrief('82393821');
+    assert.equal(brief.parent?.name, '상위 업무');
+    assert.equal(
+      brief.parent?.url,
+      'https://flow.team/main.act?projectId=2639815&postId=81412845',
+    );
+    // 지금 글(82393821)이 아니라 **상위 글**의 번호다. 모달이 이걸로 상위를 펼친다
+    assert.equal(brief.parent?.postId, '81412845');
+  });
+
+  // 글 번호가 없으면 링크를 못 만든다. 그때 `undefined`가 `href`로 새면 지금 화면으로
+  // 되돌아가는 죽은 링크가 된다. 펼치기도 같이 막혀야 한다
+  it('프로젝트·글 번호가 없으면 링크 없이 이름만 낸다', async () => {
+    stub({ upLinkTasks: [{ UP_LINK_TASK_NM: '상위 업무' }] });
+    const brief = await getPostBrief('1');
+    assert.equal(brief.parent?.url, '');
+    assert.equal(brief.parent?.postId, '');
+  });
+
+  it('하위 업무는 상태 칸을 tasks[]와 같은 규칙으로 읽는다', async () => {
+    stub({
+      subTasks: [
+        {
+          TASK_NM: '하위 하나',
+          PROGRESS: '100',
+          COLABO_SRNO: '2694919',
+          COLABO_COMMT_SRNO: '82445380',
+          // 평평한 `STTS`가 `'0'`(대기)인데 실제로는 `진행`이다 — `tasks[0]`과 같은 함정이다
+          ...STATUS_TASK,
+        },
+        // 진행률이 빈 문자열로 오는 줄이 있다 — `Number('')`는 0이라 "0%"로 새면 안 된다
+        { TASK_NM: '하위 둘', PROGRESS: '' },
+      ],
+    });
+    const brief = await getPostBrief('82445380');
+    assert.deepEqual(brief.subTasks, [
+      {
+        name: '하위 하나',
+        // 모달이 이 번호 하나로 그 업무를 펼친다
+        postId: '82445380',
+        url: 'https://flow.team/main.act?projectId=2694919&postId=82445380',
+        status: '진행',
+        progress: 100,
+      },
+      { name: '하위 둘', postId: '', url: '', status: null, progress: null },
+    ]);
+  });
+
+  it('첨부 URL의 겹친 슬래시를 줄이고 이미지는 썸네일을 단다', async () => {
+    stub({
+      attachments: [
+        {
+          FILE_NAME: '보고서.pdf',
+          FILE_SIZE: '13014262',
+          ATCH_URL: 'https://flow.team//FLOW_DOWNLOAD_R001.act?RAND_KEY=k',
+        },
+      ],
+      imageAttachments: [
+        {
+          ORCP_FILE_NM: '화면.png',
+          FILE_SIZE: '20653',
+          ATCH_URL: 'https://flow.team/flowImg/a.png',
+          THUM_IMG_PATH: 'https://flow.team/flowImg/a_thumb.png',
+        },
+      ],
+    });
+    assert.deepEqual((await getPostBrief('1')).files, [
+      {
+        name: '보고서.pdf',
+        size: 13014262,
+        url: 'https://flow.team/FLOW_DOWNLOAD_R001.act?RAND_KEY=k',
+        thumb: undefined,
+      },
+      {
+        name: '화면.png',
+        size: 20653,
+        url: 'https://flow.team/flowImg/a.png',
+        thumb: 'https://flow.team/flowImg/a_thumb.png',
+      },
+    ]);
+  });
+
+  it('이름이나 주소가 없는 첨부는 버린다 — 빈 줄이 서면 안 된다', async () => {
+    stub({ attachments: [{ FILE_SIZE: '10' }, { FILE_NAME: '이름만.txt' }] });
+    assert.deepEqual((await getPostBrief('1')).files, []);
+  });
+
+  it('관계도 첨부도 없는 글은 빈 값이다', async () => {
+    stub({ title: '공지' });
+    const brief = await getPostBrief('1');
+    assert.equal(brief.parent, null);
+    assert.deepEqual(brief.subTasks, []);
+    assert.deepEqual(brief.files, []);
   });
 });

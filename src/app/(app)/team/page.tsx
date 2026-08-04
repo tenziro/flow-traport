@@ -1,3 +1,4 @@
+import { CollectNotice } from '@/components/collect-notice';
 import { CopyButton } from '@/components/copy-button';
 import { DeptTabs } from '@/components/dept-tabs';
 import { EmptyState } from '@/components/empty-state';
@@ -29,7 +30,8 @@ export default async function TeamPage({
   searchParams: Promise<{ dept?: string }>;
 }) {
   const { dept: picked } = await searchParams;
-  const { dept, divisions, standup, projectIds, events } = await loadTeam(picked);
+  const { dept, divisions, standup, projectIds, events, truncated, failed } =
+    await loadTeam(picked);
   const { counts, members } = standup;
   /** 스탠드업은 projectId를 안 준다 — 프로젝트 이름으로 해소한다 (queries.ts). */
   const idOf = (project: string) => projectIds.get(project) ?? null;
@@ -140,6 +142,9 @@ export default async function TeamPage({
         &lsquo;어제 끝낸 일&rsquo;은 아직 없어요. 지금 막힌 것과 곧 마감할 것만
         모았어요.
       </p>
+
+      {/* 부서 전체를 훑는 화면이라 분당 상한에 제일 잘 걸린다 — 못 가져온 건 밝힌다 */}
+      <CollectNotice truncated={truncated} failed={failed} />
     </>
   );
 }

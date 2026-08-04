@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { IconInfo, IconOpen } from '@/components/icons';
+import { IconOpen } from '@/components/icons';
 import {
   ChromaticTextReveal,
   SWEEP_CHART,
@@ -11,9 +11,8 @@ import { ApiKeyGate } from './api-key-gate';
 export const metadata = { title: '로그인 · flow Cockpit' };
 
 /**
- * 로그인 화면. 아이디·비밀번호를 받지 않는다 — flow OAuth로 넘길 뿐이다 (PRD §5.2).
- * 받는 것이 하나 있는데 개인 flow API 키이고, 최초 1회만 모달로 묻는다 (`ApiKeyGate`).
- * 링크가 아니라 form GET인 이유: 프리페치로 인증 플로가 먼저 시작되지 않게.
+ * 로그인 화면. 아이디·비밀번호를 받지 않는다 — 받는 건 개인 flow API 키 하나이고,
+ * 그 키가 곧 로그인이다 (PRD §5.2, `ApiKeyGate`). 최초 1회만 모달로 묻는다.
  *
  * 화면을 반으로 갈라 왼쪽에 사진, 오른쪽에 폼을 둔다. 누를 것이 버튼 하나뿐인 화면이라
  * 가운데 카드 하나로는 넓은 모니터에서 텅 비어 보였다. 사진은 밝고 앱은 어두워서, 두 면의
@@ -23,12 +22,7 @@ export const metadata = { title: '로그인 · flow Cockpit' };
  * 작은 화면에서는 사진이 화면을 다 먹고 큰 화면에서는 띠처럼 남는다.
  * DOM 순서가 사진 → 폼이라 순서를 뒤집는 `order-*`가 필요 없다.
  */
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const { error } = await searchParams;
+export default async function LoginPage() {
   // 키를 이미 등록했으면 모달을 띄우지 않는다. 쿠키 하나 읽는 것이라 렌더를 안 붙잡는다.
   const hasKey = (await getApiKey()) !== null;
 
@@ -110,16 +104,6 @@ export default async function LoginPage({
             yOffset="20%"
             className="mt-1.5 text-sm text-muted-foreground"
           />
-
-          {error && (
-            <p
-              role="alert"
-              className="mt-5 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-            >
-              <IconInfo size={16} className="mt-0.5 shrink-0" />
-              {error}
-            </p>
-          )}
 
           {/* 마지막 박자. 설명의 마지막 낱말이 자리를 잡을 때 버튼이 올라온다 — 낱말이
               다 앉기를 기다리면 누를 것이 2초 넘게 안 보인다 */}

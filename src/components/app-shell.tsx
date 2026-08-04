@@ -3,12 +3,14 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
+import { loadEvent, type EventResult } from '@/app/(app)/actions';
 import { EmptyState } from '@/components/empty-state';
 import { FlowLink } from '@/components/flow-link';
 import {
   IconAttending,
   IconCalendar,
+  IconChevronDown,
   IconChevronRight,
   IconClose,
   IconComment,
@@ -21,6 +23,7 @@ import {
   IconToday,
   IconWorker,
 } from '@/components/icons';
+import { LinkedText } from '@/components/linked-text';
 import {
   AnimatedSidebar,
   SidebarButton,
@@ -48,9 +51,10 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { TaskNews } from '@/lib/flow/queries';
 import type { FlowEvent } from '@/lib/flow/rest';
-import { flowProjectUrl } from '@/lib/flow/urls';
+import { flowPostUrl, flowProjectUrl } from '@/lib/flow/urls';
 import type { Theme } from '@/lib/theme';
 import { cn, fmtDayLabel, fmtTime, hexColor } from '@/lib/utils';
 
@@ -493,9 +497,10 @@ function Account({
  * 어느 날 세시인지 알 수 없다. 목록은 이미 시작 시각순이라 앞에서부터 접으면 끊긴다
  * (`listEvents`가 정렬해 준다).
  *
- * 시각 옆에 색 막대, 이름 뒤에 참석·반복 표시, 프로젝트 일정이면 아래에 flow 링크가 붙는다.
- * 넷 다 §8.2 목록 응답에 이미 들어 있는 값이라 호출이 더 늘지 않는다. 장소·참석자 명단·회의
- * 링크는 일정마다 상세(§8.5)를 한 번씩 더 불러야 나와서 여기에 안 넣었다.
+ * 왼쪽에 색 막대, 그 옆으로 시각·이름을 한 줄씩, 이름 뒤에 참석·반복 표시, 달력이 여럿이면
+ * 그 이름까지가 접힌 모습이다.
+ * 다 §8.2 목록 응답에 이미 들어 있는 값이라 호출이 더 늘지 않는다. 설명·장소·참석자 명단·
+ * 반복 주기는 상세(§8.5)에만 있어서 **줄을 펼칠 때** 받아 온다 (`EventRow`).
  *
  * 참석 표시는 `"ATTENDING"`일 때만 그린다. 값 목록이 명세에 없어서(`FlowEvent`) 나머지를
  * 짐작해 적으면 "미정"과 "불참"이 뒤집힌다 — 모르면 안 그리는 편이 낫다. 그래서 불참으로
@@ -546,76 +551,185 @@ function ScheduleList({
             {ymd === today && <span className="text-primary">오늘 · </span>}
             {fmtDayLabel(ymd)}
           </h3>
-          <ul className="space-y-2">
-            {list.map((event) => {
-              const color = hexColor(event.eventColor, event.calendarColor);
-              const calendar = named ? event.calendarName : undefined;
-              return (
-                // 세 칸을 격자로 세운다. flex로 두면 시각·색 막대가 이름 줄 위에 걸려서
-                // `mt-0.5`·`mt-1` 같은 값을 손으로 맞춰야 하는데, 글자 크기가 바뀌면 그대로
-                // 어긋난다. 격자는 `items-center`가 칸마다 세로 가운데를 잡아 준다.
-                // 아래 줄(달력 이름·링크)은 `col-start-3`으로 이름 아래에 붙어서 왼쪽 여백을
-                // 따로 계산하지 않는다.
-                <li
-                  key={event.eventSrno}
-                  className="grid grid-cols-[76px_3px_1fr] items-center gap-x-2 gap-y-0.5"
-                >
-                  <span className="tabular text-xs text-muted-foreground">
-                    {event.allDayYn === 'Y'
-                      ? '종일'
-                      : `${fmtTime(event.eventStartDateTime)}–${fmtTime(event.eventFinishDateTime)}`}
-                  </span>
-                  <span
-                    aria-hidden
-                    className="h-3 rounded-full bg-border"
-                    style={color ? { backgroundColor: color } : undefined}
-                  />
-                  {/*
-                    아이콘의 `align-[-1px]`은 12px 아이콘을 13px 한글 가운데에 앉히는 값이다.
-                    `align-middle`은 x-height(로마자 소문자 높이) 기준이라 위아래가 꽉 찬 한글
-                    옆에서는 1px쯤 내려앉아 보인다. 둘은 같은 값을 쓴다 — 서로 어긋나면 그게
-                    제일 먼저 눈에 띈다.
-                  */}
-                  <span className="min-w-0 text-[13px] leading-snug">
-                    {event.eventName}
-                    {event.attendanceStatus === 'ATTENDING' && (
-                      <>
-                        <IconAttending
-                          size={12}
-                          aria-hidden
-                          className="ml-1 inline align-[-1px] text-muted-foreground"
-                        />
-                        <span className="sr-only"> (참석해요)</span>
-                      </>
-                    )}
-                    {event.repeatSrno && (
-                      <>
-                        <IconRepeat
-                          size={12}
-                          aria-hidden
-                          className="ml-1 inline align-[-1px] text-muted-foreground"
-                        />
-                        <span className="sr-only"> (반복 일정)</span>
-                      </>
-                    )}
-                  </span>
-                  {(calendar || event.colaboSrno) && (
-                    <span className="col-start-3 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
-                      {calendar}
-                      {event.colaboSrno && (
-                        <FlowLink
-                          href={flowProjectUrl(event.colaboSrno)}
-                          className="text-[11px]"
-                        />
-                      )}
-                    </span>
-                  )}
-                </li>
-              );
-            })}
+          <ul className="space-y-1">
+            {list.map((event) => (
+              <EventRow
+                key={event.eventSrno}
+                event={event}
+                calendar={named ? event.calendarName : undefined}
+              />
+            ))}
           </ul>
         </section>
       ))}
+    </div>
+  );
+}
+
+/**
+ * 일정 한 줄. 접힌 모습은 예전 그대로고, **펼칠 때 상세(§8.5)를 한 번** 불러 설명·장소·
+ * 반복 주기·참석자·만든 사람을 아래에 붙인다.
+ *
+ * 미리 안 부르는 건 셈이 안 맞아서다. 목록은 화면을 그릴 때 이미 와 있지만 상세는 일정
+ * 한 건에 REST 한 번이라, 미리 받으면 아무도 안 펼칠 예닐곱 건을 화면마다 받는다. 펼치는
+ * 건 사람 손이라 분당 상한(120)에 닿지 않는다.
+ *
+ * 한 번 받으면 다시 안 부른다 — 여닫는 동안 값이 바뀔 일이 없다.
+ */
+function EventRow({
+  event,
+  calendar,
+}: {
+  event: FlowEvent;
+  calendar?: string;
+}) {
+  const [got, setGot] = useState<EventResult | null>(null);
+  const asked = useRef(false);
+  const color = hexColor(event.eventColor, event.calendarColor);
+  const detail = got?.detail;
+
+  const load = () => {
+    if (asked.current) return;
+    asked.current = true;
+    loadEvent(
+      event.eventSrno,
+      event.eventStartDateTime,
+      event.eventFinishDateTime,
+    ).then(setGot, () => setGot({ ok: false, message: '자세한 내용을 못 가져왔어요.' }));
+  };
+
+  return (
+    <li>
+      <details
+        className="disclose group/ev"
+        onToggle={(e) => e.currentTarget.open && load()}
+      >
+        {/*
+          시각·이름·달력 이름을 한 줄씩 쌓고, 색 막대는 그 옆에 세로로 세운다. 한 줄에
+          같이 두면 이름 칸이 좁아져 긴 일정 이름이 서너 줄로 접혔다 — 사이드바 폭에서는
+          이름이 제일 먼저 희생된다. 막대 높이는 flex가 알아서 늘려 준다 (`items-stretch`가
+          기본이라 `h-*`를 손으로 안 맞춘다).
+
+          `-mx-2 px-2`는 누를 자리를 목록 폭 끝까지 넓힌다 — 시트에서 엄지로 여는 줄이다.
+        */}
+        <summary className="-mx-2 flex cursor-pointer list-none gap-2 rounded-md px-2 py-1.5 transition-colors outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50">
+          <span
+            aria-hidden
+            className="w-[3px] shrink-0 rounded-full bg-border"
+            style={color ? { backgroundColor: color } : undefined}
+          />
+          <span className="min-w-0 flex-1 space-y-0.5">
+            <span className="tabular block text-xs text-muted-foreground">
+              {event.allDayYn === 'Y'
+                ? '종일'
+                : `${fmtTime(event.eventStartDateTime)}–${fmtTime(event.eventFinishDateTime)}`}
+              {/* 쐐기는 시각 옆에 둔다. 이름 뒤에 두면 이름 길이에 따라 자리가 옮겨 다녀서
+                  줄이 여럿일 때 어디를 눌러 펴는 건지 눈으로 못 좇는다. 시각은 길이가 늘 같다.
+                  `inline-block`인 것은 인라인 요소가 회전을 안 먹기 때문이다 */}
+              <IconChevronDown
+                size={12}
+                aria-hidden
+                className="ml-1 inline-block align-[-2px] text-muted-foreground/60 transition-transform duration-300 group-open/ev:rotate-180"
+              />
+            </span>
+            {/*
+              아이콘의 `align-[-1px]`은 12px 아이콘을 13px 한글 가운데에 앉히는 값이다.
+              `align-middle`은 x-height(로마자 소문자 높이) 기준이라 위아래가 꽉 찬 한글
+              옆에서는 1px쯤 내려앉아 보인다. 둘은 같은 값을 쓴다 — 서로 어긋나면 그게
+              제일 먼저 눈에 띈다.
+            */}
+            <span className="block text-[13px] leading-snug">
+              {event.eventName}
+              {event.attendanceStatus === 'ATTENDING' && (
+                <>
+                  <IconAttending
+                    size={12}
+                    aria-hidden
+                    className="ml-1 inline align-[-1px] text-muted-foreground"
+                  />
+                  <span className="sr-only"> (참석해요)</span>
+                </>
+              )}
+              {event.repeatSrno && (
+                <>
+                  <IconRepeat
+                    size={12}
+                    aria-hidden
+                    className="ml-1 inline align-[-1px] text-muted-foreground"
+                  />
+                  <span className="sr-only"> (반복 일정)</span>
+                </>
+              )}
+            </span>
+            {calendar && (
+              <span className="block text-[11px] text-muted-foreground">
+                {calendar}
+              </span>
+            )}
+          </span>
+        </summary>
+
+        {/* 막대(3px)와 틈(8px)만큼만 밀어 시각 줄 왼쪽 끝에 맞춘다. 더 들여 쓰면 참석자
+            여덟 명이 좁은 칸에서 네 줄로 접힌다 */}
+        <div className="space-y-1.5 pt-1.5 pb-1 pl-[11px] text-[11px] text-muted-foreground">
+          {!got ? (
+            <Skeleton className="h-3 w-40" />
+          ) : !got.ok ? (
+            <p>{got.message}</p>
+          ) : detail && (detail.body || detail.place || detail.repeat || detail.attendees.length || detail.owner) ? (
+            <dl className="space-y-1">
+              {detail.body && (
+                // 설명 자리에 회의 링크만 적어 두는 일정이 흔하다 — 본문·댓글과 같이
+                // `LinkedText`로 눌리게 낸다 (BUG-025)
+                <EventField label="설명">
+                  <span className="whitespace-pre-line wrap-anywhere">
+                    <LinkedText text={detail.body} />
+                  </span>
+                </EventField>
+              )}
+              {detail.place && <EventField label="장소">{detail.place}</EventField>}
+              {detail.repeat && <EventField label="반복">{detail.repeat}</EventField>}
+              {detail.attendees.length > 0 && (
+                <EventField label="참석자">
+                  {detail.attendees.length}명 · {detail.attendees.join(', ')}
+                </EventField>
+              )}
+              {detail.owner && <EventField label="만든이">{detail.owner}</EventField>}
+            </dl>
+          ) : (
+            <p>더 적어 둔 내용이 없어요.</p>
+          )}
+
+          {/* 목록 응답이 주는 값이라 상세를 기다리지 않는다. 글 번호가 있으면 프로젝트 첫
+              화면이 아니라 그 일정 글로 바로 보낸다 */}
+          {event.colaboSrno && (
+            <FlowLink
+              href={
+                event.colaboCommtSrno
+                  ? flowPostUrl(event.colaboSrno, event.colaboCommtSrno)
+                  : flowProjectUrl(event.colaboSrno)
+              }
+              className="text-[11px]"
+            />
+          )}
+        </div>
+      </details>
+    </li>
+  );
+}
+
+/** 상세 패널의 이름·값 한 줄. 이름 칸을 고정해서 값들의 왼쪽 끝이 나란히 선다. */
+function EventField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex gap-2">
+      <dt className="w-10 shrink-0 text-muted-foreground/70">{label}</dt>
+      <dd className="min-w-0 flex-1 text-foreground/80">{children}</dd>
     </div>
   );
 }

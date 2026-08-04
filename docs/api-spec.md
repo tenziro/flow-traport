@@ -4,6 +4,14 @@
 > - 표기 없음 = **확인된 사실**. flow 공식 개발자 문서(`https://api.flow.team/docs`)의 스펙 원본에서 그대로 추출했거나, 인증 없는 실제 호출로 응답을 직접 관측한 내용.
 > - `(추정)` = 문서에 정의가 없어 다른 근거(실제 응답 관측, 유사 API 패턴, 네이밍 규칙)로 추론한 내용. **구현 시 반드시 런타임 검증 필요.**
 > - `(관측)` = 공식 문서에는 없지만 인증된 실제 flow 워크스페이스 응답에서 직접 확인한 값. 문서보다 실제에 가깝지만 표본이 적음.
+>
+> **v4.0.0 (2026-08-04)**: 이 문서가 **유일한 데이터 계약**이 됐다. flow MCP를 전부 걷어냈다
+> (PRD §5.1). 본문에 남은 MCP 언급은 그때 대조군으로 쓴 **기록**이다 — 지금 부르는 경로가
+> 아니다. 실제 호출 순서는 §12를 본다.
+>
+> **v4.1.0 (2026-08-04)**: 화면이 §6.1 응답에서 실제로 꺼내 쓰는 컬럼을 표로 박았다
+> (§6.1 "앱이 꺼내 쓰는 값"). 우선순위(`PRIORITY`)가 그 응답에 있는데 안 읽고 모달이 따로
+> 받아 오던 것을 이번에 걷었다 — 업무 한 건당 REST 1회가 줄었다.
 
 ## 0. 수집 방법과 신뢰도 근거
 
@@ -294,13 +302,48 @@ https://api.flow.team
 | `ALARM_RECORD` | array | 알림 — 아이템 스키마 없음 |
 | `ALARM_COUNT` | string | 알림 수 |
 | `ALARM_MORE_YN` | string | 알림 추가 조회 가능 여부 |
-| `TASK_REPORT_RECORD` | array | 업무 리포트 — 아이템 스키마 없음 |
-| `CUSTOM_STATUS_TASK_REPORT_RECORD` | array | 커스텀 상태 업무 리포트 — 아이템 스키마 없음 |
-| `JOIN_APPLY_RECORD` | array | 참여 신청 — 아이템 스키마 없음 |
+| `TASK_REPORT_RECORD` | array | 업무 리포트 — 아이템 스키마 없음. **실측은 전부 `null`** (아래) |
+| `CUSTOM_STATUS_TASK_REPORT_RECORD` | array | 커스텀 상태 업무 리포트 — 아이템 스키마 없음. **실측은 전부 `null`** (아래) |
+| `JOIN_APPLY_RECORD` | array | 참여 신청 — 아이템 스키마 없음. 실측은 `null` |
 
 `PROJECT_SETTING[]` 아이템: `COLABO_SRNO`*(프로젝트 ID), `TTL`*(제목), `CNTN`(설명), `USE_INTT_ID`(이용기관 ID), `SENDIENCE_CNT`(참여자 수), `OPEN_YN`, `HOME_TAB_CODE`(예 `FEED`), `STATUS`, `RGSN_DTTM`, `RGSR_ID`, `RGSR_NM`.
 
-> **왜 배열인가**: OpenGate 관례상 단건도 1-element 배열로 감싼다. `PROJECT_SETTING[0]` 을 쓰면 된다 `(추정)`.
+> **왜 배열인가**: OpenGate 관례상 단건도 1-element 배열로 감싼다. `PROJECT_SETTING[0]` 을 쓰면 된다 `(추정 → 실측 확인 2026-08-04)`.
+
+> **진행 단계 같은 "프로젝트 상태"는 이 API에 없다** `(실측 2026-08-04, 59개 전량)`.
+> `PROJECT_SETTING`의 키를 A~Z 전부 훑고 `data.project`의 다른 덩어리까지 열어 본 결과다:
+>
+> | 후보 | 실측 결과 |
+> |---|---|
+> | `STATUS` | 키는 59개 전부에 있는데 **값이 전량 빈 문자열** |
+> | `TASK_REPORT_RECORD` | 59개 전량 **`null`** (`typeof null === "object"`라 타입만 보면 객체로 보인다) |
+> | `CUSTOM_STATUS_TASK_REPORT_RECORD` | 59개 전량 **`null`**. 곁의 `TASK_REPORT_VIEW_YN`이 `N`이다 |
+> | `HIDDEN_YN` · `OFFICIAL_YN` · `DISABLE_YN` · `DISABLE_DTTM` | 앞 셋은 59개 모두 `N`, 마지막은 전량 빈 문자열 — 값이 안 갈려서 구별에 못 쓴다 |
+>
+> **값이 갈리는 상태성 필드는 둘뿐이다**: `OPEN_YN`(`N` 56 / `Y` 3, 공개 프로젝트)과
+> `IMPT_YN`(`Y` 14 / `N` 45, 중요 표시). 내 업무 화면은 이 둘만 내고, 나머지 자리는
+> `RGSR_NM`·`RGSN_DTTM`(개설자·개설일)로 채운다 — 이 둘은 59개 모두 채워져 있다.
+>
+> 같은 실측(59개 전량)에서 확인한 채움률:
+>
+> | 필드 | 채움 | 값 |
+> |---|---|---|
+> | `CNTN` (설명) | 7/59 | 여러 줄 평문, 24~72자. 없으면 화면이 그 줄을 안 그린다 |
+> | `SENDIENCE_CNT` (참여자 수) | 59/59 | 숫자 문자열, 6~656 |
+> | `OUT_SENDIENCE_CNT` (외부 참여자 수) | 59/59 | 숫자 문자열. **§5.3 표에 없는 필드다** |
+> | `OPEN_YN` (공개 여부) | 59/59 | `N` 56 / `Y` 3 |
+> | `IMPT_YN` (중요 표시) | 59/59 | `Y` 14 / `N` 45 |
+> | `RGSR_NM` / `RGSN_DTTM` | 59/59 | 이름 / 14자리 |
+> | `MNGR_DSNC` (관리자 여부) | 59/59 | `N` 53 / `Y` 6 |
+> | `JNNG_ATHZ_YN` (참여 승인) | 59/59 | `N` 45 / `Y` 14 |
+>
+> `SENDIENCE_CNT`는 **이름을 알 수 있는 사람 수보다 크다** — 90명짜리 프로젝트에서 §5.4 +
+> §6.1로 모을 수 있는 이름이 36명이다. 화면은 수를 이 필드로, 목록을 그 36명으로 내고 그
+> 차이를 문구로 적는다. 구현은 `rest.ts getProjectBrief`다.
+>
+> **캐시 10분**(`PROJECT_TTL`): 내 업무 화면이 **접힌 카드마다** 이걸 부른다(실측 38장).
+> 업무 수집이 이미 60회를 쓰므로(59 + 목록 1) 첫 조회가 98회고 분당 상한이 120회다.
+> 캐시 덕에 새로 고쳐도 다시 안 부른다.
 
 ### 5.4 `GET /user/projects/{projectId}/participants` — 프로젝트 참여자
 
@@ -324,6 +367,16 @@ https://api.flow.team
 > 담당자로 지정할 수 없습니다`에 걸리지 않는다. 구현은 `rest.ts listParticipants`다.
 >
 > 타사 사용자의 부서·직급·사진은 여전히 못 온다 (§6.1의 등록자 표와 같은 사정).
+>
+> **임직원/외부 가르기** `(실측 2026-08-04, 5개 프로젝트)`: 이 API가 준 사람은 전원
+> `@traport.com`이고, §6.1에서 긁어 온 7~42명은 **한 명도** `@traport.com`이 아니었다. 그래도
+> 출처가 아니라 `userId` 도메인으로 가른다 (`Participant.outside`) — 이 API가 언젠가 외부
+> 사람을 주기 시작해도 판정이 안 틀린다. 내 업무 카드의 참여자 목록이 이 값으로 두 무리를 만든다.
+>
+> **얼굴 사진은 여기 없다.** 내 업무 카드는 전사 명단(§9.3)의 `profileImagePath`를 **이메일로**
+> 맞춰 붙인다 (`loadProjectPanel`) — 이름으로 맞추면 동명이인에서 틀린다. 명단이 13명 한 번에
+> 오고 10분 캐시라 호출이 늘지 않는다. 타사 사용자는 그 명단에 없어서 사진이 안 붙는다 — 위에
+> 적은 대로 애초에 못 오는 값이다.
 
 ### 5.5 `GET /user/projects/{projectId}/columns` — 프로젝트 업무 컬럼 ⭐
 
@@ -430,6 +483,17 @@ https://api.flow.team
 >
 > **경고**: API Key 소유자가 아닌 사람의 `userId`를 넣어도 **그 사람 업무가 그대로 온다** (실측으로 확인). 필터 값은 요청에서 받지 말고 서버에서 세션으로 채운다.
 
+> **같은 컬럼에 레코드를 여러 개 주면 OR다** `(실측 2026-08-04)`. 팀 화면이 부서원 8명 ×
+> 프로젝트 59개 = 472회 대신 프로젝트당 1회로 끝나는 근거다 (PRD §5.1).
+> ```json
+> [{"COLUMN_SRNO":"1","OPERATOR_TYPE":"IN","FILTER_DATA":"a@traport.com"},
+>  {"COLUMN_SRNO":"1","OPERATOR_TYPE":"IN","FILTER_DATA":"b@traport.com"}]
+> ```
+> 같은 프로젝트에서 8명 배열은 3건, 나 혼자는 1건이 왔다 — 뒤 레코드가 앞을 덮지 않는다.
+> 다른 두 표기는 **쓰면 안 된다**: 콤마로 이어 붙이면(`"a,b"`) 0건이 오고(에러가 아니다 —
+> 조용히 빈다), `FILTER_DATA`에 배열을 넣으면 500이다. §6.1 상단 표의 "여러 개는 콤마 구분"은
+> `COLUMN_SRNO 12`(상태 `optionSrno`) 기준이고 담당자 컬럼에는 통하지 않는다.
+
 **응답 `data`**
 
 | 필드 | 타입 | 필수 | 설명 |
@@ -477,10 +541,10 @@ https://api.flow.team
 > 프로젝트에도 이 컬럼은 있었다 — 업무를 만든 사람은 늘 있기 때문이다. `customColumnData`는
 > 실명이 아니라 로그인 ID다 (6~13자).
 >
-> **이 응답을 이미 쓰는 화면은 호출을 늘리지 않고 등록자 열을 켤 수 있다** — 실제로 켠 것은
-> `/tasks` 내 업무뿐이다 (§6.1을 `listMyTasks`가 쓴다). `/risk` 리스크의 업무 표는 이 응답이
-> 아니라 MCP 워크리스트로 만들어서 등록자가 없다. 오늘·팀도 같다 — 붙이려면 업무마다 REST
-> 1회(`getTaskFields` 꼴)가 더 붙는다. 등록일 열이 내 업무 화면에만 있는 것과 같은 이유다.
+> **이제 모든 화면이 이 응답 하나로 선다** `(2026-08-04, v4.0.0)`. 오늘·팀·리스크가 쓰던 MCP
+> 워크리스트를 걷어내고 넷 다 §6.1로 옮겼으므로, 등록자·등록일은 어느 화면에서나 추가 호출
+> 없이 있다. 그래도 열을 켠 건 `/tasks` 내 업무뿐인데 그건 자리 문제다 — 다른 세 화면은 표가
+> 좁아서 업무명이 먼저 잘린다.
 >
 > **이름 말고는 못 붙인다** `(실측 2026-08-04)`:
 >
@@ -489,6 +553,23 @@ https://api.flow.team
 > | 사진 | 이 컬럼의 `profilePhoto`는 **늘 빈 문자열**이다 (§6.1 응답에서 관측한 전 건) |
 > | 부서·직급 | §9.3 `GET /user/search/employees`에만 있고 그건 **우리 이용기관 13명**이다. 내 업무 686건의 등록자 중 그 명단에 있는 건 **5건**(0.7%) — 나머지는 타사 사용자다. `?projectId=`로 좁혀도 응답은 그대로 13명이고(파라미터 무시), §5.4 참여자 조회는 `inttId`·`userId`·`name`뿐이다 |
 > | 회사·부서 (타사 포함) | §13.1 **댓글**에는 `registerCorpName`·`registerDivisionName`이 온다. 업무 등록자에게는 그런 필드가 없다 — §6.3 게시글 상세도 `registerId`·`registerName`까지다 |
+
+> **앱이 이 응답 하나에서 꺼내 쓰는 값** `(v4.1.0)`. 전부 `columns[]`에 이미 들어 있어서
+> **추가 호출이 0회**다 — 화면에 값 하나를 더 그리려고 REST를 다시 부르는 자리가 없다.
+>
+> | `defaultColumnType` | 어디에 쓰나 |
+> |---|---|
+> | `TASK_NM` | 업무명 (평면 `content`는 빈 문자열인 경우가 흔하다) |
+> | `END_DT` | 마감일 · D-DAY 배지 · 임박/밀림 판정 |
+> | `STATUS` / `STTS` | 상태 배지 · 상태 칩 필터 · **완료 판정**(`optionCategory == "2"`) |
+> | `WORKER_ID` | 담당자 칸 (리스크·팀) |
+> | `RGSR_ID` | 등록자 칸 (내 업무) · 모달 딱지 |
+> | `RGSN_DTTM` | 등록일 칸 (내 업무) |
+> | `EDTR_DTTM` | **방치 판정**(30일 무활동) · 방치된 업무 표의 `마지막 수정` 칸 |
+> | `PRIORITY` | 업무명 앞 표식(`높음`·`긴급`만) · 모달 우선순위 줄. **v4.1.0 전에는 안 읽었다** — 모달이 열릴 때마다 같은 값을 `getTaskFields`로 따로 받아 업무 한 건에 REST 1회를 더 썼다 |
+>
+> 안 읽는 기본 컬럼은 `PROGRESS`·`TASK_NUM`·`START_DT`·`SECTION`이다. 진행률은 상태 배지와
+> 같은 말을 두 번 하고, 나머지 셋은 화면에 자리가 없다.
 
 `columnData[]` 아이템:
 
@@ -505,7 +586,7 @@ https://api.flow.team
 >
 > | 코드 | 라벨 | `optionCategory` | 근거 |
 > |---|---|---|---|
-> | `0` | 요청 / **대기** | `"0"` | `S45^^0^^2` = "'요청' → '완료'". **flow가 두 이름을 쓴다** — 시스템 댓글은 `요청`, MCP 워크리스트는 `대기`다(`flow_get_my_worklist` 설명의 "base 상태(대기/진행)"). 화면 배지는 **`대기`** 로 쓴다: 다른 카드가 전부 MCP 라벨을 그대로 그려서, 같은 업무가 카드마다 다른 이름으로 보이면 안 된다 ([BUG-028](bug-report.md#bug-028)) |
+> | `0` | 요청 / **대기** | `"0"` | `S45^^0^^2` = "'요청' → '완료'". **flow가 두 이름을 쓴다** — 시스템 댓글은 `요청`, 업무 목록은 `대기`다. 화면 배지는 **`대기`** 로 쓴다: 사용자가 flow 업무판에서 보는 이름이 그쪽이라, 같은 업무가 두 화면에서 다른 이름이면 안 된다 ([BUG-028](bug-report.md#bug-028)) |
 > | `1` | 진행 | `"1"` | 카테고리 |
 > | `2` | 완료 | `"2"` | 위 기록의 도착점. 같은 업무 `PROGRESS`가 100이 됐다 |
 > | `3` | 보류 | `"3"` | 카테고리 |
@@ -613,6 +694,31 @@ https://api.flow.team
 > (프로젝트 2916576 `Q020 Extranet 운영`)은 실제 상태가 `진행`인데 평면 값은 `'0'`(대기)이었고,
 > `TASK_COLUMN_REC` 의 `STATUS` → `("901661", "진행", "1")` 가 맞는 값이다. 읽는 순서는
 > **`TASK_COLUMN_REC` 의 `STATUS.OPTION_NAME` → 없으면 `STTS` 코드 맵**(§6.1 끝)이다.
+
+> **원본 목록 넷이 업무 상세 모달을 채운다 `(실측 2026-08-04, 업무 글 20건)`.** 제목·상태 세 줄
+> 때문에 어차피 통째로 받던 응답이라 **REST 호출이 하나도 안 는다** (`getPostBrief`, PRD §6.1.4).
+>
+> | 배열 | 채움 | 쓰는 키 | 그래서 |
+> |---|---|---|---|
+> | `upLinkTasks` | **11/20** | `UP_LINK_TASK_NM` · `COLABO_SRNO` · `COLABO_COMMT_SRNO` | 상위 업무 한 줄. **늘 1건**이다 |
+> | `imageAttachments` | 6/20 | `ORCP_FILE_NM` · `THUM_IMG_PATH` · `ATCH_URL` · `FILE_SIZE` | 썸네일 격자 |
+> | `attachments` | 5/20 | `FILE_NAME` · `ATCH_URL` · `FILE_SIZE` | 파일 이름 + 크기 한 줄 |
+> | `subTasks` | 1/20 | `TASK_NM` · `PROGRESS` · `TASK_COLUMN_REC` · `COLABO_*` | 하위 업무 목록 |
+>
+> - **`COLABO_COMMT_SRNO` 는 그쪽 글 번호다 — 지금 글이 아니다.** 상위·하위 모두 자기
+>   `COLABO_SRNO`(프로젝트)와 짝으로 와서 `main.act?projectId=…&postId=…` 를 호출 없이 만든다.
+>   20건 전부에서 지금 글 번호와 달랐다.
+> - **`subTasks[].STTS` 도 `"0"` 고정이다** — 위의 `tasks[0]` 과 같은 함정이라 상태는 똑같이
+>   `TASK_COLUMN_REC` 의 `STATUS` 에서 읽는다. `PROGRESS` 는 빈 문자열로 오는 줄이 있어서
+>   `Number("")`(=0)와 갈라야 한다.
+> - **`attachments[].ATCH_URL` 은 슬래시가 겹쳐 온다** — `https://flow.team//FLOW_DOWNLOAD_R001.act?RAND_KEY=…`.
+>   호스트 뒤를 하나로 줄여도 그대로 200이다(둘 다 확인). `EXTENSION` 은 8건 전부 빈 문자열이라
+>   확장자는 `FILE_NAME` 에서 본다.
+> - **이미지 두 URL 다 로그인 없이 열린다** (`THUM_IMG_PATH`·`ATCH_URL` 모두 200,
+>   `content-type: application/octet-stream`). 호스트가 `flow.team/flowImg/**` 라 `next.config.ts`
+>   허용 목록에 이미 있다 — 프로필 사진과 같은 자리다.
+> - 안 쓰는 것: `todos` · `schedules` · `votes` 는 20건 전부 비었고, `remarkSrno` 도 늘 빈
+>   문자열이다.
 
 > **`connectUrl` 은 로그인 화면을 건너 살아남는 링크다 `(실측 2026-07-29)`.** 같은 응답에
 > `connectUrl: "https://flow.team/l/Qmcn5"` 가 온다 — flow가 만든 짧은 링크다. 세션이 없을 때
@@ -733,6 +839,21 @@ Body: `title`*(1~200), `todoList[]`*(1~50개) `{ contents*(1~60), endDate(YYYYMM
 | `replyId` | `-1` 이 아니면 그 댓글은 **다른 댓글에 달린 답글**이다. flow API로 얻을 수 있는 유일한 계층 신호다 |
 | 날짜 필터 | 없다. `size=100` 으로 받아 워크리스트 멘션에 조인한다 |
 
+> ### ⚠️ `remarkId`·`replyId` 가 **내가 쓴 줄**을 가리키는 알림이 섞여 온다 (실측 2026-08-04)
+>
+> 멘션 알림 8건 중 1건이 그랬다. 알림은 `registerName: "김동석"` · `registeredDateTime: 20260803162144`
+> 인데 `replyId: 6080596` 은 **내가** 15:15:49에 쓴 답글이고 `content` 도 내 글이었다. 그 시각에
+> 김동석이 쓴 답글은 스레드에 없다 — 알림의 시각·발신자와 가리키는 줄이 서로 안 맞는다.
+>
+> 나머지 7건은 전부 **알림 발신자 = 그 줄을 쓴 사람 · 알림 시각 = 그 줄의 시각**이었다.
+>
+> **그래서 강조는 알림으로 맞추지 않는다.** 스레드에서 "나를 부른 줄"은 댓글 본문의 멘션
+> 마크업으로 가른다 (`mentionsMe` — `rest.ts`): 괄호 안 id가 세션의 `userId`와 같으면 나를 부른
+> 줄이다 (`@[이종석](jongseok.lee@traport.com)` — `/user/employees/me`의 `userId`와 같은 값).
+> 알림으로 맞추면 (1) 위 1건이 내 말에 `나를 부름`을 붙이고, (2) 알림 창(최근 7일·12건 —
+> `queries.ts`)을 벗어난 옛 멘션은 아예 강조에서 빠진다. 마크업은 댓글에 영구히 남는다.
+> 전원 호출(`@[ALL](ALL)`)은 id가 `ALL`이라 안 걸린다.
+
 > **조인 키는 `registerId` + `registeredDateTime`.** 워크리스트(`flow_get_my_worklist.mentions`)는 `postId` 를 주지 않아서 그걸로는 못 묶는다. 두 응답이 같은 알림 레코드에서 나오므로 1:1로 맞는다. 알림 쪽이 실명(`registerName`)을 주므로 화면 표시도 아이디 대신 실명을 쓴다.
 
 **실측 (2026-07-29)** — `filters=WORKER,REGISTRANT` 응답 필드는 `alarmId` · `alarmType` ·
@@ -811,9 +932,11 @@ Body: `projectId` (string, 숫자, 선택 — 특정 프로젝트만 처리)
 Query: `searchWord`* (1~100), `cursor`(기본 `0`), `pageSize`(기본 `50`)
 응답 `data`: `{ hasNext, lastCursor, calendars: [{ calendarName, calendarSrno, calendarType, calendarPermission, userId, fullname, responsibility, profileImagePath, email }] }`
 
-### 8.5 `GET /user/calendars/events/{eventSrno}` — 일정 상세
+### 8.5 `GET /user/calendars/events/{eventSrno}` — 일정 상세 ⭐
 
 Path: `eventSrno` (숫자). Query: `eventStartDateTime`, `eventFinishDateTime` (반복 인스턴스 지정용, 14자리)
+
+> **사용처**: 나의 일정 서랍·시트에서 **줄을 펼칠 때만** 부른다 (`getEvent` → `loadEvent` → `EventRow`, v4.5.0). 일정 한 건에 호출 한 번이라 미리 안 받는다.
 
 응답 `data.event` = 8.2의 필드 + `location`, `locationCoordinates`, `locationUrl`, `calendarOwner`, `calendarType`, `userPermission`, `vcSrno`, `contentModifiability`, `rgsrId`, `rgsrNm`, `rgsnDateTime`, `prflPhtg`, `originSrno`, 그리고 아래 배열들:
 
@@ -824,6 +947,19 @@ Path: `eventSrno` (숫자). Query: `eventStartDateTime`, `eventFinishDateTime` (
 | `repeatEvents[]` | `repeatSrno`, `repeatType`(`WEEKLY` 등), `repeatPeriod`, `repeatCount`, `repeatDays`(`"MO,WE,FR"`), `endDateTime` |
 | `attachments[]` | `atchSrno`, `fileDownUrl`, `fileNm`, `fileSize`, `randKey`, `imgPath`, `thumImgPath` |
 | `vcRecords[]` | `vcSrno`, `vcTtl`, `videoOrg`(`GOOGLE_MEET` 등), `vcStartDateTime`, `vcEndDateTime`, `vcRgsnDateTime` |
+
+**실측 채움률** (2026-08-04, ±180일 창의 일정 8건 전량):
+
+| 필드 | 채움 | 비고 |
+|---|---|---|
+| `attendances[]` | 8/8 | 4~11명. `attendanceName`만 쓴다 — `attendanceProfile`은 `platform.bizplay.co.kr` 호스트라 `next.config.ts` 허용 목록 밖이다 |
+| `rgsrNm`·`rgsrId`·`prflPhtg`·`rgsnDateTime` | 8/8 | 만든 사람 |
+| `repeatEvents[]` | 5/8 | `WEEKLY` / `repeatPeriod: "1"` / `repeatDays: "FR"` / `endDateTime: "20260904000000"`. **`repeatCount`는 늘 빈 문자열** |
+| `eventBody` | 3/8 | **목록(8.2)에서는 8/8 빈 문자열이다** — 설명은 상세에만 있다. 상세를 부르는 주된 이유 |
+| `colaboSrno`·`colaboCommtSrno`·`originSrno` | 3/8 | 목록 응답에도 그대로 온다 — 이것만 쓰면 상세를 안 불러도 된다 |
+| `location` | 1/8 | `locationUrl`·`locationCoordinates`는 0/8 |
+| `notifications[]`·`attachments[]`·`vcRecords[]`·`vcSrno` | 0/8 | 우리 기관이 안 쓴다. `vcRecords`에는 회의 링크 필드 자체가 없다(`vcSrno`/`vcTtl`/`videoOrg`/시각뿐) |
+| `eventColor`·`customCalendarName`·`repeatSrno`(최상위)·`attendanceStatus`(최상위) | 0/8 | 최상위 `attendanceStatus`는 상세에서 비어 온다 — **내 참석 응답은 목록(8.2) 값만 믿는다** |
 
 ### 8.6 쓰기 계열 (미사용)
 
@@ -932,31 +1068,39 @@ Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSi
 | `filterRecords` 의 `OPERATOR_TYPE` 전체 목록 | 문서에 `IN` 만 예시. 다른 연산자 미공개 | 서버 필터 대신 클라이언트 필터 |
 | `GET /user/posts/{postId}` 의 10개 "원본 목록" 아이템 스키마 | 스펙에 정의 없음 | `tasks[]` 만 2.2로 관측 확보, 나머지는 `unknown[]` |
 | `GET /user/projects/{id}` 의 `PROJECT_COLUMN_REC` 등 8개 배열 | 스펙에 정의 없음 | 5.5 / 5.6 의 camelCase API로 우회 |
-| 레이트 리밋 수치 | `RATE_LIMIT_EXCEEDED_ERROR` 존재만 확인, 임계값 비공개 | 백오프 재시도 구현 |
+| ~~레이트 리밋 수치~~ | **해소.** 429 본문이 임계값을 그대로 적어 준다 — `"분당 최대 요청가능 횟수: 120"` (실측 2026-08-04) | 업무 조회 300초 캐시 + 실패한 프로젝트를 화면에 밝힘 |
 | `/user/*` 가 베타 플랜에서 열려 있는지 | 인증 토큰 없이 확인 불가 | `BETA_API_ACCESS_DENIED_ERROR` 를 별도 처리 |
 | 응답 타임존 | 문서 언급 없음 | 워크스페이스 로컬(KST) 가정 |
 
 ---
 
-## 12. REST로 갈 경우의 호출 순서 `(추정 — 설계 제안)`
+## 12. 오늘 화면의 실제 호출 순서 `(관측 2026-08-04, v4.0.0)`
 
-> **주의**: v1은 REST를 쓰지 않는다. flow OAuth 토큰이 REST에서 거부되고(400) MCP에서만 통하며, `/user/*` 는 인증 주체 고정이라 타인 조회가 불가능하기 때문이다 (PRD §5.1, §5.2). 아래는 폴백 설계로만 남긴다.
+> 이 절은 원래 "REST로 갈 경우"라는 폴백 설계였다. v4.0.0에서 MCP를 전부 걷어내고 이 순서가
+> **실제 경로**가 됐다 (PRD §5.1). 아래 숫자는 59개 프로젝트 계정의 실측이다.
 
 ```
-1. GET /user/employees/me                          → 내 userId
-2. GET /user/projects                              → 프로젝트 전체 (59개, cursor 페이징)
-3. 프로젝트별 (캐시 대상):
-   GET /user/projects/{id}/columns                 → defaultColumnType → columnSrno 매핑
-   GET /user/projects/{id}/columns/status          → optionSrno → 상태명/완료여부
-4. 프로젝트별:
-   GET /user/posts/projects/{id}/tasks/filter?pageSize=100&cursor=N
-                                                   → 업무 전량, columns[] 에서 마감일/상태/진행률 추출
-5. GET /user/alarms?filters=MENTION&readYn=N&size=100
-                                                   → 멘션 → postId dedupe
-6. (필요 시) GET /user/posts/{postId}              → editedDateTime = 최종 활동 시각
+0. (로그인 시 1회) GET /user/employees/me          → userId·fullname·부서 → 세션 쿠키
+1. GET /user/projects                              → 프로젝트 59개 (cursor 페이징, TTL 600초)
+2. 프로젝트별 ×59 (동시 10, TTL 300초):
+   GET /user/posts/projects/{id}/tasks/filter?pageSize=100
+       &filterRecords=[{COLUMN_SRNO:1,OPERATOR_TYPE:IN,FILTER_DATA:<userId>}]
+                                                   → 담당 업무. columns[]에서 마감일·상태·
+                                                     담당자·등록자·EDTR_DTTM·PRIORITY를 뽑는다
+                                                     (§6.1 "앱이 꺼내 쓰는 값")
+   (프로젝트 컬럼 매핑 GET .../columns 는 같은 TTL로 캐시 — 실측 왕복 1회/프로젝트)
+3. GET /user/alarms?filters=MENTION&days=7&size=100 → 멘션 → receiverId로 내 것만 남김
+4. 멘션의 postId 중복 제거 ×≤12: GET /user/posts/{postId}
+                                                   → 업무명·짧은 링크·상태
+5. 포커스 상위 ≤8: GET /user/comments/{postId}     → 댓글 수 + 마지막 작성자
 ```
 
-2단계가 59개 프로젝트를 한 번에 주고, 4단계가 프로젝트 수만큼 병렬 호출이 된다. 레이트 리밋 임계값이 비공개이므로 동시성 제한과 백오프가 필요하다.
+합계 ≈ 1 + 59 + 1 + 12 + 8 = **81회**. 여기에 헤더 알림 종과 일정이 얹혀 분당 상한 120에
+바짝 붙는다 — 2단계에 5분 캐시를 거는 이유다. 그래도 넘치면 429로 떨어지는 프로젝트가 생기고,
+그건 숨기지 않고 화면 아래에 이름으로 적는다 (`collectTasks`의 `failed`).
+
+**날짜 필터를 서버에 안 건다.** `IN` 외 연산자가 미공개라(§11) 마감일·수정일 비교는 전량을
+받아 클라이언트에서 한다. 대신 `EDTR_DTTM`이 업무마다 오므로 "며칠 손 안 댔나"에 상한이 없다.
 
 ---
 
@@ -969,30 +1113,42 @@ Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSi
 **§6.3 `remarks` 의 한계(14건 중 2건)를 이 엔드포인트가 없앤다.** 같은 게시글에서 14건 전부 왔다.
 
 **Path**: `postId` (숫자)
-**Query**: **받지 않는다** `(실측 2026-08-03)`. 응답이 `hasNext` / `lastCursor` 를 주니 §1.4 커서 규약을 따를 것으로 보였는데, 쿼리를 **하나라도** 붙이면 `400 VALIDATION_ERROR "잘못된 query 형식입니다."` 다 (`lastCursor` · `cursor` · `size` · `pageSize` · `parentId` · `remarkId` · `replyId` · `depth` 전부). 파라미터 없이 한 번에 다 온다.
+**Query**: `replyYn` 하나만 받는다 `(정정 2026-08-04)`. 나머지는 붙이는 즉시 `400 VALIDATION_ERROR "잘못된 query 형식입니다."` 다 (`lastCursor` · `cursor` · `size` · `pageSize` · `parentId` · `remarkId` · `replyId` · `depth` 전부). 응답이 `hasNext` / `lastCursor` 를 주지만 §1.4 커서 규약은 안 통한다 — 파라미터 없이 한 번에 다 온다.
 
-> **답글은 안 온다** `(실측 2026-08-03)`. 이건 **최상위 댓글만** 주는 목록이다.
+> ### ⭐ `replyYn=Y` 가 답글을 같이 준다 `(실측 2026-08-04 — 앞선 기록 정정)`
 >
-> | 게시글 | `remarkCount` | `comments` 길이 | `remarks[].REPLY_CNT` | 그 답글이 응답에 |
-> |---|---|---|---|---|
-> | 79974281 | `"2"` | `2` | `0`, `3` | **없음** |
-> | 82028718 | `"11"` | `11` | `1`, `0` | **없음** |
+> `GET /user/comments/{postId}?replyYn=Y` 를 부르면 `Comment` 마다 **`replies[]` 가 최대 10건**
+> 붙고, 넘치면 `replyHasNext: true` 다. **추가 호출은 0회다.**
 >
-> `comments` 길이가 `remarkCount` 와 정확히 같다 — 즉 **둘 다 최상위만 센다**. 답글 4건은
-> 어느 쪽에도 안 들어간다. `Comment` 객체에 **부모를 가리키는 필드도, 중첩 배열도 없다**
-> (위 13건 전부 스칼라만. `hasNext: false`).
+> ```jsonc
+> { "commentId": "193905429", "contents": "…", "replyHasNext": false,
+>   "replies": [ { "replyId": "6085136", "parentCommentId": "193905429",
+>                  "contents": "총 6건", "registerId": "aiden.0603",
+>                  "registeredDateTime": "20260803214457" } ] }
+> ```
 >
-> 답글을 읽는 경로도 없다. 경로 후보 6종(`/user/comments/{post}/replies` · `/user/replies/{id}` ·
-> `/user/comments/{post}/{parent}/replies` · `/user/comments/{parent}/replies` ·
-> `/user/posts/{post}/comments/{parent}/replies` · `/user/comments/{post}/{replyId}`)은 전부
-> `404 NOT_FOUND_ERROR`, 쿼리 후보 5종은 위의 `VALIDATION_ERROR` 다 — **후보 11개 전패**.
+> **`Reply` 필드**: `replyId` · `parentCommentId` · `projectId` · `postId` · `contents` ·
+> `registerId` · `registerInttId` · `registerName` · `registeredDateTime` · `editedDateTime` ·
+> `encrypted` · `systemCode` · `language`. `Comment` 와 같은 모양인데 작성자 회사·부서
+> (`registerCorpName` · `registerDivisionName`)와 `editorId` 가 없다.
 >
-> id 공간도 다르다. §7.1 알림의 `remarkId`(9자리)는 **부모 댓글** id이고 이 목록에 있다.
-> `replyId`(7자리)는 별개 공간이고 어느 목록에도 없다. 그래서 **답글 계층을 아는 자리는 알림뿐**이다
-> (`MentionAlarm.replyId !== "-1"` → `isReply`). 화면의 업무 스레드에는 답글이 없고, 들여쓰기는
-> 멘션 상세 모달에서만 한다 (PRD §6.1.2).
+> **정렬은 `replyId` 오름차순**이라 곧 시각순이다. 앱은 그래도 `registeredDateTime` 으로 다시
+> 세운다 — 부모 댓글끼리 시각순, 답글은 자기 부모 바로 뒤 (`toThread`).
 >
-> 답글 **쓰기**는 된다 — §13.2.
+> **이전 기록(2026-08-03)은 틀렸다.** "답글을 읽는 경로가 없다 · 후보 28개 전패 · `replyYn` 은
+> 무반응"이라고 적어 뒀는데, `replyYn=Y` 는 그때도 `200` 이었고 응답에 `replies` 가 실려 있었다 —
+> **응답의 새 필드를 안 보고 최상위 키만 비교했다.** 실측 게시글 82396719 는 댓글 4건 중 3건에
+> 답글이 달려 있었고, 그 대화가 화면에서 통째로 빠져 있었다 ([BUG-042](bug-report.md#bug-042)).
+>
+> 아래는 그 잘못된 기록이 남긴, **지금도 유효한 사실**이다.
+>
+> | 사실 | 상태 |
+> |---|---|
+> | `replyYn` 없이 부르면 최상위 댓글만 온다 | 유효. `comments` 길이 = `remarkCount` — **둘 다 최상위만 센다** |
+> | 답글 **쓰기** 경로는 없다 | 유효. `POST …/replies/{commentId}` 는 `404`, `POST /user/comments/{postId}` Body 는 `{ contents }` 뿐 (§13.2) |
+> | `remarkCount` · `remarks[].REPLY_CNT` 는 답글을 안 센다 | 유효 (§8.2) |
+> | id 공간이 다르다 | 유효. `commentId`(9자리) ≠ `replyId`(7자리). §7.1 알림의 `remarkId` 는 **부모 댓글** id다 |
+> | 알림으로 답글을 복원하는 건 못 쓴다 | 유효하지만 **이제 필요 없다**. (나를 멘션한 답글만 오고, 본문이 정확히 100자에서 잘린다 — 실측 49건 중 20건이 문장 중간) |
 
 **응답 `data`**: `{ hasNext: boolean, lastCursor: number, comments: Comment[] }`
 
@@ -1012,6 +1168,8 @@ Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSi
 | `encrypted` | `"Y"` | |
 | `editorId` / `editorName` | `null` | **`null` 이 온다** — §10 의 "미설정은 `""`" 규칙에 예외가 있다 |
 | `objectContentsName` / `repeatDateTime` / `repeatId` / `language` | `null` | |
+| `replies` | `Reply[]` | **`replyYn=Y` 일 때만.** 최대 10건, `replyId` 오름차순 (위 블록) |
+| `replyHasNext` | `false` | **`replyYn=Y` 일 때만.** 답글이 10건을 넘으면 참 → §13.3 |
 
 > **`systemCode` 를 안 거르면 "마지막 댓글"이 사람 말이 아니다.** 실측 14건 중 **10건이 시스템
 > 댓글**(담당자·마감일·우선순위 변경 로그)이고 사람 댓글은 4건뿐이었다.
@@ -1033,25 +1191,50 @@ Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSi
 > `S83`(`S83^^이성우` — 상단고정) — **뜻 미확정**이라 표시에 쓰지 않는다. 구분자는 필드 `^^` ·
 > 항목 `@$%`. 전체 코드표는 미확인이고, `registeredDateTime` 만 봐도 "최근 활동 시각"으로는 충분하다.
 
-### 13.2 `POST /user/comments/{postId}` — 게시글 댓글 작성
+### 13.2 `POST /user/comments/{postId}` — 게시글 댓글 작성 `(실측 2026-08-04)`
 
-Body 스키마 미확인 (**쓰기라서 REST로는 호출하지 않았다**). MCP `flow_create_comment` 는 `projectId` + `postId` 를 요구하는데 이쪽은 경로에 `postId` 하나다.
+**Body는 `contents` 하나가 전부다.**
 
-**MCP `flow_create_comment` 파라미터** `(확인 2026-08-03)`:
+```json
+{ "contents": "댓글 본문" }
+```
 
 | 필드 | 필수 | 설명 |
 |---|---|---|
-| `projectId` / `postId` | ✅ | |
-| `content` | ✅ | 본문 |
-| `replyToRemarkId` | | **부모 댓글 id**(`colabo_remark_srno`). 주면 그 댓글에 달리는 **답글**이다 |
-| `files` / `imageFiles` | | 첨부 |
+| `contents` | ✅ | 본문. `content`가 아니다 — 오타를 내면 빈 댓글이 달린다 |
 
-> **답글은 쓸 수는 있고 읽을 수는 없다.** `replyToRemarkId` 로 남긴 답글은 flow 화면에는 제대로
-> 달리는데, §13.1 이 최상위 댓글만 주니 우리 목록에는 안 나타난다. 그래서 성공 문구가
-> "답글은 flow에서 볼 수 있어요"까지 말한다 (`createComment`).
+경로에 `postId` 하나뿐이라 `projectId`는 필요 없다. 다만 우리 화면이 들고 있는 건 `taskSrno`라
+그걸 `postId`로 바꿔서 넘긴다 ([BUG-005](bug-report.md#bug-005) — §6.1 응답의 `postId`를 쓰거나
+`resolvePostId`로 푼다).
+
+> **답글은 못 쓴다** `(v4.0.0 · 재확인 2026-08-04)`. 부모 댓글을 가리키는 필드가 Body에 아예
+> 없고, 답글 전용 `POST /user/comments/{postId}/replies/{commentId}` 도 `404 NOT_FOUND_ERROR` 다
+> (읽기는 같은 경로로 `200` — §13.3). 그래서 답하기는 **`@이름 본문` 꼴의 최상위 댓글**로
+> 나간다 (`createComment`).
 >
-> 수정은 `flow_update_comment` 이고 `{ projectId, postId, remarkId, content }` 가 전부 필수다.
-> 첨부는 **합치지 않고 덮는다** — 빼먹으면 기존 첨부가 사라진다.
+> 읽기가 열린 v4.2.0부터는 **남긴 답이 목록에 한 층 위로 뜬다** — 남이 flow에서 단 답글은
+> 부모 아래 들여쓰여 오는데, 앱이 올린 것은 최상위 댓글이라 맨 아래 붙는다. 대화 자체는
+> 안 사라지므로 그대로 둔다.
+>
+> 댓글 **수정·삭제**는 REST에 없다. flow 화면에서 한다.
+
+### 13.3 `GET /user/comments/{postId}/replies/{commentId}` — 답글 조회 `(실측 2026-08-04)` ⭐
+
+**§13.1 의 `replyYn=Y` 가 답글 10건까지는 이미 준다.** 이 엔드포인트는 그 위, 즉
+`replyHasNext: true` 인 댓글의 나머지를 받는 자리다.
+
+**Path**: `postId` · `commentId` (**부모 댓글** id — `replyId` 가 아니다)
+**Query**: `cursor` (기본 `0`) · `size` (기본 `100`, `1`~`100`)
+**권한**: 부모 댓글이 속한 게시글 단건 조회 권한과 같다. `userId` 는 안 넘긴다 — 서버가
+`x-flow-api-key` 의 사용자를 쓴다.
+
+**응답 `data`**: `{ hasNext: boolean, lastCursor: number, replies: Reply[] }` — `Reply` 는
+§13.1 의 `replies[]` 와 같은 모양이고 정렬도 같다 (`replyId` 오름차순). `hasNext` 가 참이면
+`lastCursor` 를 다음 요청의 `cursor` 로 쓴다 (§1.4 커서 규약 — 여기서는 통한다).
+
+> **앱은 `replyHasNext` 인 댓글에만 부른다** (`fillReplies` — `src/app/(app)/actions.ts`).
+> 실측에서 참인 댓글을 아직 못 봐서 보통은 호출이 0회다. 한 장(`size=100`)만 받는다 —
+> 댓글 하나에 답글 100건이 넘으면 그때 커서를 돌면 된다.
 
 ---
 

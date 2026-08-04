@@ -241,7 +241,7 @@ export function MemberCardsSkeleton({ count }: { count: number }) {
 }
 
 /**
- * 댓글 줄들 (`ThreadView`의 한 줄). 아이콘 + 이름·시각 줄 + 본문 두 줄이다.
+ * 댓글 줄들 (`CommentRows`의 한 줄). 아이콘 + 이름·시각 줄 + 본문 두 줄이다.
  *
  * 본문 두 번째 줄은 짧게 준다 — 댓글은 마지막 줄이 덜 차는 게 보통이라 그게 글로 읽힌다.
  */

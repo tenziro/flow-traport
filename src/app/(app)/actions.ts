@@ -11,35 +11,44 @@
  * - 업무 제목·본문은 로그에 남기지 않는다. 고객사명이 그대로 들어 있다 (§8.1).
  *
  * ID 공간이 둘이다 (docs/bug-report.md BUG-005):
- * - `flow_update_task.taskId` = 워크리스트가 주는 `taskSrno` 그대로. 실측으로 확인했다.
- * - `flow_create_comment.postId` = `colabo_commt_srno`. **`taskSrno`가 아니다** —
+ * - 업무 변경(`PATCH .../tasks/{taskId}/...`)은 목록이 주는 `taskSrno` 그대로다.
+ * - 댓글(`POST /user/comments/{postId}`)은 `colabo_commt_srno`다. **`taskSrno`가 아니다** —
  *   `resolvePostId`로 바꿔서 넘긴다.
  */
 
 import { revalidatePath } from "next/cache";
 import { DAY_MS, kstYmd } from "@/lib/aggregate/date";
-import { getApiKey } from "@/lib/auth";
-import { FlowMcpError } from "@/lib/flow/mcp";
-import { flowMcp } from "@/lib/flow/queries";
+import { getApiKey, getSession } from "@/lib/auth";
 import {
+  createComment as createFlowComment,
+  createTask as createFlowTask,
   describeSystemComment,
   FlowRestError,
+  getEvent,
+  getPostBrief,
   getTaskFields,
   isChangeLog,
   listComments,
   listParticipants,
+  listReplies,
   listStaleTasks,
   markAlarmRead,
   markAllAlarmsRead,
+  mentionsMe,
   resolvePostId,
+  searchEmployees,
   searchPosts,
   searchProjects,
   setTaskEndDate,
   setTaskPriority,
+  setTaskStatus,
   setTaskWorkers,
   stripMentions,
+  type EventDetail,
   type FlowComment,
   type Participant,
+  type PostFile,
+  type PostLink,
   type SearchPost,
   type SearchProject,
   type StaleTask,
@@ -67,23 +76,20 @@ export async function updateTaskStatus(
   if (!projectId || !taskId) return { ok: false, message: "업무를 찾지 못했어요." };
   if (!isStatus(status)) return { ok: false, message: "바꿀 상태를 골라주세요." };
 
-  return run(
-    async (mcp) => {
-      await mcp.call("flow_update_task", { projectId, taskId, status });
-      return `${TASK_STATUS[status]}(으)로 바꿨어요.`;
-    },
-    form.get("path"),
-  );
+  return restRun(async () => {
+    await setTaskStatus(projectId, taskId, status);
+    return `${TASK_STATUS[status]}(으)로 바꿨어요.`;
+  }, form.get("path"));
 }
 
 /**
- * 댓글·답글 남기기 (PRD §13 A3).
+ * 댓글 남기기 (PRD §13 A3).
  *
- * `replyToRemarkId`가 있으면 그 댓글에 달리는 **답글**이다 (`flow_create_comment`).
- *
- * **답글은 남긴 뒤 이 화면에 안 보인다.** `GET /user/comments/{postId}`가 최상위 댓글만 주고
- * 답글을 읽는 경로는 flow API에 없다 (`listComments` 주석, 2026-08-03 실측). 그래서 성공
- * 문구가 "flow에서 볼 수 있어요"까지 말한다 — 아무 말 없이 목록이 그대로면 남았는지 알 수 없다.
+ * **REST에는 답글이 없다.** `POST /user/comments/{postId}`는 `contents` 하나만 받고
+ * `replyToRemarkId`를 얹으면 거절한다 (`createComment` — 2026-08-04 실측). 그래서 답글은
+ * 상대 이름을 앞에 붙인 **최상위 댓글**로 보낸다 — 스레드로 묶이지는 않지만 누구에게 하는
+ * 말인지는 남고, 무엇보다 목록에 보인다. 예전 답글은 남겨도 읽는 경로가 없어서 화면에서
+ * 사라졌다 (`listComments` 주석).
  */
 export async function createComment(
   _prev: ActionResult | null,
@@ -93,7 +99,7 @@ export async function createComment(
   const taskId = String(form.get("taskId") ?? "");
   const title = String(form.get("title") ?? "");
   const content = String(form.get("content") ?? "").trim();
-  const replyTo = String(form.get("replyToRemarkId") ?? "");
+  const replyTo = String(form.get("replyToName") ?? "").trim();
 
   if (!projectId || !taskId) return { ok: false, message: "업무를 찾지 못했어요." };
   if (!content) return { ok: false, message: "댓글 내용을 적어주세요." };
@@ -104,18 +110,10 @@ export async function createComment(
   const postId = await resolvePostId(projectId, taskId, title).catch(() => null);
   if (!postId) return { ok: false, message: "이 업무는 flow에서 댓글을 남겨주세요." };
 
-  return run(
-    async (mcp) => {
-      await mcp.call("flow_create_comment", {
-        projectId,
-        postId,
-        content,
-        ...(replyTo ? { replyToRemarkId: replyTo } : {}),
-      });
-      return replyTo ? "답글을 남겼어요. 답글은 flow에서 볼 수 있어요." : "댓글을 남겼어요.";
-    },
-    form.get("path"),
-  );
+  return restRun(async () => {
+    await createFlowComment(postId, replyTo ? `@${replyTo} ${content}` : content);
+    return replyTo ? `${replyTo}님에게 답했어요.` : "댓글을 남겼어요.";
+  }, form.get("path"));
 }
 
 export async function createTask(
@@ -131,21 +129,17 @@ export async function createTask(
   if (!title) return { ok: false, message: "업무명을 적어주세요." };
   if (endDate && !/^\d{8}$/.test(endDate)) return { ok: false, message: "마감일을 다시 골라주세요." };
 
-  return run(
-    async (mcp) => {
-      // 새 업무는 항상 "요청"으로 넣는다. 시작도 안 한 일을 진행으로 넣으면
-      // 워크리스트와 스탠드업 신호가 통째로 왜곡된다 (flow_add_tasks 도구 주의사항).
-      await mcp.call("flow_create_task", {
-        projectId,
-        title,
-        contents,
-        status: "request",
-        ...(endDate ? { endDate } : {}),
-      });
-      return "업무를 만들었어요.";
-    },
-    form.get("path"),
-  );
+  return restRun(async () => {
+    // 새 업무는 항상 "요청"으로 넣는다. 시작도 안 한 일을 진행으로 넣으면
+    // 워크리스트와 스탠드업 신호가 통째로 왜곡된다.
+    await createFlowTask(projectId, {
+      title,
+      contents,
+      status: "request",
+      ...(endDate ? { endDate } : {}),
+    });
+    return "업무를 만들었어요.";
+  }, form.get("path"));
 }
 
 /* ── REST 쓰기 (PRD §13 A2·A4) ────────────────────────────────────────── */
@@ -245,6 +239,13 @@ export interface ThreadComment {
   body: string;
   /** flow가 남긴 업무 변경 기록이면 true. 화면에서 흐리게 낸다 (PRD §13 B4). */
   system: boolean;
+  /** 답글이면 true. 바로 위 댓글에 달린 말이라 화면에서 한 칸 들여쓴다. */
+  reply?: boolean;
+  /**
+   * 이 줄이 **나를 불렀으면** true. 그 줄만 도드라지게 낸다 (`CommentRows`) — 멘션 모달과
+   * 업무 상세 모달이 같이 쓴다. 스무 줄짜리 스레드에서 내가 할 말이 있는 자리는 여기다.
+   */
+  called?: boolean;
 }
 
 export interface ThreadResult extends ActionResult {
@@ -271,51 +272,99 @@ export async function loadThread(
     const postId = known || (projectId && taskId ? await resolvePostId(projectId, taskId, title) : null);
     if (!postId) return { ok: false, message: "이 업무의 댓글은 flow에서 볼 수 있어요." };
 
-    const comments = await listComments(postId);
-    if (!comments.length) return { ok: true, message: "아직 댓글이 없어요." };
+    const [comments, session] = await Promise.all([
+      listComments(postId).then((list) => fillReplies(postId, list)),
+      getSession(),
+    ]);
+    const rows = toThread(comments, session?.userId);
+    if (!rows.length) return { ok: true, message: "아직 댓글이 없어요." };
 
-    return {
-      ok: true,
-      message: `댓글 ${comments.length}건을 가져왔어요.`,
-      comments: toThread(comments),
-    };
+    return { ok: true, message: `댓글 ${rows.length}건을 가져왔어요.`, comments: rows };
   } catch (error) {
     return { ok: false, message: reasonOf(error) };
   }
 }
 
-/** 댓글 원본 → 화면에 낼 줄. `loadThread`·`loadTaskPost`가 같이 쓴다. */
-function toThread(comments: FlowComment[]): ThreadComment[] {
-  return (
-    comments
-      .map((c) => {
-        // 변경 로그가 사람 댓글보다 많다 (실측 14건 중 10건). 버리지 않고 업무 이력으로 읽는다.
-        // 판정은 `isChangeLog`다 — `systemCode`가 truthy여도 사람 댓글인 코드가 있다 (BUG-035).
-        const log = isChangeLog(c.systemCode);
-        return {
-          id: c.commentId,
-          from: c.registerName || c.registerId,
-          at: c.registeredDateTime,
-          body: log ? describeSystemComment(c.systemCode ?? "") : stripMentions(c.contents),
-          system: log,
-        };
-      })
-      // 위에서 아래로 읽는 대화다 — 오래된 것부터 쌓는다.
-      .sort((a, b) => a.at.localeCompare(b.at))
+/**
+ * 답글이 10건을 넘는 댓글만 나머지를 마저 받는다 (`replyHasNext` — api-spec §13.3).
+ * `listComments`가 이미 10건까지 줬으니 보통은 호출이 0회다 — 실측에서 아직 참인 걸 못 봤다.
+ *
+ * 한 댓글의 추가분을 못 받아도 스레드는 세운다 — 그 댓글은 처음 10건만 보인다.
+ */
+async function fillReplies(postId: string, comments: FlowComment[]): Promise<FlowComment[]> {
+  const more = comments.filter((c) => c.replyHasNext);
+  if (!more.length) return comments;
+
+  const filled = await Promise.all(
+    more.map((c) => listReplies(postId, c.commentId).catch(() => c.replies ?? [])),
   );
+  const byId = new Map(more.map((c, i) => [c.commentId, filled[i]]));
+  return comments.map((c) => {
+    const replies = byId.get(c.commentId);
+    return replies ? { ...c, replies } : c;
+  });
+}
+
+/**
+ * 댓글 원본 → 화면에 낼 줄. `loadThread`·`loadTaskPost`가 같이 쓴다.
+ *
+ * **정렬은 두 층이다.** 최상위 댓글끼리 시각순으로 세우고, 답글은 자기 부모 바로 뒤에 붙인다
+ * (그 안에서는 다시 시각순). 전부 한 줄로 섞어 시각순으로 세우면 답글이 부모에서 떨어져 나가
+ * 무엇에 대한 말인지 사라진다 — 답글은 부모보다 한참 뒤에 달리는 게 보통이다.
+ *
+ * `me`(세션의 `userId`)를 주면 나를 부른 줄에 `called`를 붙인다. 판정은 **본문의 멘션
+ * 마크업**이다 — 알림으로 맞추면 알림 창(최근 7일·12건)을 벗어난 옛 멘션이 강조에서 빠지고,
+ * flow가 남의 이름으로 보내는 엉뚱한 알림까지 따라 들어온다 (api-spec §7.1).
+ */
+function toThread(comments: FlowComment[], me?: string): ThreadComment[] {
+  const line = (
+    c: { contents: string; systemCode?: string | null; registerName: string; registerId: string; registeredDateTime: string },
+    id: string,
+    reply?: boolean,
+  ): ThreadComment => {
+    // 변경 로그가 사람 댓글보다 많다 (실측 14건 중 10건). 버리지 않고 업무 이력으로 읽는다.
+    // 판정은 `isChangeLog`다 — `systemCode`가 truthy여도 사람 댓글인 코드가 있다 (BUG-035).
+    const log = isChangeLog(c.systemCode);
+    return {
+      id,
+      from: c.registerName || c.registerId,
+      at: c.registeredDateTime,
+      body: log ? describeSystemComment(c.systemCode ?? "") : stripMentions(c.contents),
+      system: log,
+      ...(reply && { reply: true }),
+      // 변경 로그는 제외한다 — 담당자로 내 이름이 박힌 기록까지 "나를 부름"이 된다.
+      ...(!log && !!me && mentionsMe(c.contents, me) && { called: true }),
+    };
+  };
+
+  return [...comments]
+    // 위에서 아래로 읽는 대화다 — 오래된 것부터 쌓는다.
+    .sort((a, b) => a.registeredDateTime.localeCompare(b.registeredDateTime))
+    .flatMap((c) => [
+      line(c, c.commentId),
+      ...[...(c.replies ?? [])]
+        .sort((a, b) => a.registeredDateTime.localeCompare(b.registeredDateTime))
+        .map((r) => line(r, r.replyId, true)),
+    ]);
 }
 
 export interface TaskPostResult extends ActionResult {
   /** 게시글 본문. 업무 글은 비어 있는 경우가 흔하다 (api-spec §6.2) — 그때는 빈 문자열이다. */
   body: string;
   comments?: ThreadComment[];
+  /** 이 업무를 품은 상위 업무 (실측 11/20). 없으면 `undefined`. */
+  parent?: PostLink;
+  /** 이 업무에 딸린 하위 업무 (실측 1/20). */
+  subTasks?: PostLink[];
+  /** 첨부 파일. 이미지 첨부도 같은 목록에 섞이고 그쪽만 `thumb`가 있다 (실측 9/20). */
+  files?: PostFile[];
 }
 
 /**
  * 상세 모달의 본문 + 댓글 전량 (PRD §6.1.4). **모달을 열 때 한 번** 부른다.
  *
- * 본문은 `flow_get_post`의 `outContent`다 — 읽기용 평문이라 그대로 화면에 낼 수 있다.
- * 평면 `content`는 본문이 표를 담으면 JSON으로 오고(`contentJsonYn: "Y"`), `htmlContent`는
+ * 본문은 게시글 상세의 `outContent`다 (`getPostBrief`) — 읽기용 평문이라 그대로 화면에 낼 수
+ * 있다. `content`는 본문이 표를 담으면 JSON으로 오고(`contentJsonYn: "Y"`), `htmlContent`는
  * 태그째로 온다. 셋 중 벗길 것이 없는 건 `outContent` 하나다 (2026-08-03 실측).
  *
  * 댓글은 `outContent`와 같은 왕복에 못 담는다 — 게시글 상세의 `remarks`는 14건 중 2건만
@@ -328,27 +377,36 @@ export interface TaskPostResult extends ActionResult {
 export async function loadTaskPost(input: {
   /** 아는 경우 (내 업무 화면). 없으면 업무 ID·업무명으로 해소한다. */
   postId?: string;
-  projectId: string;
-  taskId: string;
-  title: string;
+  /** `postId`를 모를 때만 쓴다. 상위·하위 업무를 펼칠 때는 글 번호만 있고 이 셋은 없다. */
+  projectId?: string;
+  taskId?: string;
+  title?: string;
 }): Promise<TaskPostResult> {
   try {
     const postId =
-      input.postId || (await resolvePostId(input.projectId, input.taskId, input.title));
+      input.postId ||
+      (input.projectId && input.taskId
+        ? await resolvePostId(input.projectId, input.taskId, input.title ?? "")
+        : "");
     if (!postId) return { ok: false, body: "", message: "이 업무는 flow에서 볼 수 있어요." };
 
-    const mcp = await flowMcp();
-    const [post, comments] = await Promise.all([
+    const [post, comments, session] = await Promise.all([
       // 본문은 곁가지다. 못 가져오면 댓글만 뜬다.
-      mcp.call<{ outContent?: string }>("flow_get_post", { postId }).catch(() => null),
-      listComments(postId),
+      getPostBrief(postId).catch(() => null),
+      listComments(postId).then((list) => fillReplies(postId, list)),
+      getSession(),
     ]);
 
+    const rows = toThread(comments, session?.userId);
     return {
       ok: true,
-      body: post?.outContent?.trim() ?? "",
-      message: comments.length ? `댓글 ${comments.length}개예요.` : "아직 댓글이 없어요.",
-      comments: comments.length ? toThread(comments) : undefined,
+      body: post?.body ?? "",
+      message: rows.length ? `댓글 ${rows.length}개예요.` : "아직 댓글이 없어요.",
+      comments: rows.length ? rows : undefined,
+      // 셋 다 같은 왕복에 딸려 온 값이다 — 본문 하나 때문에 이미 받던 응답에 들어 있었다.
+      parent: post?.parent ?? undefined,
+      subTasks: post?.subTasks?.length ? post.subTasks : undefined,
+      files: post?.files.length ? post.files : undefined,
     };
   } catch (error) {
     return { ok: false, body: "", message: reasonOf(error) };
@@ -381,6 +439,46 @@ export async function loadParticipants(
   }
 }
 
+export interface ProjectPanelResult extends ActionResult {
+  participants?: Participant[];
+}
+
+/** 전사 명단 캐시(초). 얼굴이 바뀌는 일이 드물어서 길게 잡는다 — 카드를 여러 장 열어도 1회다. */
+const ROSTER_TTL = 600;
+
+/**
+ * 내 업무 카드를 펼쳤을 때 오른쪽에 붙는 참여자 목록 (PRD §6.5).
+ *
+ * **펼칠 때만 부른다.** 카드 하나에 REST 두 번이고(참여자 목록 + 업무에서 긁기) 화면에 카드가
+ * 실측 38개다 — 미리 부르면 76번이라 분당 120번 한도를 화면 하나가 다 먹는다. 겉면(§5.3)은
+ * 접힌 카드도 쓰므로 여기가 아니라 `loadMyTasks`가 미리 받아 둔다. 전사 명단은 10분 캐시다.
+ */
+export async function loadProjectPanel(projectId: string): Promise<ProjectPanelResult> {
+  if (!projectId) return { ok: false, message: "프로젝트를 찾지 못했어요." };
+
+  const [participants, roster] = await Promise.all([
+    listParticipants(projectId).catch(() => null),
+    // 얼굴은 곁가지다 — 없으면 화면이 이름 첫 글자 원판을 그린다.
+    searchEmployees(undefined, ROSTER_TTL)
+      .then((d) => d.employees)
+      .catch(() => []),
+  ]);
+
+  if (!participants) return { ok: false, message: "참여자를 못 가져왔어요." };
+
+  // 참여자 API에 사진이 없다. 우리 기관 사람만 명단에서 이메일로 맞춰 붙인다 — 타사
+  // 사용자는 그 명단에 아예 없다 (api-spec §5.4).
+  const photos = new Map(roster.map((e) => [e.email.toLowerCase(), e.profileImagePath]));
+  return {
+    ok: true,
+    message: "",
+    participants: participants.map((p) => {
+      const photo = p.outside ? "" : photos.get(p.userId.toLowerCase());
+      return photo ? { ...p, photo } : p;
+    }),
+  };
+}
+
 export interface TaskFieldsResult extends ActionResult {
   fields?: TaskFields;
 }
@@ -405,6 +503,37 @@ export async function loadTaskFields(
     const fields = await getTaskFields(projectId, String(taskId), title);
     if (!fields) return { ok: false, message: "지금 값을 찾지 못했어요." };
     return { ok: true, message: "지금 값을 가져왔어요.", fields };
+  } catch (error) {
+    return { ok: false, message: reasonOf(error) };
+  }
+}
+
+export interface EventResult extends ActionResult {
+  detail?: EventDetail;
+}
+
+/**
+ * 일정 하나의 설명·장소·참석자·반복 주기 (PRD §13 B3).
+ *
+ * **펼칠 때만 부른다.** 목록(§8.2)이 이름·시각·색까지 주고 나머지는 상세(§8.5)에만 있는데,
+ * 일정 한 건에 REST 한 번이다. 서랍을 열면 그날 일정이 예닐곱 줄이라 미리 받으면 화면 하나가
+ * 예닐곱 번을 먹는다 — 실제로 펼치는 줄은 보통 하나다.
+ *
+ * 시각 둘을 같이 넘기는 이유는 반복 일정 때문이다 (`getEvent`).
+ */
+export async function loadEvent(
+  eventSrno: string,
+  startDateTime: string,
+  finishDateTime: string,
+): Promise<EventResult> {
+  if (!eventSrno) return { ok: false, message: "일정을 찾지 못했어요." };
+
+  try {
+    return {
+      ok: true,
+      message: "",
+      detail: await getEvent(eventSrno, startDateTime, finishDateTime),
+    };
   } catch (error) {
     return { ok: false, message: reasonOf(error) };
   }
@@ -481,25 +610,11 @@ export async function searchFlow(word: string): Promise<SearchResult> {
   }
 }
 
-/** 공통 실행부 — 성공하면 해당 경로를 다시 불러오고, 실패하면 flow가 준 사유를 그대로 낸다. */
-async function run(
-  fn: (mcp: Awaited<ReturnType<typeof flowMcp>>) => Promise<string>,
-  path: FormDataEntryValue | null,
-): Promise<ActionResult> {
-  try {
-    const message = await fn(await flowMcp());
-    revalidatePath(typeof path === "string" && path.startsWith("/") ? path : "/risk");
-    return { ok: true, message };
-  } catch (error) {
-    // flow가 준 사유를 숨기지 않는다. 사용자가 다음에 뭘 할지 판단할 재료다.
-    const reason = error instanceof FlowMcpError ? error.message : "";
-    return { ok: false, message: reason || "flow가 받아주지 않았어요. 잠시 뒤 다시 해주세요." };
-  }
-}
-
 /**
- * REST 쓰기 공통부. **개인 키가 없으면 아예 막는다** — 공용 환경변수 키로 나가면 변경이
- * 남의 이름으로 기록된다 (rest.ts 상단 주석). 읽기는 그래도 화면이 서지만 쓰기는 안 된다.
+ * 쓰기 공통부. 성공하면 해당 경로를 다시 불러오고, 실패하면 flow가 준 사유를 그대로 낸다.
+ *
+ * **개인 키가 없으면 아예 막는다** — 공용 환경변수 키로 나가면 변경이 남의 이름으로
+ * 기록된다 (rest.ts 상단 주석). 읽기는 그래도 화면이 서지만 쓰기는 안 된다.
  */
 async function restRun(
   fn: () => Promise<string>,

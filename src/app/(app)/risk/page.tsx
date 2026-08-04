@@ -1,3 +1,4 @@
+import { CollectNotice } from '@/components/collect-notice';
 import { DeptTabs } from '@/components/dept-tabs';
 import { EmptyState } from '@/components/empty-state';
 import {
@@ -56,7 +57,8 @@ export default async function RiskPage({
   searchParams: Promise<{ dept?: string }>;
 }) {
   const { dept: picked } = await searchParams;
-  const { dept, divisions, rollups, unresolved } = await loadRisk(picked);
+  const { dept, divisions, rollups, unresolved, truncated, failed } =
+    await loadRisk(picked);
 
   const risky = rollups.filter((r) => r.grade !== 'normal');
   const calm = rollups.filter((r) => r.grade === 'normal');
@@ -173,40 +175,36 @@ export default async function RiskPage({
           </div>
 
           {risky.map((rollup, i) => (
-            <RollupCard
-              key={rollup.name}
-              rollup={rollup}
-              rank={i + 1}
-              top={top}
-              i={6 + i}
-            />
+            <RollupCard key={rollup.name} rollup={rollup} top={top} i={6 + i} />
           ))}
-
-          {calm.length > 0 && (
-            <details
-              className="disclose rise group rounded-xl bg-card px-4 py-3 ring-1 ring-foreground/10"
-              style={{ '--i': 6 + risky.length } as React.CSSProperties}
-            >
-              <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-muted-foreground">
-                잠잠한 프로젝트 {calm.length}개도 볼까요?
-                <IconChevronDown
-                  size={14}
-                  className="shrink-0 transition-transform duration-300 group-open:rotate-180"
-                />
-              </summary>
-              <div className="mt-3 space-y-2">
-                {calm.map((rollup, i) => (
-                  <RollupCard
-                    key={rollup.name}
-                    rollup={rollup}
-                    rank={risky.length + i + 1}
-                    top={top}
-                  />
-                ))}
-              </div>
-            </details>
-          )}
         </div>
+      )}
+
+      {/*
+       * 잠잠한 쪽은 카드 밖이다 — 여는 줄에 면을 깔면 그 자체가 카드로 보여서 위험
+       * 카드들과 같은 무게가 된다. 맨바닥의 한 줄로 두고, 펼치면 그때 카드가 나온다.
+       *
+       * 안쪽 카드도 각자 `<details>`라 group에 이름을 붙인다 — 이름 없는 `group`은 가장
+       * 가까운 것만 잡지 않아서 바깥이 열리면 안쪽 셰브론까지 같이 돌아간다.
+       */}
+      {rollups.length > 0 && calm.length > 0 && (
+        <details
+          className="disclose rise group/calm mt-4"
+          style={{ '--i': 6 + risky.length } as React.CSSProperties}
+        >
+          <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md py-1 text-sm text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
+            잠잠한 프로젝트 {calm.length}개도 볼까요?
+            <IconChevronDown
+              size={14}
+              className="shrink-0 transition-transform duration-300 group-open/calm:rotate-180"
+            />
+          </summary>
+          <div className="mt-4 space-y-4">
+            {calm.map((rollup) => (
+              <RollupCard key={rollup.name} rollup={rollup} top={top} />
+            ))}
+          </div>
+        </details>
       )}
 
       {unresolved > 0 && (
@@ -215,20 +213,23 @@ export default async function RiskPage({
           막아뒀어요.
         </p>
       )}
+
+      {/* 위 등급 분포와 점수는 가져온 것만 센 값이다 — 못 가져온 프로젝트를 밝혀야
+          "위험 0개"가 진짜 0개인지 알 수 있다 */}
+      <CollectNotice truncated={truncated} failed={failed} />
     </>
   );
 }
 
 function RollupCard({
   rollup,
-  rank,
   top,
   i,
 }: {
   rollup: ProjectRollup;
-  rank: number;
   /** 1위 점수. 점수 절대값은 의미가 없어서 1위 대비 길이로만 쓴다. */
   top: number;
+  /** 등장 순서. 접혀 있는 잠잠한 쪽은 안 준다 — 펼칠 때 한 번에 나온다. */
   i?: number;
 }) {
   const grade = GRADE[rollup.grade];
@@ -245,10 +246,6 @@ function RollupCard({
         <details className="disclose group">
           {/* 셰브론은 감싸는 행 밖에 둔다 — 안에 넣으면 flex-wrap이 접힐 때 같이 밀려 내려간다 */}
           <summary className="flex cursor-pointer list-none items-start gap-3">
-            {/* 순위를 숫자로 박는다. 카드 순서만으로는 스크롤 중에 몇 번째인지 잃는다 */}
-            <span className="tabular mt-0.5 w-5 shrink-0 text-right text-xs text-muted-foreground">
-              {rank}
-            </span>
             <span className="min-w-0 flex-1">
               <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <span
@@ -260,9 +257,10 @@ function RollupCard({
                 <span className={cn('text-xs font-semibold', grade.text)}>
                   {RISK_GRADE_LABEL[rollup.grade]}
                 </span>
-                {/* 프로젝트명은 한 줄에서 자른다 — 긴 이름이 두세 줄로 흘러 등급 점과
-                    오른쪽 건수 사이가 벌어졌다 */}
-                <span className="min-w-0 flex-1 basis-full truncate font-medium sm:basis-auto">
+                {/* 카드의 제목이라 본문(14px)보다 한 급 크다 — `내 업무`의 프로젝트 카드
+                  제목과 같은 크기다. 한 줄에서 자르는 건 그대로다: 긴 이름이 두세 줄로
+                  흘러 등급 점과 오른쪽 건수 사이가 벌어졌다 */}
+                <span className="min-w-0 flex-1 basis-full truncate text-base font-medium sm:basis-auto">
                   {rollup.name}
                 </span>
                 {/* 팀 화면 멤버 카드와 같은 줄이다 — 힌트 문구도 같이 맞춘다 */}
@@ -311,8 +309,8 @@ function RollupCard({
           </summary>
 
           {/* 카드가 이미 한 프로젝트라 프로젝트 칸을 끄고, 그 자리에 담당자를 세운다 —
-              여기는 남의 업무가 섞여 있어서 누구 것인지가 정보다.
-              급함은 마감일 칸의 D+/D- 배지가 말한다 (밀림/임박 아이콘이 하던 일이다) */}
+            여기는 남의 업무가 섞여 있어서 누구 것인지가 정보다.
+            급함은 마감일 칸의 D+/D- 배지가 말한다 (밀림/임박 아이콘이 하던 일이다) */}
           <div className="mt-3 border-t border-border pt-3">
             <TaskTable
               rows={rollup.tasks.map((task) => ({

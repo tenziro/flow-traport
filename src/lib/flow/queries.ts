@@ -1,31 +1,47 @@
 /**
- * 오늘 화면 데이터 (PRD §6.1). flow MCP 실측 응답 그대로를 타입으로 박았다.
+ * 오늘·팀·리스크 화면 데이터 (PRD §6.1~6.3).
  *
- * MCP가 이미 임박/밀림/방치를 분류해서 준다 → `lib/aggregate/classifyTasks`는 여기서 쓰지 않는다.
- * (worklist 응답에 progress·lastActivityAt이 없어서 재분류할 재료 자체가 없다.)
- * 우리가 하는 집계는 멘션 접기(`groupMentions`) 하나뿐이다.
+ * 전부 REST 한 갈래에서 나온다. 프로젝트 목록을 받아 프로젝트마다 **담당자 필터**로 업무를
+ * 긁고(`listWorkerTasks`), 임박·밀림·방치는 `classifyTasks`가, 포커스 점수는 `scoreFocus`가
+ * 만든다 (`lib/aggregate/*`).
+ *
+ * 예전에는 MCP가 이 셋을 완성된 형태로 줬다. 그런데 방치된 업무는 **건수만** 오고 목록이
+ * 없어서 활동 창을 180일로 넓혀 워크리스트를 한 번 더 부르는 우회가 있었고, 그래도 180일이
+ * 그 도구의 상한이라 그보다 오래된 건 영영 목록으로 못 왔다. REST는 `EDTR_DTTM`(마지막 수정)을
+ * 업무마다 주므로 우리가 직접 가른다 — 창의 상한이 없어졌고 화면이 건수와 목록을 맞출 수 있다.
+ *
+ * 대가는 호출 수다. 화면 하나가 프로젝트 수만큼(실측 59회) 부르고 분당 상한이 120회라,
+ * 업무 조회에 5분 데이터 캐시를 건다 (`listWorkerTasks`의 `TASK_TTL`). 오늘 화면과 내 업무
+ * 화면이 **같은 URL**을 부르는 게 그래서 의도다 — 두 화면이 캐시 한 칸을 나눠 쓴다.
+ * 그래도 상한에 걸리는 프로젝트는 생긴다. 조용히 빠지지 않게 `collectTasks`가 실패한 이름을
+ * 그대로 내고, 화면이 그걸 적는다.
  */
 
-import { rollupProjects, type ProjectRollup, type StandupMember } from "@/lib/aggregate";
+import { classifyTasks, rollupProjects, scoreFocus } from "@/lib/aggregate";
+import type { ClassifiedTask } from "@/lib/aggregate/classifyTasks";
+import type { ProjectRollup, StandupMember } from "@/lib/aggregate/rollupProjects";
+import type { Task } from "@/lib/aggregate/types";
 import { DAY_MS, kstYmd } from "@/lib/aggregate/date";
 import { getSession } from "@/lib/auth";
-import { createFlowMcp, type FlowMcp } from "./mcp";
 import {
   getPostBrief,
+  isChangeLog,
   lastHumanComment,
   listComments,
-  listEmployeeIds,
+  listDivisions,
+  listEmployees,
   listEvents,
   listMentionAlarms,
   listProjects,
   listTaskAlarms,
-  mergeMentionComments,
-  resolvePostId,
+  listWorkerTasks,
+  type FlowDivision,
+  type FlowEmployee,
   type FlowEvent,
+  type FlowTask,
   type MentionAlarm,
   type MentionRow,
 } from "./rest";
-import { searchProjectIds } from "./search";
 import { flowPostUrl } from "./urls";
 
 export interface WorklistTask {
@@ -35,27 +51,25 @@ export interface WorklistTask {
   project: string;
   /** YYYYMMDD */
   endDate: string;
-  /**
-   * 등록일 `YYYYMMDD`. 업무 필터 REST(`MyTask`·`StaleTask`)에만 있다 — 워크리스트·포커스
-   * MCP 응답은 안 준다. 그래서 오늘·팀 화면 표에는 등록일 열이 없다.
-   */
+  /** 등록일 `YYYYMMDD`. 없으면 빈 문자열이 아니라 undefined다 — 열을 아예 안 그린다. */
   regDate?: string;
-  /**
-   * 등록자 실명. 등록일과 같은 자리에서 온다 — 업무 필터 REST(`MyTask.author`)에만 있고
-   * 워크리스트·포커스는 안 준다. 그래서 등록자 열도 내 업무 화면에만 있다.
-   */
+  /** 등록자 실명. 이름뿐이다 — 부서·직급·사진은 flow가 안 준다 (`authorOf`). */
   author?: string;
+  /**
+   * 마지막 수정 `YYYYMMDDHHmmss`. 방치 판정의 재료인데(`classifyTasks`) 화면에는 안 보였다 —
+   * 방치 표가 "왜 방치인지"를 말하려면 이 값이 필요하다. 없으면 undefined다.
+   */
+  editDate?: string;
+  /** `low`\|`normal`\|`high`\|`urgent`. 미설정이면 undefined — 표는 높음·긴급만 그린다. */
+  priority?: string;
   /** 음수면 지남 */
   daysLeft: number;
   link: string;
-  /**
-   * 댓글 API가 요구하는 게시글 ID. 업무 필터 응답에는 있고(`MyTask.postId`) 워크리스트
-   * 응답에는 없다 — 없는 줄은 댓글을 나중에 불러올 수 없다 (`TaskThread`).
-   */
+  /** 댓글 API가 요구하는 게시글 ID (`colabo_commt_srno`). */
   postId?: string;
 }
 
-/** 워크리스트가 주는 건 발신자·시각·제목뿐이다. 댓글 본문은 `MentionRow`쪽 — 알림 REST에서 붙인다. */
+/** 멘션 한 줄. 본문·읽음은 알림에서, 업무명·링크·상태는 게시글 상세에서 온다. */
 export interface WorklistMention extends MentionRow {
   title: string;
   link: string;
@@ -69,18 +83,12 @@ export interface Worklist {
   mentions: WorklistMention[];
 }
 
-export interface FocusPick {
-  taskSrno: number;
-  title: string;
-  project: string;
-  status: string;
-  endDate: string;
-  daysLeft: number;
+/** 포커스 한 줄. 업무 줄에 점수·이유·열기를 얹은 것이라 `WorklistTask`를 그대로 넓힌다. */
+export interface FocusPick extends WorklistTask {
   score: number;
   reasons: string[];
   comments: number;
   mentions: number;
-  link: string;
 }
 
 /** 담당 업무·내가 올린 글에 붙은 알림 한 줄 (PRD §13 B1·B2). */
@@ -103,25 +111,116 @@ export interface TaskNews {
   title?: string;
 }
 
-
 export interface TodayData {
   /** 조회 기준 시각. 렌더 중 `Date.now()`를 부르지 않으려고 여기서 찍어 내려보낸다. */
   now: number;
   worklist: Worklist;
-  /** MCP 계약이 깨지면 null. 워크리스트만으로도 화면은 선다. */
+  /** 댓글 조회가 통째로 막히면 null. 나머지 표만으로도 화면은 선다. */
   focus: FocusPick[] | null;
-  /** 방치된 업무. 워크리스트가 목록 없이 건수만 줘서 따로 만들어 낸다 (`staleTasks`). */
+  /** 방치된 업무. 30일 넘게 손 안 댄 밀린 업무다 (`classifyTasks`). */
   stale: WorklistTask[] | null;
-  /** 프로젝트 이름 → projectId. 워크리스트가 projectId를 안 줘서 쓰기 액션에 필요하다. */
+  /** 프로젝트 이름 → projectId. 업무 줄은 이름만 들고 있어서 쓰기 액션에 필요하다. */
   projectIds: ReadonlyMap<string, string>;
+  /** 페이지 상한(300건)에 걸린 프로젝트 이름. */
+  truncated: string[];
+  /** 못 읽은 프로젝트 이름 (권한·429). 둘 중 하나라도 있으면 숫자가 실제보다 적다는 뜻이다. */
+  failed: string[];
 }
 
-/** 로그인 세션의 토큰으로 MCP 클라이언트를 연다. 서버 액션도 이걸 쓴다. */
-export async function flowMcp(): Promise<FlowMcp> {
-  const session = await getSession();
-  if (!session) throw new Error("세션 없음");
-  return createFlowMcp(session.accessToken);
+/* ── 프로젝트 훑기 ─────────────────────────────────────────────────────── */
+
+/** 프로젝트 한 개의 조회 결과. */
+export interface ProjectTasks {
+  projectId: string;
+  name: string;
+  tasks: FlowTask[];
 }
+
+/** 프로젝트를 몇 개씩 동시에 훑을지. */
+const CONCURRENCY = 10;
+
+/**
+ * 프로젝트 전량 × 넘긴 담당자들의 업무 (PRD §6.5). 오늘·내 업무·팀 화면이 전부 여기서 선다.
+ *
+ * `userIds`는 **반드시 세션이나 부서 명단에서 채운다** (PRD §8.1). 공용 API 키에 남의 ID를
+ * 넣으면 그 사람 업무가 그대로 나온다 — 요청에서 받은 값을 여기 넘기면 그게 유출 경로다.
+ *
+ * 한 프로젝트가 막혀도(권한·429) 나머지는 그대로 보여 준다. 실패한 이름은 `failed`로 내고,
+ * 페이지 상한(300건)에 걸린 이름은 `truncated`로 낸다 — 조용히 적게 보이는 게 제일 나쁘다.
+ *
+ * ponytail: 풀 대신 10개씩 잘라 돈다. 느린 프로젝트가 자기 묶음만 붙잡는데, 실측 2.1초라
+ * 그 손해를 신경 쓸 이유가 없다.
+ */
+export async function collectTasks(
+  userIds: readonly string[],
+): Promise<{ rows: ProjectTasks[]; truncated: string[]; failed: string[] }> {
+  const projects = [...(await listProjects())].map(([name, projectId]) => ({ name, projectId }));
+
+  const rows: ProjectTasks[] = [];
+  const truncated: string[] = [];
+  const failed: string[] = [];
+
+  for (let i = 0; i < projects.length; i += CONCURRENCY) {
+    const batch = await Promise.all(
+      projects.slice(i, i + CONCURRENCY).map(async (p) => {
+        const got = await listWorkerTasks(p.projectId, userIds).catch(() => null);
+        if (!got) {
+          failed.push(p.name);
+          return null;
+        }
+        if (got.hasMore) truncated.push(p.name);
+        return { ...p, tasks: got.tasks };
+      }),
+    );
+    for (const row of batch) if (row) rows.push(row);
+  }
+
+  return { rows, truncated, failed };
+}
+
+/** 업무 한 건 → 집계 레이어 입력. 날짜는 flow 원본 문자열 그대로 넘긴다 (`lib/aggregate/types`). */
+function toTask(task: FlowTask, project: ProjectTasks): Task {
+  return {
+    id: task.taskId,
+    title: task.title,
+    projectId: project.projectId,
+    projectName: project.name,
+    due: task.endDate || null,
+    // 밀림과 방치를 가르는 유일한 재료다. 이게 비면 그 업무는 방치로 떨어진다.
+    lastActivityAt: task.editDate || null,
+    status: task.status || null,
+    done: task.done,
+    url: flowPostUrl(project.projectId, task.postId),
+  };
+}
+
+/**
+ * 분류 결과 한 건 → 화면 한 줄.
+ *
+ * `regDate`·`author`·`postId`는 집계 타입에 없어서 원본에서 다시 꺼낸다 — 그 셋은 화면
+ * 표시용이고 분류에는 안 쓴다.
+ */
+function toRow(entry: ClassifiedTask, origin: ReadonlyMap<string, FlowTask>): WorklistTask {
+  const { task } = entry;
+  const flow = origin.get(task.id);
+  return {
+    taskSrno: Number(task.id),
+    title: task.title,
+    status: task.status ?? "",
+    project: task.projectName ?? "",
+    endDate: task.due ?? "",
+    regDate: flow?.regDate || undefined,
+    author: flow?.author || undefined,
+    editDate: flow?.editDate || undefined,
+    priority: flow?.priority || undefined,
+    // 마감일이 없으면 0이다. 그 줄에는 D-DAY 배지를 안 그린다 (task-table.tsx).
+    daysLeft: entry.daysUntilDue ?? 0,
+    link: task.url ?? "",
+    postId: flow?.postId,
+  };
+}
+
+/* ── 일정 (PRD §13 B3) ─────────────────────────────────────────────────── */
 
 /** 일정 창의 길이. 오늘을 1일째로 세서 오늘 + 엿새다. */
 export const EVENT_WINDOW_DAYS = 7;
@@ -153,73 +252,203 @@ export async function loadWeekEvents(): Promise<{
   return { today, events };
 }
 
+/* ── 오늘 화면 (PRD §6.1) ──────────────────────────────────────────────── */
+
 export async function loadToday(): Promise<TodayData> {
-  const mcp = await flowMcp();
+  const session = await getSession();
+  if (!session) throw new Error("세션 없음");
   const now = Date.now();
 
-  // ponytail: 보조 데이터는 실패해도 null로 흘린다. flow_list_alarms가 서버측 스키마
-  // 오류로 죽는 걸 이미 봤다(docs/bug-report.md) — 한 도구 때문에 화면 전체를 날리지 않는다.
-  const [worklist, picks, wide, alarms] = await Promise.all([
-    mcp.call<Worklist>("flow_get_my_worklist", { format: "structured" }),
-    // 화면에 뿌리는 포커스는 5개지만 `FOCUS_CHECK`개를 받는다 — 내가 이미 답한 피드백 업무를
-    // 걸러내면서 5개를 채우려면 여유분이 필요하다 (`pickFocus`).
-    mcp
-      .call<{ picks: FocusPick[] }>("flow_suggest_my_focus", {
-        format: "structured",
-        topN: FOCUS_CHECK,
-      })
-      .then((r) => r.picks)
-      .catch(() => null),
-    // 같은 워크리스트를 활동 창만 넓혀서 한 번 더 부른다 — 방치된 업무 목록용 (`staleTasks`).
-    mcp
-      .call<Worklist>("flow_get_my_worklist", { format: "structured", overdueActiveDays: 180 })
-      .catch(() => null),
-    // 멘션 댓글 본문은 워크리스트에 없다. 실패하면 본문만 빠지고 행은 그대로 뜬다.
-    listMentionAlarms().catch(() => null),
+  // 담당자 필터 값은 **여기서** 세션으로 채운다 (PRD §8.1).
+  // 멘션은 곁가지라 실패해도 null로 흘린다 — 알림 하나 때문에 화면 전체를 날리지 않는다.
+  const [{ rows, truncated, failed }, alarms] = await Promise.all([
+    collectTasks([session.userId]),
+    listMentionAlarms(MENTION_DAYS).catch(() => null),
   ]);
 
-  const stale = staleTasks(worklist, wide);
+  const projectIds = new Map(rows.map((row) => [row.name, row.projectId]));
+  const origin = new Map(rows.flatMap((row) => row.tasks.map((t) => [t.taskId, t] as const)));
+  const tasks = rows.flatMap((row) => row.tasks.map((t) => toTask(t, row)));
 
-  // 포커스를 고르기 전에 부른다 — `pickFocus`가 픽마다 `projectId`로 게시글을 찾아야 한다.
-  // 포커스 5개가 아니라 픽 20개 이름이 들어오지만 이름 검색은 병렬 한 왕복이고(`searchProjectIds`)
-  // MCP는 분당 상한이 없다. REST는 프로젝트 전량 목록 한 번으로 개수가 그대로다.
-  const projectIds = await projectIdMap(
-    mcp,
-    projectNames([...worklist.overdueActive, ...(picks ?? []), ...(stale ?? [])]),
-  );
+  const classified = classifyTasks(tasks, now);
+  const mentions = await myMentions(alarms, session.userId);
 
-  const focus = picks ? await pickFocus(picks, projectIds, worklist.user.id) : null;
-
-  // 알림 수신자가 지금 로그인한 사람과 같은 것만 붙는다 (rest.ts). 워크리스트가 주는
-  // `user.id`가 알림의 `receiverId`와 같은 공간이다 — 둘 다 flow user_id다.
-  const merged = alarms
-    ? mergeMentionComments(worklist.mentions, alarms, worklist.user.id)
-    : worklist.mentions;
-  const mentions = await withMentionStatus(merged);
   return {
     now,
     worklist: {
-      ...worklist,
+      user: { id: session.userId, name: session.fullname },
+      counts: {
+        imminent: classified.counts.imminent,
+        overdueActive: classified.counts.overdueActive,
+        overdueStale: classified.counts.overdueStale,
+        mentions: mentions.length,
+      },
+      imminent: classified.imminent.map((c) => toRow(c, origin)),
+      overdueActive: classified.overdueActive.map((c) => toRow(c, origin)),
       mentions,
     },
-    focus,
-    stale,
+    focus: await pickFocus(tasks, mentions, origin, session.userId, now),
+    stale: classified.overdueStale.map((c) => toRow(c, origin)),
     projectIds,
+    truncated,
+    failed,
   };
 }
 
+/* ── 오늘의 포커스 (PRD §6.1.3) ────────────────────────────────────────── */
+
+/** 오늘의 포커스에 올리는 줄 수. */
+const FOCUS_LIMIT = 5;
+
 /**
- * 헤더 알림 종에 올릴 소식 (PRD §13 B1·B2).
+ * 5줄을 채우려고 확인해 보는 픽 수. 여기까지만 댓글을 본다 — 픽마다 REST 1회라
+ * 상한(분당 120회)에서 이 숫자가 곧 비용이다.
+ */
+const FOCUS_CHECK = 8;
+
+/** 댓글 응답을 데이터 캐시에 두는 시간(초). 같은 화면을 다시 열어도 안 부른다. */
+const FOCUS_COMMENT_TTL = 300;
+
+/**
+ * 포커스 5줄. **피드백 상태인데 마지막 댓글을 내가 쓴 업무는 내린다.**
  *
- * 오늘 화면 카드에 있던 걸 셸로 올렸다 — 세 화면 어디서나 같은 종이 뜬다.
+ * 피드백은 "상대 답을 기다리는 중"이라 내가 답을 남긴 뒤에는 내가 할 일이 없는데, 날짜가
+ * 바뀌어도 점수가 높아서(마감 지남 + 댓글 열기) 오늘의 포커스에 계속 남아 있었다. 상태가
+ * 완료로 넘어가지 않는 업무가 자리를 잡고 앉으면 정작 오늘 할 일이 밀려난다.
+ *
+ * 그래서 앞 `FOCUS_CHECK`개의 댓글을 받는다. 한 번의 응답이 **댓글 수**(모달의 "댓글 n개")와
+ * **마지막 댓글 작성자**를 같이 준다 — 예전에는 게시글을 먼저 찾느라 피드백 픽마다 REST가
+ * 2회였는데(`resolvePostId`), 이제 `postId`가 업무 응답에 이미 있어서 1회다.
+ *
+ * 못 알아내면 남긴다 — 안 보이게 하는 쪽으로 틀리면 일을 놓친다.
+ */
+async function pickFocus(
+  tasks: readonly Task[],
+  mentions: readonly WorklistMention[],
+  origin: ReadonlyMap<string, FlowTask>,
+  me: string,
+  now: number,
+): Promise<FocusPick[]> {
+  // 열기 신호 = 이 업무에 붙은 멘션 수. 멘션은 `postId`로 오고 업무는 `taskId`라 한 번 옮긴다.
+  const taskIdByPost = new Map([...origin.values()].map((t) => [t.postId, t.taskId] as const));
+  const signals = new Map<string, number>();
+  for (const mention of mentions) {
+    const taskId = mention.postId && taskIdByPost.get(mention.postId);
+    if (taskId) signals.set(taskId, (signals.get(taskId) ?? 0) + 1);
+  }
+
+  const items = scoreFocus(tasks, signals, now, { limit: FOCUS_CHECK });
+  const threads = await Promise.all(
+    items.map((item) => {
+      const postId = origin.get(item.task.id)?.postId;
+      return postId ? listComments(postId, FOCUS_COMMENT_TTL).catch(() => null) : null;
+    }),
+  );
+
+  return items
+    .flatMap((item, i) => {
+      const comments = threads[i];
+      const last = comments && lastHumanComment(comments);
+      if (item.task.status === "피드백" && last?.registerId.toLowerCase() === me.toLowerCase()) {
+        return [];
+      }
+      return [
+        {
+          ...toRow(item.classified, origin),
+          score: item.score,
+          reasons: item.reasons,
+          // 변경 로그는 뺀다 — 실측 14건 중 10건이 그것이라, 세면 "댓글 10개"가 사람 말이
+          // 하나도 없는 업무를 대화가 오간 업무처럼 보이게 한다.
+          comments: (comments ?? []).filter((c) => !isChangeLog(c.systemCode)).length,
+          mentions: signals.get(item.task.id) ?? 0,
+        },
+      ];
+    })
+    .slice(0, FOCUS_LIMIT);
+}
+
+/* ── 멘션 (PRD §6.1, §13 A5) ──────────────────────────────────────────── */
+
+/**
+ * 멘션을 얼마나 거슬러 볼지(일). "나를 부른 사람들"은 최근 자리다.
+ *
+ * 30일이었다. 그런데 `days`는 결국 **알림 페이지를 몇 장 넘길지**만 정한다 (한 장 100건) —
+ * 실측으로 7일도 30일도 최신 20줄이 글자 하나까지 같았고 (2026-08-04), 30일 쪽만 페이지를
+ * 두 배로 넘겼다. 같은 화면에 호출만 두 배면 이레가 맞다.
+ */
+const MENTION_DAYS = 7;
+
+/**
+ * 멘션 줄 수 상한. 이 수가 곧 게시글 상세 호출 수의 상한이다 (분당 120회).
+ * 화면은 이걸 업무 단위로 다시 접는다 (`groupMentions`) — 실측 20줄이 업무 12건이라
+ * 12줄이면 접힌 뒤 카드 수가 사실상 같다.
+ */
+const MENTION_LIMIT = 12;
+
+/** 게시글 상세를 데이터 캐시에 두는 시간(초). 헤더 종이 같은 글을 또 부른다 (`NEWS_BRIEF_TTL`). */
+const MENTION_BRIEF_TTL = 300;
+
+/**
+ * 내 멘션 알림 → 화면 줄 (BUG-028).
+ *
+ * `receiverId`가 로그인한 사람과 다른 건 **버린다** — API Key가 발급자 한 명에게 묶여 있어서
+ * (rest.ts 상단 주석), 이 필터가 남의 멘션이 새는 걸 막는다. `taskNews`와 같은 방어선이다.
+ *
+ * 알림은 업무명도 상태도 안 준다 — 게시글 상세에서 셋(제목·링크·상태)을 한 번에 받는다.
+ * `postId`를 중복 제거하고 병렬로 부른다: 같은 업무에 멘션이 여러 개 달리는 게 흔해서
+ * 실측 17건이 게시글 12개였다. 실패는 삼킨다 — 그 줄만 제목이 비고 링크는 우리가 조립한다.
+ */
+async function myMentions(
+  alarms: readonly MentionAlarm[] | null,
+  me: string,
+): Promise<WorklistMention[]> {
+  if (!alarms) return [];
+
+  const mine = alarms
+    .filter((a) => a.receiverId.toLowerCase() === me.toLowerCase())
+    .sort((a, b) => b.registeredDateTime.localeCompare(a.registeredDateTime))
+    .slice(0, MENTION_LIMIT);
+  if (!mine.length) return [];
+
+  const briefs = new Map(
+    await Promise.all(
+      [...new Set(mine.map((a) => a.postId))].map(
+        async (postId) =>
+          [postId, await getPostBrief(postId, MENTION_BRIEF_TTL).catch(() => null)] as const,
+      ),
+    ),
+  );
+
+  return mine.map((a) => {
+    const brief = briefs.get(a.postId);
+    return {
+      // 실명이 있으면 실명이다 — `djseo7`보다 `서동조`가 읽힌다.
+      from: a.registerName || a.registerId,
+      at: a.registeredDateTime,
+      content: a.content?.trim() || undefined,
+      isReply: a.replyId !== "-1",
+      projectId: a.projectId || undefined,
+      id: a.alarmId || undefined,
+      // flow가 `readYn`을 안 주면 "안 읽었다"고 단정하지 않는다 — 읽음 표시가 헛돌면
+      // 눌러도 화면이 그대로라 사용자가 고장으로 읽는다.
+      unread: a.readYn === "N",
+      postId: a.postId,
+      status: brief?.status ?? undefined,
+      title: brief?.title ?? "제목 없는 업무",
+      // flow가 만든 짧은 링크가 있으면 그걸 쓴다 — 로그인 화면을 건너서도 대상을 지킨다.
+      link: brief?.url ?? flowPostUrl(a.projectId, a.postId),
+    };
+  });
+}
+
+/* ── 헤더 알림 종 (PRD §13 B1·B2) ─────────────────────────────────────── */
+
+/**
+ * 헤더 알림 종에 올릴 소식.
  *
  * 알림은 이름을 하나도 안 준다 (`projectId`·`postId`뿐). 프로젝트명은 전량 목록에서,
  * 업무명과 링크는 게시글 상세에서 풀어 붙인다. 이름 조회는 전부 실패를 삼킨다 — 못 풀면
  * 그 줄만 이름이 빠지고 소식은 그대로 뜬다.
- *
- * ponytail: 게시글 상세는 소식 줄 수(`NEWS_LIMIT`)만큼 붙는다. `postId`가 겹치는 알림은
- * 한 번만 부르고(같은 업무에 댓글이 여러 개 달리는 게 흔해서 실측 12건이 게시글 3~4개였다)
- * 나머지는 병렬이라 왕복 한 번 값이다.
  *
  * **종이 1분마다 이걸 다시 부른다** (`/api/news`). 제목·링크는 안 바뀌는 값이라 캐시에
  * 올려서(`NEWS_BRIEF_TTL`) 폴링 한 번이 알림 목록 + 프로젝트 목록 두 번으로 끝난다 —
@@ -247,7 +476,6 @@ export async function loadNews(me: string): Promise<TaskNews[] | null> {
       ...n,
       project: nameOf.get(n.projectId),
       title: brief?.title ?? undefined,
-      // flow가 만든 짧은 링크가 있으면 그걸 쓴다 — 로그인 화면을 건너서도 대상을 지킨다.
       url: brief?.url ?? n.url,
     };
   });
@@ -272,8 +500,7 @@ const NEWS_BRIEF_TTL = 300;
  * 담당 업무·내가 올린 글 알림을 카드용 한 줄로 (PRD §13 B1·B2).
  *
  * `receiverId`가 로그인한 사람과 다른 건 **버린다** — API Key가 발급자 한 명에게 묶여 있어서
- * (rest.ts 상단 주석), 이 필터가 남의 알림이 새는 걸 막는다. `mergeMentionComments`와 같은
- * 방어선이다.
+ * (rest.ts 상단 주석), 이 필터가 남의 알림이 새는 걸 막는다. `myMentions`와 같은 방어선이다.
  */
 export function taskNews(alarms: readonly MentionAlarm[], me: string): TaskNews[] {
   return alarms
@@ -295,117 +522,10 @@ export function taskNews(alarms: readonly MentionAlarm[], me: string): TaskNews[
     .slice(0, NEWS_LIMIT);
 }
 
-/** 오늘의 포커스에 올리는 줄 수. */
-const FOCUS_LIMIT = 5;
-
-/**
- * 5줄을 채우려고 확인해 보는 픽 수. 여기까지만 댓글을 본다 — 픽 20개를 다 확인하면
- * 피드백 업무마다 REST 2회라 왕복이 최대 40번이다(분당 상한 120회).
- */
-const FOCUS_CHECK = 8;
-
-/** 마지막 댓글 응답을 데이터 캐시에 두는 시간(초). 같은 화면을 다시 열어도 안 부른다. */
-const FOCUS_COMMENT_TTL = 300;
-
-/**
- * 포커스 5줄. **피드백 상태인데 마지막 댓글을 내가 쓴 업무는 내린다.**
- *
- * 피드백은 "상대 답을 기다리는 중"이라 내가 답을 남긴 뒤에는 내가 할 일이 없는데, 날짜가
- * 바뀌어도 점수가 높아서(마감 지남 + 댓글 열기) 오늘의 포커스에 계속 남아 있었다. 상태가
- * 완료로 넘어가지 않는 업무가 자리를 잡고 앉으면 정작 오늘 할 일이 밀려난다.
- *
- * 댓글 작성자는 픽에 없다 — 게시글을 찾고(REST 1회) 댓글을 받아(REST 1회) 봐야 안다.
- * 그래서 **피드백 픽만**, 앞에서 `FOCUS_CHECK`개까지만 확인한다. 실측으로 픽 8개 중
- * 피드백이 3~5개라 왕복 6~10번이다.
- */
-async function pickFocus(
-  picks: FocusPick[],
-  projectIds: Map<string, string>,
-  me: string,
-): Promise<FocusPick[]> {
-  const head = picks.slice(0, FOCUS_CHECK);
-  const answered = await Promise.all(head.map((pick) => answeredByMe(pick, projectIds, me)));
-  return head.filter((_, i) => !answered[i]).slice(0, FOCUS_LIMIT);
-}
-
-/**
- * 피드백 업무의 마지막 사람 댓글을 내가 썼는지.
- *
- * 못 알아내면 `false`다 — 안 보이게 하는 쪽으로 틀리면 일을 놓친다. 게시글을 못 찾는 경우
- * (같은 이름 100건 초과, 이름을 못 푼 프로젝트)도 그대로 남긴다.
- */
-async function answeredByMe(
-  pick: FocusPick,
-  projectIds: Map<string, string>,
-  me: string,
-): Promise<boolean> {
-  if (pick.status !== "피드백") return false;
-  const projectId = projectIds.get(pick.project);
-  if (!projectId) return false;
-
-  try {
-    const postId = await resolvePostId(projectId, String(pick.taskSrno), pick.title);
-    if (!postId) return false;
-    const last = lastHumanComment(await listComments(postId, FOCUS_COMMENT_TTL));
-    return last?.registerId.toLowerCase() === me.toLowerCase();
-  } catch {
-    return false;
-  }
-}
-
-/**
- * 방치된 업무 목록. 워크리스트는 건수(`counts.overdueStale`)만 주고 목록은 안 준다 —
- * 활동 창(`overdueActiveDays`, 기본 30일)을 상한인 180일로 넓혀 한 번 더 부르고,
- * 기본 창의 "밀리는 업무"에 없는 것만 골라낸다. 30일은 넘었지만 180일 안에 손댄 업무다.
- *
- * ponytail: 180일까지가 이 도구의 상한이라 그보다 오래 방치된 건 여전히 목록으로 못 온다.
- * 화면에서 `counts.overdueStale`와 목록 수를 비교해 못 가져온 건수를 그대로 밝힌다.
- */
-function staleTasks(worklist: Worklist, wide: Worklist | null): WorklistTask[] | null {
-  if (!wide) return null;
-  const active = new Set(worklist.overdueActive.map((t) => t.taskSrno));
-  return wide.overdueActive
-    .filter((t) => !active.has(t.taskSrno))
-    .sort((a, b) => a.daysLeft - b.daysLeft); // 많이 지난 것부터 (daysLeft는 음수)
-}
-
-/**
- * 멘션 줄에 업무 상태를 붙인다 (BUG-028).
- *
- * 워크리스트도 알림도 상태를 안 준다. 전에는 이미 받아 둔 담당 업무 목록에서 링크로 찾아
- * 빌렸는데, 멘션은 **내가 담당이 아닌** 업무에도 온다 — 실측 17건 중 12건이 그 목록에
- * 아예 없어서 배지가 빠졌다. 그래서 게시글 상세에서 직접 읽는다.
- *
- * ponytail: `postId`를 중복 제거하고 병렬로 부른다 (`loadNews`와 같은 방식) — 같은 업무의
- * 멘션이 여러 건이라 실측 17건이 게시글 12개였다. 실패는 삼킨다: 그 줄만 배지가 빠진다.
- * 무거워지면 응답을 캐시하는 게 다음 수다.
- */
-async function withMentionStatus(mentions: WorklistMention[]): Promise<WorklistMention[]> {
-  const ids = [...new Set(mentions.map((m) => m.postId).filter(Boolean))] as string[];
-  if (!ids.length) return mentions;
-  const statusOf = new Map(
-    await Promise.all(
-      ids.map(
-        async (postId) =>
-          [postId, (await getPostBrief(postId).catch(() => null))?.status ?? undefined] as const,
-      ),
-    ),
-  );
-  return mentions.map((m) =>
-    m.postId ? { ...m, status: statusOf.get(m.postId) } : m,
-  );
-}
-
-/** 업무 목록에서 프로젝트 이름만 뽑는다. */
-const projectNames = (tasks: readonly { project: string }[]) => tasks.map((t) => t.project);
-
 /* ── 리스크 보드 · 팀 (PRD §6.2, §6.3) ────────────────────────────────── */
 
-export interface Division {
-  divisionCode: string;
-  divisionName: string;
-  upperDivisionCode: string;
-}
+/** 부서 탭 한 칸 (api-spec §4.1). */
+export type Division = FlowDivision;
 
 export interface Standup {
   dept: string;
@@ -419,10 +539,18 @@ export interface TeamData {
   dept: string;
   divisions: Division[];
   standup: Standup;
-  /** 프로젝트 이름 → projectId. 스탠드업이 projectId를 안 줘서 쓰기 액션에 필요하다. */
+  /** 프로젝트 이름 → projectId. 업무 줄은 이름만 들고 있어서 쓰기 액션에 필요하다. */
   projectIds: ReadonlyMap<string, string>;
   /** 부서원 이름 → 오늘 일정 (PRD §13 B3). 조회가 실패한 사람은 키가 아예 없다. */
   events: ReadonlyMap<string, FlowEvent[]>;
+  /** 페이지 상한(300건)에 걸린 프로젝트 이름. */
+  truncated: string[];
+  /**
+   * 못 읽은 프로젝트 이름 (권한·429). 오늘·내 업무 화면만 이걸 적고 있었고 팀·리스크는
+   * `collectTasks`가 준 걸 버렸다 — 부서 전체를 훑는 화면이라 429가 제일 잘 나는 자리인데
+   * 거기서만 조용히 적게 보였다 (bug-report BUG-040).
+   */
+  failed: string[];
 }
 
 export interface RiskData extends TeamData {
@@ -434,68 +562,89 @@ export interface RiskData extends TeamData {
 /**
  * 부서 스탠드업 + 부서 목록. `/team`과 `/risk`가 같은 걸 쓴다.
  *
- * 두 화면 모두 `flow_get_team_standup` 한 번이면 끝난다 — 멤버별 임박/밀림 업무를
- * 통째로 주기 때문이다. 프로젝트 59개를 개별 조회하지 않는다 (`rollupProjects` 주석).
+ * 부서원 명단을 먼저 받고(`listEmployees`), 그 사람들 `userId`를 **한 번에** 담당자 필터에
+ * 넣는다 — 같은 컬럼의 필터 레코드끼리는 OR라서(`listWorkerTasks`) 여덟 명이든 한 명이든
+ * 프로젝트당 조회 1회다. 그다음 업무를 담당자별로 갈라 분류한다.
+ *
+ * 내 부서는 세션에 이미 있다 — 로그인할 때 `/user/employees/me`로 받아 둔 값이다. 대가:
+ * 부서가 바뀐 사람은 세션이 만료될 때까지(7일) 옛 부서로 열린다 — 부서 탭으로 바꿔 볼 수
+ * 있고, 다시 로그인하면 갱신된다.
  */
 export async function loadTeam(dept?: string): Promise<TeamData> {
   const session = await getSession();
   if (!session) throw new Error("세션 없음");
-  const mcp = createFlowMcp(session.accessToken);
   const now = Date.now();
-
-  const divisionsP = mcp
-    .call<{ divisions: Division[] }>("flow_list_divisions")
-    .then((r) => r.divisions);
-  // 내 부서는 세션에 이미 있다 — 로그인할 때 `flow_get_my_profile`로 받아 둔 값이다
-  // (`api/auth/callback/flow`). 여기서 다시 부르면 스탠드업 **앞에** MCP 왕복이 하나
-  // 직렬로 붙는다. 대가: 부서가 바뀐 사람은 세션이 만료될 때까지(7일) 옛 부서로 열린다 —
-  // 부서 탭으로 바꿔 볼 수 있고, 다시 로그인하면 갱신된다.
   const target = dept ?? session.divisionName;
 
-  const [divisions, standup] = await Promise.all([
-    divisionsP,
-    mcp.call<Standup>("flow_get_team_standup", { dept: target, format: "structured" }),
+  // 부서 탭은 곁가지다 — 목록을 못 받아도 지금 부서 화면은 선다.
+  const [divisions, employees] = await Promise.all([
+    listDivisions().catch(() => [] as Division[]),
+    listEmployees(target),
   ]);
 
-  // 스탠드업이 나온 다음에 부른다 — 이름·부서원 목록이 여기서 나온다.
-  const [projectIds, events] = await Promise.all([
-    projectIdMap(
-      mcp,
-      standup.members.flatMap((m) => projectNames([...m.imminent, ...m.blocked])),
-    ),
-    memberEvents(standup.members, target, now),
-  ]);
+  const { rows, truncated, failed } = await collectTasks(employees.map((e) => e.userId));
+  const projectIds = new Map(rows.map((row) => [row.name, row.projectId]));
+  const origin = new Map(rows.flatMap((row) => row.tasks.map((t) => [t.taskId, t] as const)));
 
-  return { now, dept: target, divisions, standup, projectIds, events };
+  // 업무를 담당자별로 가른다. 공동 담당이면 같은 업무가 여러 사람 밑에 선다 — flow가 그렇게
+  // 걸어 둔 것이고, 스탠드업은 "이 사람이 뭘 물고 있나"를 보는 자리다.
+  const members = employees.map((employee): StandupMember => {
+    const mine = rows.flatMap((row) =>
+      row.tasks
+        .filter((t) => t.workers.some((w) => sameUser(w.userId, employee.userId)))
+        .map((t) => toTask(t, row)),
+    );
+    const classified = classifyTasks(mine, now);
+    return {
+      name: employee.fullname || employee.userId,
+      role: employee.responsibility ?? "",
+      imminent: classified.imminent.map((c) => toRow(c, origin)),
+      blocked: classified.overdueActive.map((c) => toRow(c, origin)),
+      staleCount: classified.counts.overdueStale,
+    };
+  });
+
+  return {
+    now,
+    dept: target,
+    divisions,
+    standup: {
+      dept: target,
+      counts: {
+        members: members.length,
+        imminent: members.reduce((sum, m) => sum + m.imminent.length, 0),
+        blocked: members.reduce((sum, m) => sum + m.blocked.length, 0),
+      },
+      members,
+    },
+    projectIds,
+    events: await memberEvents(employees, now),
+    truncated,
+    failed,
+  };
 }
+
+/** 우리 기관 사람의 `userId`는 이메일이라 대소문자가 섞여 온다. */
+const sameUser = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /** 팀원 일정 조회 상한. 부서원 20명까지 본다 — 그 위는 화면도 못 읽는다. */
 const EVENT_MEMBER_LIMIT = 20;
 
 /**
- * 부서원별 오늘 일정 (PRD §13 B3). 스탠드업은 이름만 주므로 `userId`를 먼저 해소한다.
+ * 부서원별 오늘 일정 (PRD §13 B3).
  *
  * 부서원 한 명에 REST 1회다. 실패한 사람은 맵에서 빠지고 나머지는 그대로 뜬다 —
  * 일정 하나 때문에 팀 화면을 날리지 않는다.
  */
 async function memberEvents(
-  members: readonly StandupMember[],
-  dept: string,
+  employees: readonly FlowEmployee[],
   now: number,
 ): Promise<Map<string, FlowEvent[]>> {
-  const ids = await listEmployeeIds(dept).catch(() => null);
-  if (!ids) return new Map();
-
   const today = kstYmd(now);
-  const targets = members.slice(0, EVENT_MEMBER_LIMIT).flatMap((m) => {
-    const userId = ids.get(m.name);
-    return userId ? [[m.name, userId] as const] : [];
-  });
-
   const results = await Promise.all(
-    targets.map(([name, userId]) =>
-      listEvents(`${today}000000`, `${today}235959`, userId)
-        .then((events) => [name, events] as const)
+    employees.slice(0, EVENT_MEMBER_LIMIT).map((e) =>
+      listEvents(`${today}000000`, `${today}235959`, e.userId)
+        .then((events) => [e.fullname || e.userId, events] as const)
         .catch(() => null),
     ),
   );
@@ -507,22 +656,4 @@ export async function loadRisk(dept?: string): Promise<RiskData> {
   const team = await loadTeam(dept);
   const rollups = rollupProjects(team.standup.members, team.projectIds);
   return { ...team, rollups, unresolved: rollups.filter((r) => r.projectId === null).length };
-}
-
-/**
- * 프로젝트 이름 → projectId. 스탠드업이 projectId를 주지 않아서 필요하다.
- *
- * 두 출처를 겹친다. REST 전량 목록은 **API Key 발급자 기준**이라 화면에 안 뜬 프로젝트까지
- * 알지만 다른 사람이 로그인하면 그 사람 것이 아니고, 검색은 로그인한 사람 권한으로 돌지만
- * **화면에 뜬 이름**만 풀 수 있다. 그래서 검색 결과를 위에 덮는다 — 겹치는 이름은 항상
- * 로그인한 사람 쪽이 이긴다.
- *
- * 검색은 예전에도 매번 돌았다 (MCP 목록 도구가 죽어 있어서 — BUG-007). 늘어난 건 REST 한 번이다.
- */
-async function projectIdMap(mcp: FlowMcp, names: Iterable<string>): Promise<Map<string, string>> {
-  const [listed, searched] = await Promise.all([
-    listProjects().catch(() => null),
-    searchProjectIds(mcp, names),
-  ]);
-  return new Map([...(listed ?? []), ...searched]);
 }

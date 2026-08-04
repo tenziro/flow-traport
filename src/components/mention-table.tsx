@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { loadThread, type ThreadResult } from "@/app/(app)/actions";
 import { FlowLink } from "@/components/flow-link";
 import { IconLastComment } from "@/components/icons";
 import { LinkedText } from "@/components/linked-text";
@@ -8,7 +9,9 @@ import { MentionActions } from "@/components/mention-actions";
 import { Button } from "@/components/motion/button/base";
 import { MorphingModal } from "@/components/motion/morphing-modal";
 import { Table, type TableColumn } from "@/components/motion/table";
+import { CommentRowsSkeleton } from "@/components/skeletons";
 import { StatusPill } from "@/components/status-pill";
+import { CommentRows } from "@/components/thread-view";
 import type { MentionGroup } from "@/lib/aggregate";
 import { cn, fmtDateTime } from "@/lib/utils";
 
@@ -148,8 +151,13 @@ const descIdOf = (group: MentionTableRow) => `mention-detail-${group.taskId}`;
 /**
  * 멘션 상세 모달. 표 줄은 마지막 말 한 줄만 보여주니, 앞뒤 대화는 여기서 읽는다.
  *
- * 알림은 **나를 부른 댓글만** 준다 — 부모 댓글은 안 와서 진짜 트리로는 못 세운다.
- * 답글은 한 칸 들여쓰기와 아이콘 색까지가 정직한 선이다.
+ * **열면 바로 스레드 전량을 부른다** (v4.2.0). 알림은 나를 부른 댓글만 주는데, 부른 이유는
+ * 대개 그 앞뒤 말에 있다 — 눌러야 나오는 `댓글 다 보기`를 두면 맥락 없는 두세 줄이 기본
+ * 화면이 된다. 대신 **나를 부른 줄은 면과 아이콘 색을 올려서** 스무 줄 사이에서도 찾는다
+ * (`ThreadComment.called` — 본문의 멘션 마크업으로 서버가 표시한다).
+ *
+ * 못 가져오면 **알림 목록으로 돌아간다.** 알림은 이미 손에 있어서 공짜고, 스레드 한 번
+ * 실패했다고 모달이 비면 표에서 보이던 것보다 못한 화면이 된다.
  */
 function MentionDetail({
   group,
@@ -161,6 +169,31 @@ function MentionDetail({
   onClose: () => void;
 }) {
   const descId = descIdOf(group);
+  const { postId } = group;
+  /** 어느 게시글의 결과인지 같이 들고 있는다 — 다른 줄을 열면 앞의 댓글이 잠깐 남는다. */
+  const [loaded, setLoaded] = useState<{ postId: string; result: ThreadResult | null } | null>(null);
+
+  // 모달을 열 때 한 번. 다른 줄을 열면 `postId`가 바뀌어 다시 부른다 — 모달 하나를 표가
+  // 돌려 써서 컴포넌트가 다시 마운트되지 않는다.
+  useEffect(() => {
+    if (!postId) return;
+    let alive = true;
+
+    const form = new FormData();
+    form.set("postId", postId);
+    loadThread(null, form)
+      .catch(() => null)
+      .then((result) => {
+        if (alive) setLoaded({ postId, result });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [postId]);
+
+  const thread = loaded && loaded.postId === postId ? loaded.result : null;
+  /** 아직 오는 중. 실패(`thread`가 있는데 `comments`가 없다)와 갈라야 골격을 언제 걷을지 안다. */
+  const loading = !!postId && (!loaded || loaded.postId !== postId);
 
   return (
     <>
@@ -184,46 +217,71 @@ function MentionDetail({
           (task-detail-modal.tsx). 아래 선은 이 칸이 이미 갖고 있다.
           면도 업무 상세 모달과 같다 — `bg-card`로 패널보다 한 단 올린다 */}
       <div className="max-h-[min(60vh,calc(100dvh-16rem))] overflow-y-auto border-b border-border bg-card px-5 py-4">
-        {/* 오래된 것부터 — 대화는 위에서 아래로 읽는다 (그룹 배열은 최신순이다) */}
-        <ul className="space-y-3">
-          {[...group.alarms].reverse().map((alarm, i) => (
-            <li key={`${alarm.at}-${i}`} className={cn("flex gap-2", alarm.isReply && "ml-5")}>
-              <IconLastComment
-                size={14}
-                className={cn(
-                  "mt-0.5 shrink-0",
-                  alarm.isReply ? "text-primary" : "text-muted-foreground",
-                )}
-              />
-              <div className="min-w-0 flex-1">
-                <p className="tabular flex flex-wrap items-baseline gap-x-1.5 text-xs">
-                  {/* 이름은 본문색으로. 시각과 같은 회색이면 누가 썼는지가 안 걸린다 */}
-                  <span className="font-medium text-foreground">{alarm.from}</span>
-                  {alarm.isReply && <span className="text-primary">답글</span>}
-                  {alarm.unread && (
-                    <span className="rounded bg-primary/15 px-1 text-[11px] text-primary">
-                      안 읽음
-                    </span>
-                  )}
-                  <span className="text-muted-foreground">{fmtDateTime(alarm.at)}</span>
-                </p>
-                {alarm.content && (
-                  // 줄바꿈은 살린다 — 댓글이 목록 형태로 오는 경우가 많다.
-                  // `wrap-anywhere` — 링크가 섞여 와서 안 끊으면 그 덩어리가 최소폭이 된다.
-                  <p className="mt-1 text-[13px] leading-relaxed whitespace-pre-line wrap-anywhere">
-                    {/* 주소는 새 창 링크로 (`LinkedText`) — 알림 내용이 곧 댓글 내용이다 */}
-                    <LinkedText text={alarm.content} />
-                  </p>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-        {/* 읽음 처리와 전체 스레드 (PRD §13 A1·A2) */}
+        {loading ? (
+          // 도착하면 이 자리에 글자만 앉는다 — 알림 목록을 먼저 그렸다가 댓글로 갈아 끼우면
+          // 같은 말이 자리를 옮겨 다시 서서, 읽던 줄을 눈으로 다시 찾아야 한다
+          <>
+            <p role="status" className="mb-2 text-xs text-muted-foreground">
+              댓글을 가져오는 중…
+            </p>
+            <CommentRowsSkeleton count={Math.min(group.count, 4)} />
+          </>
+        ) : thread?.comments ? (
+          <>
+            <p className="tabular mb-2 text-xs text-muted-foreground">{thread.message}</p>
+            {/* 나를 부른 줄은 서버가 표시해서 온다 (`ThreadComment.called`) */}
+            <CommentRows comments={thread.comments} />
+          </>
+        ) : (
+          <>
+            {/* 스레드를 못 가져왔을 때의 자리. 알림은 나를 부른 댓글만이라 앞뒤가 없지만,
+                빈 화면보다는 낫다 */}
+            {thread && (
+              <p role="status" className="mb-2 text-xs text-muted-foreground">
+                {thread.message}
+              </p>
+            )}
+            {/* 오래된 것부터 — 대화는 위에서 아래로 읽는다 (그룹 배열은 최신순이다) */}
+            <ul className="space-y-3">
+              {[...group.alarms].reverse().map((alarm, i) => (
+                <li key={`${alarm.at}-${i}`} className={cn("flex gap-2", alarm.isReply && "ml-5")}>
+                  <IconLastComment
+                    size={14}
+                    className={cn(
+                      "mt-0.5 shrink-0",
+                      alarm.isReply ? "text-primary" : "text-muted-foreground",
+                    )}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="tabular flex flex-wrap items-baseline gap-x-1.5 text-xs">
+                      {/* 이름은 본문색으로. 시각과 같은 회색이면 누가 썼는지가 안 걸린다 */}
+                      <span className="font-medium text-foreground">{alarm.from}</span>
+                      {alarm.isReply && <span className="text-primary">답글</span>}
+                      {alarm.unread && (
+                        <span className="rounded bg-primary/15 px-1 text-[11px] text-primary">
+                          안 읽음
+                        </span>
+                      )}
+                      <span className="text-muted-foreground">{fmtDateTime(alarm.at)}</span>
+                    </p>
+                    {alarm.content && (
+                      // 줄바꿈은 살린다 — 댓글이 목록 형태로 오는 경우가 많다.
+                      // `wrap-anywhere` — 링크가 섞여 와서 안 끊으면 그 덩어리가 최소폭이 된다.
+                      <p className="mt-1 text-[13px] leading-relaxed whitespace-pre-line wrap-anywhere">
+                        {/* 주소는 새 창 링크로 (`LinkedText`) — 알림 내용이 곧 댓글 내용이다 */}
+                        <LinkedText text={alarm.content} />
+                      </p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        {/* 읽음 처리 (PRD §13 A2). 스레드는 위에서 이미 펼쳤다 */}
         <MentionActions
           alarmIds={group.alarms.flatMap((alarm) => (alarm.unread && alarm.id ? [alarm.id] : []))}
           unread={group.unread}
-          postId={group.postId}
           path={path}
         />
       </div>

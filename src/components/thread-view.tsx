@@ -1,103 +1,20 @@
 "use client";
 
-import { useActionState } from "react";
-import { loadThread, type ThreadComment, type ThreadResult } from "@/app/(app)/actions";
-import { IconLastComment, IconOpen } from "@/components/icons";
+import { type ThreadComment } from "@/app/(app)/actions";
+import { IconHistory, IconLastComment, IconSubTask } from "@/components/icons";
 import { LinkedText } from "@/components/linked-text";
-import { Button } from "@/components/motion/button/base";
-import { CommentRowsSkeleton } from "@/components/skeletons";
 import { cn, fmtDateTime } from "@/lib/utils";
-
-/**
- * 전체 댓글 스레드 (PRD §13 A1·B4).
- *
- * **누를 때만 부른다.** 게시글 상세(`flow_get_post`)는 14건 중 2건만 주고, 전량은
- * `GET /user/comments/{postId}`에만 있다 (api-spec §13.1) — 그런데 그건 게시글 하나에
- * 호출 하나다. 화면을 열 때 다 부르면 업무 열 줄에 열 번이라, 필요한 사람이 눌러서 받는다.
- *
- * `postId`를 아는 자리(멘션 알림)는 그대로 넘기고, 모르는 자리(업무 행)는 업무 ID와
- * 업무명으로 서버가 해소한다 (`resolvePostId` — BUG-005).
- *
- * 시스템 댓글도 버리지 않는다. 실측 14건 중 10건이 시스템 댓글(담당자·마감일·우선순위 변경
- * 기록)이었고, 그게 곧 이 업무의 활동 이력이다 (PRD §13 B4). 사람 댓글과 색으로 구분한다.
- */
-export function ThreadView({
-  postId,
-  projectId,
-  taskId,
-  title,
-  className,
-}: {
-  /** 아는 경우. 멘션 알림은 `postId`를 준다. */
-  postId?: string;
-  /** 모르는 경우. 업무 행은 이 셋으로 서버가 `postId`를 찾는다. */
-  projectId?: string;
-  taskId?: string | number;
-  title?: string;
-  className?: string;
-}) {
-  const [result, action, pending] = useActionState<ThreadResult | null, FormData>(
-    loadThread,
-    null,
-  );
-
-  return (
-    <form action={action} className={className}>
-      {postId && <input type="hidden" name="postId" value={postId} />}
-      {projectId && <input type="hidden" name="projectId" value={projectId} />}
-      {taskId !== undefined && <input type="hidden" name="taskId" value={taskId} />}
-      {title && <input type="hidden" name="title" value={title} />}
-
-      {/* 한 번 받아 오면 버튼을 지운다 — 같은 걸 또 받을 이유가 없다 */}
-      {!result?.comments && (
-        <Button type="submit" size="sm" variant="ghost" disabled={pending} className="h-7 px-2">
-          <IconLastComment size={13} />
-          {pending ? "가져오는 중…" : "댓글 다 보기"}
-        </Button>
-      )}
-
-      {/* 기다리는 동안 올 것과 같은 모양을 세워 둔다 — 댓글이 몇 줄이든 아이콘 + 이름 +
-          본문 두 줄이라, 도착하면 이 자리에 글자만 앉는다 (`CommentRowsSkeleton`).
-          세 줄이다: 실측 평균이 그쯤이고, 더 세우면 짧은 스레드에서 목록이 줄어든다 */}
-      {pending && (
-        <div className="mt-2">
-          <CommentRowsSkeleton count={3} />
-        </div>
-      )}
-
-      {result && !result.comments && (
-        <p
-          role="status"
-          className={cn(
-            "mt-1 text-xs",
-            result.ok ? "text-muted-foreground" : "text-danger-foreground",
-          )}
-        >
-          {result.message}
-        </p>
-      )}
-
-      {result?.comments && (
-        <>
-          <p className="tabular mb-2 text-xs text-muted-foreground">{result.message}</p>
-          <CommentRows comments={result.comments} />
-        </>
-      )}
-    </form>
-  );
-}
 
 /** 답글을 달 대상. `id`는 flow의 댓글 번호(`colabo_remark_srno`)다. */
 export type ReplyTarget = { id: string; from: string };
 
 /**
- * 댓글 줄들. 멘션 패널(`ThreadView`)과 업무 상세 모달(`TaskThread`)이 같이 쓴다 —
+ * 댓글 줄들. 멘션 상세 모달(`MentionDetail`)과 업무 상세 모달(`TaskThread`)이 같이 쓴다 —
  * 같은 댓글이 자리마다 다르게 생기면 같은 것인지 알아보는 데 시간이 든다.
  *
- * **답글은 목록에 안 들여쓴다.** `GET /user/comments/{postId}`가 최상위 댓글만 주고 답글을
- * 읽는 경로가 flow API에 없어서 (`listComments` 주석) 여기 오는 줄은 전부 같은 층이다.
- * 들여쓸 게 없으니 계층 표시도 안 만든다 — 알림이 부모·답글을 구분해 주는 멘션 상세
- * 모달에서만 한 칸 들여쓴다 (`MentionDetail`).
+ * **답글은 부모 바로 아래, 한 칸 들여쓰고 말풍선 앞에 `↳`가 선다** (`reply` — `toThread`).
+ * 업무 표의 하위 업무와 같은 표시다 (`IconSubTask` — `TaskTable`) — 세로선은 폭이 좁아지면
+ * 흐려지는데 화살표는 폭과 무관하고, 같은 "무엇에 딸린 것"을 두 화면이 같은 모양으로 말한다.
  */
 export function CommentRows({
   comments,
@@ -112,14 +29,39 @@ export function CommentRows({
 }) {
   return (
     <ul className="space-y-2.5">
-      {comments.map((comment) => (
-        <li key={comment.id} className="flex gap-2">
-          {/* 시스템 기록은 화살표, 사람 댓글은 말풍선. 색까지 다르게 둔다 —
+      {comments.map((comment) => {
+        // 나를 부른 줄 (`ThreadComment.called`). 스레드 전량을 펼쳐 두면 내가 왜 불렸는지가
+        // 스무 줄 사이에 묻혀서, 그 줄만 면과 아이콘 색을 올린다.
+        const called = comment.called ?? false;
+        return (
+        <li
+          key={comment.id}
+          className={cn(
+            "flex gap-2",
+            // 나를 부른 줄. 여백을 음수로 되돌려서 면만 넓어지고 글자는 제자리에 있는다 —
+            // 강조된 줄에서 글이 밀리면 목록의 왼쪽 끝이 들쭉날쭉해진다
+            called && "-mx-2 rounded-md bg-primary/5 px-2 py-1.5",
+            // 답글은 한 칸 들여선다. 강조된 줄은 여백이 음수라 그만큼 더 준다 —
+            // 답글 두 줄이 강조 여부에 따라 서로 어긋나 보이면 계단이 두 개가 된다
+            comment.reply && (called ? "pl-7" : "pl-5"),
+          )}
+        >
+          {/* 답글 표시. 말풍선 앞에 서서 "이건 위 말에 붙은 답"을 말한다 */}
+          {comment.reply && (
+            <>
+              <span className="sr-only">답글 </span>
+              <IconSubTask size={14} aria-hidden className="mt-0.5 shrink-0 text-muted-foreground" />
+            </>
+          )}
+          {/* 시스템 기록은 되감기, 사람 댓글은 말풍선. 색까지 다르게 둔다 —
               아이콘만으로는 촘촘한 목록에서 둘이 섞여 보였다 */}
           {comment.system ? (
-            <IconOpen size={13} className="mt-0.5 shrink-0 text-muted-foreground/60" />
+            <IconHistory size={13} className="mt-0.5 shrink-0 text-muted-foreground/60" />
           ) : (
-            <IconLastComment size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
+            <IconLastComment
+              size={14}
+              className={cn("mt-0.5 shrink-0", called ? "text-primary" : "text-muted-foreground")}
+            />
           )}
           <div className="min-w-0 flex-1">
             <p className="tabular flex flex-wrap items-baseline gap-x-1.5 text-xs">
@@ -131,6 +73,8 @@ export function CommentRows({
               >
                 {comment.from}
               </span>
+              {/* 면과 아이콘 색만으로는 색을 못 가리는 사람에게 아무 표시가 없다 */}
+              {called && <span className="font-medium text-primary">나를 부름</span>}
               {comment.system && <span className="text-muted-foreground/70">기록</span>}
               <span className="text-muted-foreground">{fmtDateTime(comment.at)}</span>
               {/* 이름·시각과 같은 줄이다. 줄을 하나 더 쓰면 댓글 스무 개에 빈 줄이 스무 개고,
@@ -163,7 +107,8 @@ export function CommentRows({
             </p>
           </div>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }

@@ -48,7 +48,7 @@ export interface FlowErrorDetail {
 export type FlowErrorCode =
   | 'VALIDATION_ERROR'
   | 'UNAUTHORIZED_ERROR'
-  /** @관측 OAuth Bearer 경로 전용. 공식 에러 카탈로그에는 없다. */
+  /** @관측 폐기된 OAuth Bearer 경로에서만 봤다. 공식 에러 카탈로그에는 없다. */
   | 'INVALID_TOKEN'
   | 'FORBIDDEN_ERROR'
   | 'NOT_FOUND_ERROR'

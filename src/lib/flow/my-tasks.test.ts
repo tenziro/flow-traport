@@ -2,26 +2,29 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { buildMyTasks, type ProjectTasks } from './my-tasks';
-import type { MyTask } from './rest';
+import type { FlowTask } from './rest';
 
 /** 2026-07-30 12:00 KST. 마감일 비교 기준이 되는 고정 시각이다. */
 const NOW = Date.UTC(2026, 6, 30, 3);
 
 let srno = 1;
-const task = (over: Partial<MyTask> = {}): MyTask => ({
+const task = (over: Partial<FlowTask> = {}): FlowTask => ({
   taskId: String(srno++),
   postId: '78159339',
   title: '업무',
   endDate: '',
   regDate: '20260701',
+  editDate: '20260701120000',
   author: '이종석',
+  workers: [{ userId: 'jongseok.lee@traport.com', name: '이종석' }],
   status: '진행',
+  priority: '',
   done: false,
   upTaskId: '-1',
   ...over,
 });
 
-const project = (name: string, tasks: MyTask[]): ProjectTasks => ({
+const project = (name: string, tasks: FlowTask[]): ProjectTasks => ({
   projectId: '2236827',
   name,
   tasks,

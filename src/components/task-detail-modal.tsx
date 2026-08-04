@@ -49,6 +49,9 @@ export function TaskDetailModal({
   const pick = "score" in task ? task : null;
   const regDate = "regDate" in task ? (task.regDate ?? "") : "";
   const author = "author" in task ? (task.author ?? "") : "";
+  // 목록 응답이 이미 주는 값들이다 — 넘겨 두면 값 줄이 REST를 기다리지 않는다.
+  const priority = "priority" in task ? (task.priority ?? "") : "";
+  const editDate = "editDate" in task ? (task.editDate ?? "") : "";
   const descId = descIdOf(task);
 
   return (
@@ -123,6 +126,8 @@ export function TaskDetailModal({
               status={shown.status}
               endDate={shown.endDate}
               regDate={regDate}
+              priority={priority}
+              editDate={editDate}
               path={path}
               onSaved={onSaved}
             />
