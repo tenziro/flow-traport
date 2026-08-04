@@ -246,6 +246,7 @@ function ProjectCard({ project, i }: { project: MyTasksProject; i: number }) {
                 }))}
                 path={PATH}
                 showProject={false}
+                showAuthor
                 showRegDate
                 filterable
                 // 한 프로젝트에 실측 최대 300건이다. 12줄까지 펼치고 그 아래는 표가 스크롤한다

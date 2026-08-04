@@ -37,8 +37,9 @@ const ROW_HEIGHT = 44;
 const INDENT = ["", "pl-3", "pl-6"];
 
 /**
- * 업무 표 (PRD §6.1). 업무명 · 프로젝트 · 진행상태 · 등록일 · 마감일 다섯 칸이고,
- * 업무명을 누르면 상세 모달이 열린다.
+ * 업무 표 (PRD §6.1). 업무명 · 프로젝트 · 등록자 · 진행상태 · 등록일 · 마감일 여섯 칸이고,
+ * 업무명을 누르면 상세 모달이 열린다. 화면마다 켜는 칸이 다르다 — 프로젝트·등록자·등록일은
+ * 그 화면 응답이 그 값을 주는지에 달렸다.
  *
  * 업무명이 첫 칸이다. 프로젝트를 앞에 두면 같은 프로젝트 이름이 줄마다 반복되는 칸을 먼저
  * 읽고 나서야 업무명에 닿는다 — 찾는 것은 업무이고, 프로젝트는 그 업무가 어디 것인지다.
@@ -55,6 +56,7 @@ export function TaskTable({
   showProject = true,
   showRegDate = false,
   showOwner = false,
+  showAuthor = false,
   top,
   maxRows = 8,
   filterable = false,
@@ -69,6 +71,11 @@ export function TaskTable({
   showRegDate?: boolean;
   /** 담당자 칸. 리스크 화면만 쓴다 — 남의 업무가 섞여 있어서 누구 것인지가 정보다. */
   showOwner?: boolean;
+  /**
+   * 등록자 칸. 등록일과 같은 응답에서 와서(`MyTask.author`) 내 업무 화면만 켠다 —
+   * 오늘·팀·리스크는 MCP 응답이라 등록자가 없다 (`WorklistTask.author`).
+   */
+  showAuthor?: boolean;
   /** 1위 점수. 포커스 표에서 점수 막대의 분모로 쓴다. */
   top?: number;
   /** 스크롤 없이 보여줄 줄 수. 이보다 많으면 표 안에서 스크롤한다. */
@@ -121,7 +128,7 @@ export function TaskTable({
       header: "업무명",
       sortable: true,
       // 남는 폭을 다 준다 — 제목이 제일 길고, 잘리면 어느 업무인지 못 알아본다.
-      width: titleWidth(showProject, showRegDate, showOwner),
+      width: titleWidth(showProject, showRegDate, showOwner, showAuthor),
       cell: (row) => (
         <button
           type="button"
@@ -162,6 +169,23 @@ export function TaskTable({
         // 업무명보다 한 톤 흐리다. 같은 프로젝트 이름이 줄마다 반복되는 칸이라 본문색이면
         // 업무명과 같은 무게로 서서 눈이 먼저 그쪽에 걸린다.
         cell: (row) => <span className="text-muted-foreground">{row.project}</span>,
+      });
+    }
+    if (showAuthor) {
+      // 프로젝트 바로 뒤다 — 업무명 다음에 오는 두 칸이 "어디 것이고 누가 낸 것인가"로
+      // 이어진다. 담당자 칸(있는 화면에서는)보다 앞인 것도 같은 이유다: 등록자는 업무가
+      // 생긴 자리고 담당자는 지금 상태다.
+      list.push({
+        key: "author",
+        header: "등록자",
+        sortable: true,
+        width: "13%",
+        // 프로젝트와 같은 흐림이다 — 이름이 줄마다 반복되는 칸이라 업무명과 같은 무게로
+        // 서면 눈이 먼저 그쪽에 걸린다.
+        cell: (row) => {
+          const author = "author" in row ? row.author : "";
+          return <span className="truncate text-muted-foreground">{author || "—"}</span>;
+        },
       });
     }
     list.push({
@@ -206,7 +230,7 @@ export function TaskTable({
       },
     });
     return list;
-  }, [showProject, showRegDate, showOwner, shownOf]);
+  }, [showProject, showRegDate, showOwner, showAuthor, shownOf]);
 
   const openedShown = opened ? shownOf(opened) : null;
 
@@ -325,8 +349,13 @@ function next(
 }
 
 /** 업무명 칸이 남는 폭을 다 먹는다 — 나머지 칸 폭을 100%에서 뺀 값이다. */
-function titleWidth(project: boolean, regDate: boolean, owner: boolean): string {
+function titleWidth(project: boolean, regDate: boolean, owner: boolean, author: boolean): string {
   const rest =
-    (project ? (regDate ? 18 : 20) : 0) + 13 + (owner ? 13 : 0) + (regDate ? 14 : 0) + (regDate ? 18 : 20);
+    (project ? (regDate ? 18 : 20) : 0) +
+    (author ? 13 : 0) +
+    13 +
+    (owner ? 13 : 0) +
+    (regDate ? 14 : 0) +
+    (regDate ? 18 : 20);
   return `${100 - rest}%`;
 }

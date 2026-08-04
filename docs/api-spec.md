@@ -456,11 +456,22 @@ https://api.flow.team
 | `columnData` | | 값 배열. 담당자처럼 여러 명이면 원소가 여럿이다 |
 
 > **`RGSR_ID`(등록자 = 글 작성자)는 `columnType: USER`고 `userName`에 실명이 온다** `(실측
-> 2026-08-04, 프로젝트 4곳 100%)`. 담당자(`WORKER_ID`)와 형태가 같고, 담당자가 아예 없는
-> 프로젝트에도 이 컬럼은 있었다 — 업무를 만든 사람은 늘 있기 때문이다. **이 응답을 이미
-> 쓰는 화면(`/tasks` 내 업무 · `/risk` 리스크)은 호출을 늘리지 않고 작성자 열을 켤 수 있다.**
-> 워크리스트·포커스 MCP 응답에는 없어서 오늘·팀 화면은 업무마다 REST 1회가 더 붙는다 —
-> 등록일 열이 그 두 화면에만 없는 것과 같은 이유다.
+> 2026-08-04, 업무 4,142건 채움률 100%)`. 담당자(`WORKER_ID`)와 형태가 같고, 담당자가 아예 없는
+> 프로젝트에도 이 컬럼은 있었다 — 업무를 만든 사람은 늘 있기 때문이다. `customColumnData`는
+> 실명이 아니라 로그인 ID다 (6~13자).
+>
+> **이 응답을 이미 쓰는 화면은 호출을 늘리지 않고 등록자 열을 켤 수 있다** — 실제로 켠 것은
+> `/tasks` 내 업무뿐이다 (§6.1을 `listMyTasks`가 쓴다). `/risk` 리스크의 업무 표는 이 응답이
+> 아니라 MCP 워크리스트로 만들어서 등록자가 없다. 오늘·팀도 같다 — 붙이려면 업무마다 REST
+> 1회(`getTaskFields` 꼴)가 더 붙는다. 등록일 열이 내 업무 화면에만 있는 것과 같은 이유다.
+>
+> **이름 말고는 못 붙인다** `(실측 2026-08-04)`:
+>
+> | 원하는 값 | 결과 |
+> |---|---|
+> | 사진 | 이 컬럼의 `profilePhoto`는 **늘 빈 문자열**이다 (§6.1 응답에서 관측한 전 건) |
+> | 부서·직급 | §9.3 `GET /user/search/employees`에만 있고 그건 **우리 이용기관 13명**이다. 내 업무 686건의 등록자 중 그 명단에 있는 건 **5건**(0.7%) — 나머지는 타사 사용자다. `?projectId=`로 좁혀도 응답은 그대로 13명이고(파라미터 무시), §5.4 참여자 조회는 `inttId`·`userId`·`name`뿐이다 |
+> | 회사·부서 (타사 포함) | §13.1 **댓글**에는 `registerCorpName`·`registerDivisionName`이 온다. 업무 등록자에게는 그런 필드가 없다 — §6.3 게시글 상세도 `registerId`·`registerName`까지다 |
 
 `columnData[]` 아이템:
 
@@ -468,7 +479,7 @@ https://api.flow.team
 |---|---|---|
 | `customColumnData` | `"20260430"` | **실제 값.** 마감일은 `YYYYMMDD`, 상태는 코드(`"4"`), 담당자는 이메일/아이디, 업무명은 문자열 |
 | `userName` | `"이종석"` | `USER` 컬럼일 때 실명 |
-| `profilePhoto` | `https://flow.team/flowImg/…` | `USER` 컬럼일 때 프로필 |
+| `profilePhoto` | `https://flow.team/flowImg/…` | `USER` 컬럼일 때 프로필. **`RGSR_ID`에서는 늘 `""`다** (위 표) |
 | `optionName` | `"PAST"` | `DATE`에서 `PAST`면 마감 지남 |
 | `optionCategory` | `"1"` | `STTS`에서 상태 그룹 |
 | `optionColor` · `customColumnDataId` · `columnType` | `""` | 실측에서 대부분 비어 있다 |

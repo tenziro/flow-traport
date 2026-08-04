@@ -40,6 +40,11 @@ export interface WorklistTask {
    * MCP 응답은 안 준다. 그래서 오늘·팀 화면 표에는 등록일 열이 없다.
    */
   regDate?: string;
+  /**
+   * 등록자 실명. 등록일과 같은 자리에서 온다 — 업무 필터 REST(`MyTask.author`)에만 있고
+   * 워크리스트·포커스는 안 준다. 그래서 등록자 열도 내 업무 화면에만 있다.
+   */
+  author?: string;
   /** 음수면 지남 */
   daysLeft: number;
   link: string;

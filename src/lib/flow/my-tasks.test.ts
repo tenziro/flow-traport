@@ -14,6 +14,7 @@ const task = (over: Partial<MyTask> = {}): MyTask => ({
   title: '업무',
   endDate: '',
   regDate: '20260701',
+  author: '이종석',
   status: '진행',
   done: false,
   upTaskId: '-1',

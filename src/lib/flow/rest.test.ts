@@ -328,12 +328,31 @@ describe('내 업무 조회', () => {
         endDate: '20260731',
         // 픽스처에 등록일 칸(`RGSN_DTTM`)이 없다 — 표에서는 `—`로 나온다.
         regDate: '',
+        // 등록자 칸(`RGSR_ID`)도 없다. 실제 응답은 100% 채워 오지만 없으면 `—`다.
+        author: '',
         status: '완료',
         done: true,
         // 픽스처에 `upTaskId`가 없다 — 필드가 안 오면 최상위로 둔다.
         upTaskId: '-1',
       },
     ]);
+  });
+
+  it('등록자는 userName에서 온다 — customColumnData는 로그인 ID다', async () => {
+    stub([
+      page([
+        filterTask([
+          NAME_COL,
+          {
+            defaultColumnType: 'RGSR_ID',
+            columnData: [{ customColumnData: 'hong67', userName: '홍성우' }],
+          },
+        ]),
+      ]),
+    ]);
+
+    const { tasks } = await listMyTasks('2639815', 'me');
+    assert.equal(tasks[0].author, '홍성우');
   });
 
   it('부모 업무 ID를 그대로 넘긴다 (columns 밖 최상위 필드다 — BUG-034)', async () => {

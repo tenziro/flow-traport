@@ -515,6 +515,17 @@ const columnData = (task: FilterTask, type: string) =>
 const regDateOf = (task: FilterTask) =>
   (columnData(task, "RGSN_DTTM")[0]?.customColumnData ?? "").slice(0, 8);
 
+/**
+ * 등록자 실명 `RGSR_ID`. `columnType: USER`라 `userName`에 이름이 온다 — `customColumnData`는
+ * 로그인 ID다 (실측 2026-08-04, 업무 4,142건 채움률 100%).
+ *
+ * **이름 말고는 아무것도 못 붙인다.** 부서·직급·사진은 `/user/search/employees`(§9.3)에만
+ * 있고 그건 우리 기관 13명이다 — 내 업무 686건의 등록자 중 그 명단에 있는 건 5건이다.
+ * 나머지는 타사 사용자고 flow에 그 사람들의 부서를 주는 경로가 없다. 같은 응답의
+ * `profilePhoto`도 이 컬럼에서는 늘 빈 문자열이다.
+ */
+const authorOf = (task: FilterTask) => columnData(task, "RGSR_ID")[0]?.userName ?? "";
+
 /** 업무 한 건의 현재 값. 워크리스트·스탠드업이 주지 않는 것들이다 (PRD §13 A4). */
 export interface TaskFields {
   /** `colabo_commt_srno` — 댓글 도구가 요구하는 ID다 (BUG-005). */
@@ -736,6 +747,8 @@ export interface MyTask {
   endDate: string;
   /** 등록일 `YYYYMMDD`. 없으면 빈 문자열이다. */
   regDate: string;
+  /** 등록자 실명 (`authorOf`). 이름뿐이다 — 부서·직급·사진은 못 온다. */
+  author: string;
   /** 상태 라벨. 못 풀면 빈 문자열이다. */
   status: string;
   /** 완료 상태인가. */
@@ -806,6 +819,7 @@ export async function listMyTasks(
         title: columnData(task, "TASK_NM")[0]?.customColumnData ?? "제목 없는 업무",
         endDate: columnData(task, "END_DT")[0]?.customColumnData ?? "",
         regDate: regDateOf(task),
+        author: authorOf(task),
         status: cell?.optionName?.trim() || STTS_LABEL[cell?.customColumnData ?? ""] || "",
         done: cell?.optionCategory === "2",
         upTaskId: task.upTaskId || "-1",
