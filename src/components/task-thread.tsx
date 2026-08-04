@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { loadTaskPost, type TaskPostResult } from "@/app/(app)/actions";
 import { IconLastComment } from "@/components/icons";
+import { LinkedText } from "@/components/linked-text";
 import { Button } from "@/components/motion/button/base";
 import { CommentRowsSkeleton } from "@/components/skeletons";
 import { CommentForm } from "@/components/task-actions";
@@ -90,7 +91,7 @@ export function TaskThread({
               `wrap-anywhere` — 본문에 섞여 오는 링크는 띄어쓰기가 없다 (BUG-025) */}
           {/* 이 모달에서 제일 오래 읽는 글이라 값 다섯 줄(text-xs)보다 한 급 크다 */}
           <p className="mt-2 text-sm leading-relaxed whitespace-pre-line wrap-anywhere">
-            {got.body}
+            <LinkedText text={got.body} />
           </p>
         </div>
       )}

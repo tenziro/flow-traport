@@ -80,8 +80,16 @@ export function TaskDetailModal({
               이름만으로 충분하다 (flow가 이 컬럼에 사진을 안 준다) */}
           {(shown.endDate || author || rank !== undefined) && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
+              {/* 등록자가 이 줄의 첫 자리다 — 누가 맡긴 일인지가 남은 날보다 먼저 읽힌다.
+                  D-day는 색과 굵기로 이미 눈에 걸려서 순서가 앞일 필요가 없다 */}
+              {/* `등록자`는 딱지고 이름이 값이다 — 같은 밝기로 두면 넉 자짜리 딱지가 이름과
+                  같은 무게로 읽힌다. 딱지는 흐리게 두고 이름만 본문 밝기로 올린다 */}
+              {author && (
+                <span className="text-xs text-muted-foreground">
+                  등록자 <span className="text-foreground">{author}</span>
+                </span>
+              )}
               {shown.endDate ? <DDay days={shown.daysLeft} /> : null}
-              {author && <span className="text-xs text-muted-foreground">등록자 {author}</span>}
               {rank !== undefined && (
                 <span className="text-xs text-muted-foreground">오늘 포커스 {rank}순위</span>
               )}

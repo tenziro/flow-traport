@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DAY_MS, kstYmd } from "./aggregate/date";
-import { fmtDayLabel, hexColor } from "./utils";
+import { fmtDayLabel, hexColor, splitLinks } from "./utils";
 import { EVENT_WINDOW_DAYS } from "./flow/queries";
 
 /* fmtDayLabel — 나의 일정의 날짜 소제목 */
@@ -38,6 +38,56 @@ test("hexColor: 6자리 hex가 아니면 null이다", () => {
   assert.equal(hexColor("#D0DA09"), null);
   assert.equal(hexColor("D0DA0"), null);
   assert.equal(hexColor("red; background: url(x)"), null);
+});
+
+/* splitLinks — 업무 본문의 주소를 새 창 링크로 */
+
+test("splitLinks: 주소가 없으면 글 하나다", () => {
+  assert.deepEqual(splitLinks("링크 없는 본문"), [{ text: "링크 없는 본문" }]);
+  assert.deepEqual(splitLinks(""), []);
+});
+
+test("splitLinks: 글 사이의 주소를 조각으로 가른다", () => {
+  assert.deepEqual(splitLinks("확인: https://flow.team/x 부탁해요"), [
+    { text: "확인: " },
+    { text: "https://flow.team/x", url: "https://flow.team/x" },
+    { text: " 부탁해요" },
+  ]);
+});
+
+test("splitLinks: 끝에 붙은 문장부호와 닫는 괄호는 주소가 아니다", () => {
+  // 그대로 두면 마침표·괄호가 주소에 실려 404가 된다.
+  assert.deepEqual(splitLinks("(https://a.io/b)"), [
+    { text: "(" },
+    { text: "https://a.io/b", url: "https://a.io/b" },
+    { text: ")" },
+  ]);
+  assert.deepEqual(splitLinks("https://a.io/b."), [
+    { text: "https://a.io/b", url: "https://a.io/b" },
+    { text: "." },
+  ]);
+});
+
+test("splitLinks: 주소에 붙은 조사는 주소가 아니다", () => {
+  assert.deepEqual(splitLinks("http://a.io에서 봐요"), [
+    { text: "http://a.io", url: "http://a.io" },
+    { text: "에서 봐요" },
+  ]);
+});
+
+test("splitLinks: 스킴이 없으면 링크가 아니다", () => {
+  // 도메인처럼 보이는 파일명(`설계.v2.zip`)까지 링크로 만들면 눌러도 갈 곳이 없다.
+  assert.deepEqual(splitLinks("www.flow.team 과 설계.v2.zip"), [
+    { text: "www.flow.team 과 설계.v2.zip" },
+  ]);
+});
+
+test("splitLinks: 한 본문에 주소가 여럿이면 다 가른다", () => {
+  assert.deepEqual(splitLinks("https://a.io\nhttps://b.io"), [
+    { text: "https://a.io", url: "https://a.io" },
+    { text: "\n" },
+    { text: "https://b.io", url: "https://b.io" },
+  ]);
 });
 
 /* 일정 창 — 오늘을 1일째로 세서 오늘 + 엿새 */

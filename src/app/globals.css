@@ -64,6 +64,8 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-bg: var(--primary-bg);
+  --color-primary-bg-foreground: var(--primary-bg-foreground);
   --color-primary: var(--primary);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
@@ -130,6 +132,20 @@
   /* 어둡게만 primary보다 밝다 — `ring-ring/50`으로 반투명하게 깔리므로 원래 파랑으로는
      짙은 남색 위에서 3:1이 안 나온다. 밝게는 primary와 같은 값이면 충분하다 */
   --ring: light-dark(#1d4ed8, #5b9bff);
+
+  /*
+   * 지금 있는 메뉴 알약과 그 위의 글자 (`animated-sidebar.tsx`).
+   *
+   * 전에는 `bg-primary/10` + `text-primary` 한 쌍이었다. 밝게는 흰 레일 위에서 잘 읽혔지만
+   * 어둡게는 근검정 위 10%짜리 파랑이라 알약이 있는지조차 안 보였다 — 배경(#151c2c)과
+   * 8/255 차이다.
+   *
+   * 어둡게만 알약을 25%로 올리고 글자도 같이 밝힌다. 알약만 밝히면 브랜드 파랑(#2f6feb)이
+   * 그 위에서 2.8:1로 떨어져 AA에 못 미친다 — 면이 밝아진 만큼 글자도 밝아져야 한다
+   * (#7fb0ff 위 5.8:1). 밝게는 예전 값 그대로 5.3:1이다.
+   */
+  --primary-bg: light-dark(#1d4ed81f, #2f6feb40);
+  --primary-bg-foreground: light-dark(#1d4ed8, #7fb0ff);
 
   /* 상태. 원본 토큰은 아이콘·인디케이터용, -foreground는 배경 위 텍스트용(AA). */
   --danger: light-dark(#dc2626, #f76a6a);

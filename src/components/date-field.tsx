@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ko } from "date-fns/locale";
 import { IconCalendar } from "@/components/icons";
 import { Calendar } from "@/components/ui/calendar";
@@ -39,6 +39,73 @@ const toValue = (date: Date) =>
     String(date.getDate()).padStart(2, "0"),
   ].join("-");
 
+/**
+ * 달력 레이어. **트리거 생김새만 호출자가 정한다** — 신규 업무 폼은 네모 칸이고(아래
+ * `DateField`), 상세 모달의 마감일 줄은 지금 날짜 글자 자체다 (`task-actions.tsx`).
+ * 팝오버·달력·`z-[110]`·한국어 로케일을 둘이 나눠 갖지 않으려고 여기서 한 번만 세운다.
+ */
+export function DateMenu({
+  value,
+  onPick,
+  className,
+  disabled,
+  children,
+  "aria-label": label,
+  "aria-labelledby": labelledBy,
+}: {
+  /** `YYYY-MM-DD`. 빈 문자열이면 아직 안 골랐다는 뜻이다. */
+  value: string;
+  onPick: (value: string) => void;
+  className?: string;
+  disabled?: boolean;
+  /** 트리거 안에 그릴 것. */
+  children: ReactNode;
+  /** 트리거가 지금 값 자체일 때 쓴다 — 안 주면 이름이 날짜 글자뿐이다. */
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = toDate(value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      {/* 폼 안이다 — `type="button"`이 없으면 날짜를 고르려다 폼이 나간다 */}
+      <PopoverTrigger
+        type="button"
+        disabled={disabled}
+        aria-label={label}
+        aria-labelledby={labelledBy}
+        className={className}
+      >
+        {children}
+      </PopoverTrigger>
+      {/* 달력 폭에 맞춘다. 기본값(`w-72` + 안쪽 여백)은 7칸짜리 격자보다 넓어 오른쪽이 빈다.
+          `z-[110]`은 바꾸기 모달(`z-[100]` — morphing-modal)보다 위로 올리는 값이다.
+          기본 `z-50`이면 모달 안에서 열었을 때 달력이 패널 뒤로 들어간다.
+          Escape는 여기서 멈춘다 — 모달의 Escape 처리기도 `window`에서 듣고 있어서, 그냥
+          두면 달력을 접으려고 누른 키가 업무 상세 모달까지 통째로 닫는다. radix는 이 문서
+          캡처 단계에서 키를 받으니(`useEscapeKeydown`) 여기서 끊으면 뒤로 안 넘어간다 */}
+      <PopoverContent
+        align="start"
+        className="z-[110] w-auto p-0"
+        onEscapeKeyDown={(event) => event.stopPropagation()}
+      >
+        <Calendar
+          mode="single"
+          locale={ko}
+          selected={selected}
+          defaultMonth={selected}
+          onSelect={(date) => {
+            onPick(date ? toValue(date) : "");
+            setOpen(false);
+          }}
+          autoFocus
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function DateField({
   name,
   value,
@@ -56,38 +123,19 @@ export function DateField({
   className?: string;
   "aria-labelledby"?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const selected = toDate(value);
-
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      {/* 폼 안이다 — `type="button"`이 없으면 날짜를 고르려다 폼이 나간다 */}
-      <PopoverTrigger
-        type="button"
+    <>
+      <DateMenu
+        value={value}
+        onPick={onChange}
         aria-labelledby={labelledBy}
         className={cn("tabular", TRIGGER, !value && "text-muted-foreground", className)}
       >
         <IconCalendar size={13} className="shrink-0" />
         <span className="min-w-0 flex-1 truncate">{value || placeholder}</span>
-      </PopoverTrigger>
-      {/* 달력 폭에 맞춘다. 기본값(`w-72` + 안쪽 여백)은 7칸짜리 격자보다 넓어 오른쪽이 빈다.
-          `z-[110]`은 바꾸기 모달(`z-[100]` — morphing-modal)보다 위로 올리는 값이다.
-          기본 `z-50`이면 모달 안에서 열었을 때 달력이 패널 뒤로 들어간다 */}
-      <PopoverContent align="start" className="z-[110] w-auto p-0">
-        <Calendar
-          mode="single"
-          locale={ko}
-          selected={selected}
-          defaultMonth={selected}
-          onSelect={(date) => {
-            onChange(date ? toValue(date) : "");
-            setOpen(false);
-          }}
-          autoFocus
-        />
-      </PopoverContent>
+      </DateMenu>
       {/* 트리거는 button이라 FormData에 안 들어간다 — 값은 이 hidden이 싣는다 */}
       <input type="hidden" name={name} value={value} />
-    </Popover>
+    </>
   );
 }

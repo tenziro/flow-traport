@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { loadThread, type ThreadComment, type ThreadResult } from "@/app/(app)/actions";
 import { IconLastComment, IconOpen } from "@/components/icons";
+import { LinkedText } from "@/components/linked-text";
 import { Button } from "@/components/motion/button/base";
 import { CommentRowsSkeleton } from "@/components/skeletons";
 import { cn, fmtDateTime } from "@/lib/utils";
@@ -156,7 +157,9 @@ export function CommentRows({
                 comment.system && "text-muted-foreground",
               )}
             >
-              {comment.body}
+              {/* 본문과 같이 주소를 새 창 링크로 낸다 (`LinkedText`) — 업무에 붙는 주소는
+                  본문보다 댓글로 더 자주 온다 */}
+              <LinkedText text={comment.body} />
             </p>
           </div>
         </li>

@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { FlowLink } from "@/components/flow-link";
 import { IconLastComment } from "@/components/icons";
+import { LinkedText } from "@/components/linked-text";
 import { MentionActions } from "@/components/mention-actions";
 import { Button } from "@/components/motion/button/base";
 import { MorphingModal } from "@/components/motion/morphing-modal";
@@ -210,7 +211,8 @@ function MentionDetail({
                   // 줄바꿈은 살린다 — 댓글이 목록 형태로 오는 경우가 많다.
                   // `wrap-anywhere` — 링크가 섞여 와서 안 끊으면 그 덩어리가 최소폭이 된다.
                   <p className="mt-1 text-[13px] leading-relaxed whitespace-pre-line wrap-anywhere">
-                    {alarm.content}
+                    {/* 주소는 새 창 링크로 (`LinkedText`) — 알림 내용이 곧 댓글 내용이다 */}
+                    <LinkedText text={alarm.content} />
                   </p>
                 )}
               </div>

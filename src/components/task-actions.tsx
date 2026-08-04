@@ -13,29 +13,47 @@ import {
   type ParticipantResult,
 } from "@/app/(app)/actions";
 import type { Participant, TaskFields } from "@/lib/flow/rest";
-import { TASK_STATUS, type TaskStatus } from "@/lib/task-status";
+import { TASK_STATUS } from "@/lib/task-status";
 import { TASK_PRIORITY, type TaskPriority } from "@/lib/task-priority";
-import { DateField } from "@/components/date-field";
-import { IconComment, IconLastComment, IconNormal } from "@/components/icons";
+import { DateMenu } from "@/components/date-field";
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconCheck,
+  IconChevronDown,
+  IconComment,
+  IconLastComment,
+  IconLoader,
+  IconMinus,
+  IconNormal,
+  IconSiren,
+} from "@/components/icons";
 import { Button } from "@/components/motion/button/base";
 import { Input } from "@/components/motion/input";
 import { type ReplyTarget } from "@/components/thread-view";
 import { StatusPill } from "@/components/status-pill";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { WorkerPicker } from "@/components/worker-picker";
 import { cn, fmtDate } from "@/lib/utils";
 
 /**
  * 업무 상세 모달의 쓰기 줄 (PRD §6.1.4, §13 A4).
  *
- * **읽는 자리와 고치는 자리를 갈랐다.** 예전에는 셀렉트 네 개가 패널에 펼쳐져 있고 지금 값이
- * 그 셀렉트의 placeholder(`지금 진행중`)였다 — 값을 확인하려면 고르는 UI를 마주해야 했고,
- * 하나를 고르면 확인 문구·버튼 둘이 그 줄에 더 붙어 네 줄이 통째로 흔들렸다. 지금은 다섯 줄이
- * 다 텍스트고, `변경`을 누른 줄만 컨트롤로 바뀐다.
+ * **지금 값이 곧 버튼이다.** 상태·마감일·우선순위는 값 글자를 누르면 그 아래로 목록이나
+ * 달력이 열리고, 고른 즉시 저장된다. 레이어 밖을 누르면 접히고 값은 그대로다.
  *
- * 확인 단계는 두 번 누르기다 (§8.1) — `변경`으로 컨트롤을 열고, 고른 뒤 `저장`을
- * 누른다. 예전 "바꿀까요?" 한 줄이 하던 일을 `저장` 버튼이 한다.
+ * 예전에는 줄마다 `변경`이 있고 고른 뒤 `저장`을 또 눌러야 했다 — 값 하나 바꾸는 데 세 번을
+ * 누르고, 누른 줄만 컨트롤로 커져서 다섯 줄이 통째로 흔들렸다. 셋 다 되돌리기가 한 번 더
+ * 고르는 것뿐이라(§8.1의 "확인 또는 실행 취소" 중 실행 취소) 확인 단계를 뺐다.
  *
- * 댓글은 확인 단계를 두지 않는다. 내용을 직접 타이핑하는 것 자체가 확인이고, 댓글은
+ * 담당자만 `변경`을 남긴다. 여럿을 켜고 끄는 일은 한 번 누르기로 끝나지 않고, flow 쓰기가
+ * 덮어쓰기라서 잘못 저장하면 남의 담당까지 떨어진다 — 목록·검색·고른 사람을 한 화면에 놓는
+ * 별도 모달로 받고 `확인`으로 맺는다 (`worker-picker.tsx`).
+ *
+ * 등록일은 읽기다. flow에 등록일을 바꾸는 경로가 없다 — 사람이 정하는 값이 아니라 글이
+ * 생길 때 시스템이 찍는 값이다 (`RGSN_DTTM` — api-spec §6.4에 쓰기 경로가 없다).
+ *
+ * 댓글도 확인 단계를 두지 않는다. 내용을 직접 타이핑하는 것 자체가 확인이고, 댓글은
  * 파괴적이지 않다 (§8.1의 "확인 또는 실행 취소" 중 확인에 해당).
  *
  * 상태만 MCP로 나가고 나머지 셋은 REST다. REST 쓰기는 개인 API 키가 있어야 한다 —
@@ -56,15 +74,14 @@ const LABEL = "w-14 shrink-0 text-xs leading-8 text-muted-foreground";
 /** 접힘은 여기서 일어난다 — 넘친 결과 문구가 값 열 안쪽에서 다음 줄로 간다. */
 const FIELD = "flex min-w-0 flex-1 flex-wrap items-center gap-2";
 /**
- * 고치는 중의 값 열. 지금 값·컨트롤·저장이 각자 줄을 갖는다.
+ * 값 글자가 곧 트리거다 (상태·마감일·우선순위).
  *
- * 한 줄을 나눠 쓰던 때는 지금 값 글자 수만큼 컨트롤이 오른쪽으로 밀려서 네 줄이 저마다
- * 다른 x에서 고르기를 시작했고, 후보 칸이 두 개씩 접혀 저장·취소 사이로 끼어들었다.
- * 위아래로 쌓으면 어느 줄을 펼쳐도 같은 모양이다.
+ * 네모나 밑줄을 두르지 않는다 — 다섯 줄 중 셋에 테두리가 생기면 읽는 자리가 입력 폼으로
+ * 보인다. 대신 좌우 여백을 넓혀 두고 그만큼 음수 여백으로 당겨서, 값 시작점은 등록일 줄과
+ * 맞은 채로 호버·포커스에서만 그 자리가 바닥색으로 드러난다.
  */
-const EDITING = "flex min-w-0 flex-1 flex-col items-start gap-2";
-/** 고치는 중에도 지금 값은 남긴다 — 무엇에서 무엇으로 바뀌는지가 한 줄에서 읽힌다. */
-const FROM = "shrink-0 text-xs leading-8 text-muted-foreground";
+const PICK =
+  "-mx-1.5 flex h-8 max-w-full min-w-0 cursor-pointer items-center gap-1 rounded-md px-1.5 text-left transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60";
 
 /**
  * 상태·등록일·마감일·우선순위·담당자 다섯 줄 (PRD §6.1.4).
@@ -133,9 +150,8 @@ export function TaskEditFields({
   const created = regDate || fields?.regDate || "";
 
   return (
-    /* 줄 사이에 선을 둔다. `변경`을 누른 줄만 컨트롤로 커지는데, 선이 없으면 커진
-       줄이 위아래 줄까지 한 덩어리로 읽혔다 — 특히 결과 문구가 값 열 아래로
-       접히면 그게 다음 줄의 값처럼 보였다 */
+    /* 줄 사이에 선을 둔다. 결과 문구가 값 열 아래로 접히면 그게 다음 줄의 값처럼
+       보였다 — 선이 어느 줄까지가 한 덩어리인지 말한다 */
     <div className="divide-y divide-border/60">
       <StatusField
         projectId={projectId}
@@ -144,7 +160,7 @@ export function TaskEditFields({
         path={path}
         onSaved={(shown) => onSaved?.({ status: shown })}
       />
-      {/* 등록일만 읽기다 — flow가 바꿀 수 있는 값으로 열어 두지 않았다.
+      {/* 등록일만 읽기다 — flow에 바꾸는 경로가 없다 (위 주석).
           마감일 위에 둔다 — 업무가 언제 시작해서 언제까지인지가 시간 순서로 읽힌다 */}
       <div className={ROW}>
         <span className={LABEL}>등록일</span>
@@ -154,10 +170,11 @@ export function TaskEditFields({
           </span>
         </div>
       </div>
+      {/* 마감일은 목록이 이미 알아서 REST를 안 기다린다 — 여기만 `loading`을 안 넘긴다 */}
       <EndDateField
         projectId={projectId}
         taskId={taskId}
-        now={dueDate ? fmtDate(dueDate) : "아직 없어요"}
+        now={dueDate}
         path={path}
         /* 고른 값은 `YYYY-MM-DD`고 표는 flow 형식(`YYYYMMDD`)을 쓴다 */
         onSaved={(shown) => onSaved?.({ endDate: shown.replaceAll("-", "") })}
@@ -166,6 +183,7 @@ export function TaskEditFields({
         projectId={projectId}
         taskId={taskId}
         now={restNow(TASK_PRIORITY[fields?.priority as TaskPriority] ?? "")}
+        loading={loading}
         path={path}
       />
       <WorkerField
@@ -173,13 +191,14 @@ export function TaskEditFields({
         taskId={taskId}
         now={restNow(fields?.workers.join(", ") ?? "")}
         workers={fields?.workers ?? []}
+        loading={loading}
         path={path}
       />
     </div>
   );
 }
 
-/** 네 폼이 같이 쓰는 숨은 필드. 셋 다 어느 폼에서든 똑같이 필요하다. */
+/** 댓글 폼의 숨은 필드. 다섯 줄은 폼이 아니라 손으로 FormData를 만든다 (`useField`). */
 function TaskRef({ projectId, taskId, path }: { projectId: string; taskId: number; path: string }) {
   return (
     <>
@@ -191,82 +210,79 @@ function TaskRef({ projectId, taskId, path }: { projectId: string; taskId: numbe
 }
 
 /**
- * 한 줄의 저장. 성공하면 줄을 닫고 방금 저장한 값을 지금 값으로 보여준다.
+ * 한 줄의 즉시 저장. 고른 자리에서 바로 보내고, 성공하면 방금 보낸 값이 지금 값이 된다.
  *
- * 값은 폼의 `shown` 필드에서 읽는다 — 네 줄이 보내는 코드(`progress`·`high`·userId)는
- * 화면에 낼 글자가 아니고, 라벨을 훅이 알아내려면 표 넷을 여기로 끌고 와야 한다.
+ * `<form>`을 쓰지 않는다 — 폼이면 고르는 것과 보내는 것이 두 동작으로 갈라져서, 숨은
+ * input에 코드를 심고 그다음 submit을 부르는 순서를 맞춰야 한다. `useActionState`의 두 번째
+ * 값은 그냥 함수라, 누른 자리에서 FormData를 만들어 그대로 넘긴다.
  *
- * 닫는 시점이 액션 안인 이유: 성공 여부를 아는 자리가 여기다. 이펙트에서 `result.ok`를
- * 보고 닫으면 React 19 린트가 막는다 (`react-hooks/set-state-in-effect`).
+ * `shown`은 화면에 낼 글자다 — 서버로 나가는 코드(`progress`·`high`·userId)는 사람이 읽을
+ * 글자가 아니고, 라벨을 훅이 알아내려면 표 넷을 여기로 끌고 와야 한다.
  */
-function useSave(
+function useField(
   serverAction: (prev: ActionResult | null, form: FormData) => Promise<ActionResult>,
-  /** 고른 값을 비운다. 줄마다 타입이 달라서 훅이 쥐지 못하고 밖에서 받는다. */
-  reset: () => void,
+  /** 어느 업무인가. 줄마다 똑같이 필요해서 `save`가 알아서 붙인다. */
+  ref: { projectId: string; taskId: number; path: string },
   /** 저장한 값을 행에도 알린다 (BUG-037). 행에 없는 줄(우선순위·담당자)은 안 넘긴다. */
   onSaved?: (shown: string) => void,
 ) {
-  const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState("");
-  const [result, action, pending] = useActionState<ActionResult | null, FormData>(
+  const [result, dispatch, pending] = useActionState<ActionResult | null, FormData>(
     async (prev, form) => {
       const next = await serverAction(prev, form);
       if (next.ok) {
         const shown = String(form.get("shown") ?? "");
         setSaved(shown);
-        setEditing(false);
         onSaved?.(shown);
       }
       return next;
     },
     null,
   );
-  return {
-    editing,
-    saved,
-    result,
-    action,
-    pending,
-    // 열 때도 비운다. 저장한 값이 남아 있으면 `저장`이 켜진 채로 열려서 같은 값을 또 보내고,
-    // flow는 "동일한 …로 변경할 수 없습니다"로 거절한다.
-    edit: () => {
-      reset();
-      setEditing(true);
-    },
-    cancel: () => {
-      reset();
-      setEditing(false);
-    },
+
+  /** 줄마다 다른 필드만 받는다. 값이 배열이면 같은 이름으로 여러 번 싣는다 (담당자). */
+  const save = (fields: Record<string, string | string[]>) => {
+    const form = new FormData();
+    form.set("projectId", ref.projectId);
+    form.set("taskId", String(ref.taskId));
+    form.set("path", ref.path);
+    for (const [name, value] of Object.entries(fields)) {
+      if (Array.isArray(value)) value.forEach((one) => form.append(name, one));
+      else form.set(name, value);
+    }
+    dispatch(form);
   };
+
+  return { saved, result, pending, save };
 }
 
-/** 지금 값 + `변경`. 네 줄이 다 이 모양이라 값만 위아래로 훑어 읽힌다. */
+/** 지금 값 + `변경`. 담당자 줄만 쓴다 — 나머지 셋은 값 자체가 트리거다 (`PICK`). */
 function Shown({
   now,
   label,
+  disabled,
   onEdit,
 }: {
-  /** 글자 그대로 두 줄이 대부분이고, 상태만 배지를 넣는다 (`StatusPill`). */
-  now: ReactNode;
+  now: string;
   label: string;
+  disabled?: boolean;
   onEdit: () => void;
 }) {
   return (
     <>
-      {/* 32px 자리를 잡고 그 안에 세운다 — 글자만 있을 때는 `leading-8`로 충분했지만
-          상태 배지는 인라인 상자라 baseline에 걸려 몇 px 아래로 처진다 */}
+      {/* 32px 자리를 잡고 그 안에 세운다 — 옆 버튼(28px)과 다른 줄에서 온 값들이
+          같은 높이에서 시작해야 다섯 줄의 눈금이 맞는다 */}
       <span className="flex h-8 min-w-0 flex-1 items-center">
         {/* 라벨 열과 같은 `text-xs`다 — 지금 값은 읽고 지나가는 값이고, 이 다섯 줄에서
-            제일 크게 읽혀야 하는 건 위 머리의 업무명이다. 상태 줄은 배지가 자기 크기를
-            갖고 있어서 여기 크기와 무관하다 */}
+            제일 크게 읽혀야 하는 건 위 머리의 업무명이다 */}
         <span className="min-w-0 truncate text-xs">{now}</span>
       </span>
-      {/* 버튼 넷이 다 `변경`이라 이름만으로는 어느 줄인지 안 읽힌다 */}
       <Button
         type="button"
         size="sm"
         variant="outline"
         aria-label={`${label} 변경`}
+        disabled={disabled}
         onClick={onEdit}
         className="h-7 px-2.5"
       >
@@ -277,89 +293,129 @@ function Shown({
 }
 
 /**
- * 고르기 칸 하나. 상태·우선순위·담당자가 같이 쓴다.
+ * 지금 값 옆의 표시. 저장 중에는 도는 표시로 바꾼다.
  *
- * 폼 값은 input이 스스로 싣는다 — 켠 것만 이름표를 달고 나가서 서버가 그대로 받는다.
- * 담당자는 `checkbox`(여럿), 상태·우선순위는 `radio`(하나)다. 라디오는 켜질 때만 `change`를
- * 주므로 `onPick`은 켜는 쪽만 알면 된다.
- *
- * 체크 네모·라디오 동그라미는 그리지 않는다. 후보가 여섯이면 표식 여섯 개가 값 열을
- * 채우는데 여기서 읽어야 할 것은 "무엇이 켜졌나" 하나다. 켬은 강조 배경이 말하고, 표식을
- * 숨겨 사라진 키보드 포커스 표시는 `has-[:focus-visible]`로 칸이 대신 받는다.
- *
- * 드롭다운으로 돌아가지 않는다. 후보가 넷·다섯인데 목록을 접어 두면 무엇을 고를 수 있는지
- * 알려면 한 번 더 눌러야 하고, beUI `Select`는 목록이 `absolute`로 붙어 clip-path로 자기
- * 네모를 잘라내는 이 모달 패널 밖으로 자라면 그대로 사라진다 (bug-report BUG-009).
+ * 고른 즉시 레이어가 접히니 저장 중이라고 말할 자리가 여기밖에 없다 — `저장` 버튼이 있던
+ * 때는 그 버튼이 `저장 중…`으로 바뀌었다. 화살표는 항상 보인다. 호버로만 알리면 손가락으로
+ * 쓰는 화면에서는 누를 수 있는 줄인지 알 수가 없다.
  */
-function Chip({
-  type,
-  name,
-  value,
-  label,
-  on,
-  onPick,
-}: {
-  type: "checkbox" | "radio";
-  name: string;
-  value: string;
-  label: string;
-  on: boolean;
-  onPick: (on: boolean) => void;
-}) {
-  return (
-    <label
-      className={cn(
-        "inline-flex h-8 cursor-pointer items-center rounded-md border px-3 text-sm transition-colors select-none has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50",
-        on
-          ? "border-primary bg-primary text-primary-foreground"
-          : "border-border bg-background text-foreground hover:bg-muted",
-      )}
-    >
-      <input
-        type={type}
-        name={name}
-        value={value}
-        checked={on}
-        onChange={(event) => onPick(event.target.checked)}
-        className="sr-only"
-      />
-      {label}
-    </label>
+function PickMark({ pending }: { pending: boolean }) {
+  return pending ? (
+    <IconLoader size={12} aria-label="저장 중" className="shrink-0 animate-spin text-primary" />
+  ) : (
+    <IconChevronDown size={12} aria-hidden className="shrink-0 text-muted-foreground" />
   );
 }
 
-/** 후보 칸이 값 열 폭을 다 쓴다 — 다섯 개면 한 줄에 안 든다. */
-const CHIPS = "flex w-full flex-wrap gap-1.5";
+/**
+ * 우선순위 네 단계의 표시 — flow 화면이 쓰는 그림을 그대로 따른다 (낮음 ↓ / 보통 — /
+ * 높음 ↑ / 긴급 경보등). Cockpit이 다른 그림을 쓰면 같은 값을 두 번 배워야 한다.
+ *
+ * 색만으로 말하지 않는다 (WCAG 1.4.1). 라벨 글자가 항상 같이 나가고, 모양도 색 없이 단계를
+ * 말한다 — 아래·수평·위·경보. 아는 라벨이 아니면(`불러오는 중…`·`아직 없어요`·
+ * `지금 값을 못 가져왔어요`) 글자만 낸다. 없는 값에 그림을 붙이면 값이 있는 것처럼 읽힌다.
+ */
+const PRIORITY_MARK: Record<string, { Icon: typeof IconArrowDown; tone: string }> = {
+  낮음: { Icon: IconArrowDown, tone: "text-muted-foreground" },
+  보통: { Icon: IconMinus, tone: "text-success-foreground" },
+  높음: { Icon: IconArrowUp, tone: "text-warning-foreground" },
+  긴급: { Icon: IconSiren, tone: "text-danger-foreground" },
+};
+
+function PriorityMark({ label }: { label: string }) {
+  const mark = PRIORITY_MARK[label];
+
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      {mark && <mark.Icon size={13} aria-hidden className={cn("shrink-0", mark.tone)} />}
+      <span className="min-w-0 truncate text-xs">{label}</span>
+    </span>
+  );
+}
 
 /**
- * 저장·취소. 네 줄이 같은 높이를 쓴다 — 줄마다 다르면 값 열이 다시 들쭉날쭉해진다.
+ * 값 아래로 열리는 고르기 레이어 (상태·우선순위). 누르면 즉시 저장하고 접힌다.
  *
- * 위 컨트롤(32px)보다 한 급 낮춘다. 같은 높이에 라임을 채우면 이 줄에서 제일 큰 덩어리가
- * 되어, 고르는 컨트롤보다 저장 버튼이 먼저 읽힌다.
+ * 지금 값도 목록에 남긴다 — 빼면 줄마다 후보 수가 달라져서 위치로 값을 기억할 수 없다.
+ * 대신 체크로 표시하고, 그걸 다시 누르면 저장하지 않고 접기만 한다. flow가 같은 값으로의
+ * 변경을 400으로 거절하기 때문에, 보내 봐야 이 줄에 빨간 문구만 남는다.
+ *
+ * beUI `Select`가 아니다 — 목록이 `absolute`로 붙어서, clip-path로 자기 네모를 잘라내는
+ * 이 모달 패널 밖으로 자라면 그대로 사라진다 (bug-report BUG-009). 라딕스 팝오버는 Portal로
+ * 나간다.
+ *
+ * ponytail: 화살표 키 이동은 없다 — `Tab`이 후보 넷·다섯을 그대로 훑고 `Enter`가 고른다.
+ * 그래서 `role="menu"`도 안 붙인다. 메뉴라고 알리면 화살표로 움직일 수 있다는 뜻이 되고,
+ * 그걸 믿은 사람은 목록 안에서 아무 데도 못 간다.
  */
-function Save({
-  pending,
+function PickMenu({
+  label,
+  options,
+  now,
   disabled,
-  note,
-  onCancel,
+  pending,
+  onPick,
+  render,
 }: {
+  label: string;
+  /** `[코드, 화면에 낼 라벨]`. 상태·우선순위 표를 그대로 받는다. */
+  options: [string, string][];
+  /** 지금 값 라벨. 트리거에 그리고 체크 자리를 찾는 데 쓴다. */
+  now: string;
+  disabled?: boolean;
   pending: boolean;
-  /** 아직 아무것도 안 골랐으면 막는다. 빈 값으로 보내면 서버가 거절할 뿐이다. */
-  disabled: boolean;
-  note?: string;
-  onCancel: () => void;
+  onPick: (value: string, label: string) => void;
+  /**
+   * 라벨 하나를 그리는 법. 상태는 배지(`StatusPill`), 우선순위는 아이콘+글자다
+   * (`PriorityMark`).
+   *
+   * 트리거와 목록이 **같은 함수**를 쓴다 — 고른 값은 목록에서 본 그 모양으로 자리에 남는다.
+   * 트리거만 따로 그리던 때는 목록이 글자뿐이고 트리거만 배지라, 고르고 나면 방금 누른 것과
+   * 다른 것이 켜진 것처럼 보였다.
+   */
+  render: (label: string) => ReactNode;
 }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    // 값 열이 세로 스택이라 둘을 한 덩어리로 묶는다 — 그냥 두면 각자 줄로 갈라진다.
-    <div className="flex flex-wrap items-center gap-2">
-      <Button type="submit" size="sm" disabled={disabled || pending} className="h-7 px-2.5">
-        {pending ? "저장 중…" : "저장"}
-      </Button>
-      <Button type="button" size="sm" variant="ghost" onClick={onCancel} className="h-7 px-2.5">
-        취소
-      </Button>
-      {note && <span className="w-full text-xs text-warning-foreground">{note}</span>}
-    </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        type="button"
+        disabled={disabled || pending}
+        /* 값이 트리거라 그냥 두면 이름이 값뿐이다 — 무슨 값인지, 눌러서 뭐가 되는지 같이 읽힌다 */
+        aria-label={`${label} 바꾸기, 지금 ${now}`}
+        className={PICK}
+      >
+        {render(now)}
+        <PickMark pending={pending} />
+      </PopoverTrigger>
+      {/* `z-[110]`은 업무 상세 모달(`z-[100]` — morphing-modal)보다 위로 올리는 값이다.
+          기본 `z-50`이면 목록이 패널 뒤로 들어간다. Escape는 여기서 멈춘다 — 모달도
+          `window`에서 Escape를 듣고 있어서, 그냥 두면 목록을 접으려고 누른 키가 모달까지
+          통째로 닫는다 (라딕스는 문서 캡처 단계에서 받으니 여기서 끊으면 안 넘어간다) */}
+      <PopoverContent
+        align="start"
+        aria-label={label}
+        className="z-[110] w-36 gap-0 p-1"
+        onEscapeKeyDown={(event) => event.stopPropagation()}
+      >
+        {options.map(([value, text]) => (
+          <button
+            key={value}
+            type="button"
+            aria-current={text === now ? "true" : undefined}
+            onClick={() => {
+              setOpen(false);
+              if (text !== now) onPick(value, text);
+            }}
+            className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            <span className="flex min-w-0 flex-1 items-center">{render(text)}</span>
+            {text === now && <IconCheck size={13} aria-hidden className="shrink-0 text-primary" />}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -376,61 +432,46 @@ function StatusField({
   path: string;
   onSaved: (shown: string) => void;
 }) {
-  const [picked, setPicked] = useState<TaskStatus | "">("");
-  const { editing, saved, result, action, pending, edit, cancel } = useSave(
+  const { saved, result, pending, save } = useField(
     updateTaskStatus,
-    () => setPicked(""),
+    { projectId, taskId, path },
     onSaved,
   );
-  const labelId = `status-label-${taskId}`;
   /** 저장한 뒤에는 방금 저장한 값이 지금 값이다 — 부모가 준 `now`는 아직 옛것이다. */
   const current = saved || now;
 
   return (
-    <form action={action} className={ROW}>
-      <TaskRef projectId={projectId} taskId={taskId} path={path} />
-      <input type="hidden" name="shown" value={picked ? TASK_STATUS[picked] : ""} />
-
-      <span id={labelId} className={LABEL}>
-        상태
-      </span>
-      <div className={editing ? EDITING : FIELD}>
-        {editing ? (
-          <>
-            <span className={FROM}>{current} →</span>
-            <div role="radiogroup" aria-labelledby={labelId} className={CHIPS}>
-              {Object.entries(TASK_STATUS).map(([value, label]) => (
-                <Chip
-                  key={value}
-                  type="radio"
-                  name="status"
-                  value={value}
-                  label={label}
-                  on={picked === value}
-                  onPick={() => setPicked(value as TaskStatus)}
-                />
-              ))}
-            </div>
-            <Save pending={pending} disabled={!picked} onCancel={cancel} />
-          </>
-        ) : (
-          /* 상태만 글자가 아니라 배지다 — 값 자체가 색을 갖는 유일한 줄이고(요청·진행·
+    <div className={ROW}>
+      <span className={LABEL}>상태</span>
+      <div className={FIELD}>
+        <PickMenu
+          label="상태"
+          options={Object.entries(TASK_STATUS)}
+          now={current}
+          pending={pending}
+          onPick={(value, label) => save({ status: value, shown: label })}
+          /* 상태는 글자가 아니라 배지다 — 값 자체가 색을 갖는 유일한 줄이고(요청·진행·
              피드백·완료·보류), 머리에 있는 배지와 같은 모양이라 이 줄이 그 값을 가리킨다는
-             걸 따로 읽지 않아도 된다. 색만으로 말하지 않는다 — 라벨 글자가 같이 나간다 */
-          <Shown now={<StatusPill status={current} />} label="상태" onEdit={edit} />
-        )}
+             걸 따로 읽지 않아도 된다. 색만으로 말하지 않는다 — 라벨 글자가 같이 나간다.
+             고르기 목록도 같은 배지다: 목록에서 색을 보고 고른 사람은 그 색이 자리에 남을
+             거라고 읽는다 */
+          render={(label) => <StatusPill status={label} />}
+        />
 
         <Result result={result} />
       </div>
-    </form>
+    </div>
   );
 }
 
 /**
  * 마감일 (PRD §13 A4).
  *
- * 달력은 shadcn `Calendar` + `Popover`다 (`date-field.tsx`). 값은 `YYYY-MM-DD` 문자열이고
- * 서버가 하이픈만 떼서 flow의 `YYYYMMDD`로 만든다.
+ * 후보가 365개라 목록이 아니라 달력이다 — shadcn `Calendar` + `Popover` (`date-field.tsx`).
+ * 값은 `YYYY-MM-DD` 문자열이고 서버가 하이픈만 떼서 flow의 `YYYYMMDD`로 만든다.
+ *
+ * 이미 골라 둔 날짜를 다시 누르면 저장하지 않고 접기만 한다 — 달력은 같은 날을 다시 누르면
+ * 고른 것을 지워서 빈 값을 주는데, 마감일을 지우는 경로는 flow에 없다.
  */
 function EndDateField({
   projectId,
@@ -441,49 +482,37 @@ function EndDateField({
 }: {
   projectId: string;
   taskId: number;
+  /** 지금 마감일 `YYYYMMDD`. 빈 문자열이면 아직 없다. */
   now: string;
   path: string;
   onSaved: (shown: string) => void;
 }) {
-  const [picked, setPicked] = useState("");
-  const { editing, saved, result, action, pending, edit, cancel } = useSave(
+  const { saved, result, pending, save } = useField(
     updateTaskEndDate,
-    () => setPicked(""),
+    { projectId, taskId, path },
     onSaved,
   );
-  const labelId = `end-date-label-${taskId}`;
-  const current = saved || now;
+  /** 달력이 쓰는 `YYYY-MM-DD`. 그대로 화면에 낼 글자이기도 하다. */
+  const value = saved || (now ? fmtDate(now) : "");
 
   return (
-    <form action={action} className={ROW}>
-      <TaskRef projectId={projectId} taskId={taskId} path={path} />
-      {/* 고른 날짜가 그대로 화면에 낼 글자다 (`fmtDate`가 하이픈 형식을 통과시킨다) */}
-      <input type="hidden" name="shown" value={picked} />
-
-      <span id={labelId} className={LABEL}>
-        마감일
-      </span>
-      <div className={editing ? EDITING : FIELD}>
-        {editing ? (
-          <>
-            <span className={FROM}>{current} →</span>
-            {/* 마감일만 고르기 칸 목록이 아니다 — 후보가 365개다 */}
-            <DateField
-              name="endDate"
-              value={picked}
-              onChange={setPicked}
-              aria-labelledby={labelId}
-              className="w-40"
-            />
-            <Save pending={pending} disabled={!picked} onCancel={cancel} />
-          </>
-        ) : (
-          <Shown now={current} label="마감일" onEdit={edit} />
-        )}
+    <div className={ROW}>
+      <span className={LABEL}>마감일</span>
+      <div className={FIELD}>
+        <DateMenu
+          value={value}
+          disabled={pending}
+          aria-label={`마감일 바꾸기, 지금 ${value || "없어요"}`}
+          className={PICK}
+          onPick={(picked) => picked && save({ endDate: picked, shown: picked })}
+        >
+          <span className="min-w-0 truncate text-xs">{value || "아직 없어요"}</span>
+          <PickMark pending={pending} />
+        </DateMenu>
 
         <Result result={result} />
       </div>
-    </form>
+    </div>
   );
 }
 
@@ -492,60 +521,49 @@ function PriorityField({
   projectId,
   taskId,
   now,
+  loading,
   path,
 }: {
   projectId: string;
   taskId: number;
   now: string;
+  /** 지금 값이 아직 안 왔으면 못 누른다 — 무엇이 켜져 있는지 모르는 채로 고르게 된다. */
+  loading: boolean;
   path: string;
 }) {
-  const [picked, setPicked] = useState<TaskPriority | "">("");
-  const { editing, saved, result, action, pending, edit, cancel } = useSave(
-    updateTaskPriority,
-    () => setPicked(""),
-  );
-  const labelId = `priority-label-${taskId}`;
+  const { saved, result, pending, save } = useField(updateTaskPriority, {
+    projectId,
+    taskId,
+    path,
+  });
   const current = saved || now;
 
   return (
-    <form action={action} className={ROW}>
-      <TaskRef projectId={projectId} taskId={taskId} path={path} />
-      <input type="hidden" name="shown" value={picked ? TASK_PRIORITY[picked] : ""} />
-
-      <span id={labelId} className={LABEL}>
-        우선순위
-      </span>
-      <div className={editing ? EDITING : FIELD}>
-        {editing ? (
-          <>
-            <span className={FROM}>{current} →</span>
-            <div role="radiogroup" aria-labelledby={labelId} className={CHIPS}>
-              {Object.entries(TASK_PRIORITY).map(([value, label]) => (
-                <Chip
-                  key={value}
-                  type="radio"
-                  name="priority"
-                  value={value}
-                  label={label}
-                  on={picked === value}
-                  onPick={() => setPicked(value as TaskPriority)}
-                />
-              ))}
-            </div>
-            <Save pending={pending} disabled={!picked} onCancel={cancel} />
-          </>
-        ) : (
-          <Shown now={current} label="우선순위" onEdit={edit} />
-        )}
+    <div className={ROW}>
+      <span className={LABEL}>우선순위</span>
+      <div className={FIELD}>
+        <PickMenu
+          label="우선순위"
+          options={Object.entries(TASK_PRIORITY)}
+          now={current}
+          disabled={loading}
+          pending={pending}
+          onPick={(value, label) => save({ priority: value, shown: label })}
+          render={(label) => <PriorityMark label={label} />}
+        />
 
         <Result result={result} />
       </div>
-    </form>
+    </div>
   );
 }
 
 /**
  * 담당자 (PRD §13 A4).
+ *
+ * 여기만 `변경`이 남았다. 담당은 여럿이 나눠 지고 flow 쓰기가 덮어쓰기라, 한 번 누르기로
+ * 끝내면 켜다 만 상태가 그대로 저장돼 남의 담당까지 떨어진다 — 고르기는 별도 모달에서
+ * 받고 `확인`으로 맺는다 (`worker-picker.tsx`).
  *
  * 후보 목록은 **`변경`을 누를 때만 부른다.** 조회가 업무 한 줄에 REST 두 번이라(참여자 +
  * 그 프로젝트 업무 — `listParticipants`), 모달을 열 때 같이 부르면 상태만 바꾸러 온 사람도
@@ -553,14 +571,13 @@ function PriorityField({
  *
  * 후보에는 타사 사용자도 있다. flow 참여자 API가 우리 기관 사람만 주는데 실제 담당자는
  * 대부분 고객사 쪽이라, 그 목록만 쓰면 고를 수 있는 사람이 실제의 5분의 1이었다.
- *
- * 고르기 칸은 상태·우선순위와 같은 모양이지만 여기만 `checkbox`다 — 담당은 여럿이 나눠 진다.
  */
 function WorkerField({
   projectId,
   taskId,
   now,
   workers,
+  loading,
   path,
 }: {
   projectId: string;
@@ -568,23 +585,25 @@ function WorkerField({
   now: string;
   /** 지금 담당자 실명. 프리체크와 누락 안내가 이걸 후보 목록과 맞춘다. */
   workers: readonly string[];
+  /** 지금 담당자가 아직 안 왔으면 못 누른다 — 미리 켤 사람을 모르는 채로 열게 된다. */
+  loading: boolean;
   path: string;
 }) {
+  const [open, setOpen] = useState(false);
+  // 저장이 되면 모달을 접는다. 실패면 열어 둔다 — 고른 사람들이 그대로 남아 있어야 사유를
+  // 읽고 다시 보낼 수 있다. 접는 자리가 액션 안인 이유: 성공 여부를 아는 자리가 거기다
+  // (이펙트에서 `result.ok`를 보고 접으면 React 19 린트가 막는다).
+  const { saved, result, pending, save } = useField(
+    updateTaskWorker,
+    { projectId, taskId, path },
+    () => setOpen(false),
+  );
   const [picked, setPicked] = useState<string[]>([]);
-  const {
-    editing,
-    saved,
-    result,
-    action,
-    pending,
-    edit: openEdit,
-    cancel,
-  } = useSave(updateTaskWorker, () => setPicked([]));
   const [people, setPeople] = useState<ParticipantResult | null>(null);
   const [asking, startAsk] = useTransition();
-  const labelId = `worker-label-${taskId}`;
   const current = saved || now;
   const candidates = people?.participants ?? [];
+  /** 이름은 성공 문구용이다 — 서버가 id로만 답하면 "누구로 바꿨는지"를 못 적는다. */
   const pickedNames = candidates
     .filter((p) => picked.includes(p.userId))
     .map((p) => p.name)
@@ -605,14 +624,15 @@ function WorkerField({
    * 사람이 기존 담당자까지 다시 찾아 골라야 한다 — 그러다 빠뜨리면 조용히 떨어진다.
    *
    * 이름으로 맞춘다 (flow는 담당자를 실명으로만 준다 — rest.ts `TaskFields.workers`).
-   * 그래서 아무것도 안 바꾸고 저장하면 flow가 같은 값이라고 거절하는데, 그 메시지는
+   * 그래서 아무것도 안 바꾸고 `확인`을 누르면 flow가 같은 값이라고 거절하는데, 그 메시지는
    * 이 줄에 그대로 나온다.
    */
   const mine = (list: readonly Participant[]) =>
     list.filter((p) => currentNames.includes(p.name)).map((p) => p.userId);
 
+  /** 열 때마다 지금 담당자로 되돌린다 — 지난번에 고르다 닫은 것이 남아 있으면 안 된다. */
   function edit() {
-    openEdit();
+    setOpen(true);
     if (people?.participants) {
       setPicked(mine(people.participants));
       return;
@@ -628,70 +648,40 @@ function WorkerField({
   }
 
   return (
-    <form action={action} className={ROW}>
-      <TaskRef projectId={projectId} taskId={taskId} path={path} />
-      {/* 이름은 성공 문구용이다 — 서버가 id로만 답하면 "누구로 바꿨는지"를 못 적는다 */}
-      <input type="hidden" name="workerName" value={pickedNames} />
-      <input type="hidden" name="shown" value={pickedNames} />
-
-      <span id={labelId} className={LABEL}>
-        담당자
-      </span>
-      <div className={editing ? EDITING : FIELD}>
-        {editing ? (
-          <>
-            <span className={FROM}>{current} →</span>
-            {asking ? (
-              /* 올 것은 이름 알약 묶음이다 — 글자 한 줄(`불러오는 중…`)을 두면 참여자가
-                 도착하는 순간 이 줄이 두세 줄로 벌어져 저장 버튼이 손 아래에서 밀렸다.
-                 알약 다섯 개면 제일 적은 프로젝트(실측 5명)만큼은 자리를 잡는다 */
-              <div className={CHIPS} aria-busy="true" aria-label="참여자 불러오는 중">
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className={i % 2 ? "h-8 w-16" : "h-8 w-20"} />
-                ))}
-              </div>
-            ) : (
-              <div role="group" aria-labelledby={labelId} className={CHIPS}>
-                {candidates.map((person) => (
-                  <Chip
-                    key={person.userId}
-                    type="checkbox"
-                    name="workerId"
-                    value={person.userId}
-                    label={person.name}
-                    on={picked.includes(person.userId)}
-                    onPick={(on) =>
-                      setPicked((prev) =>
-                        on
-                          ? [...prev, person.userId]
-                          : prev.filter((id) => id !== person.userId),
-                      )
-                    }
-                  />
-                ))}
-              </div>
-            )}
-            {/* 덮어쓰기라는 걸 그대로 적는다 — 안 켠 사람은 담당에서 빠진다 */}
-            <Save
-              pending={pending}
-              disabled={picked.length === 0}
-              note={
-                missing.length > 0
-                  ? `참여자 목록에 없는 담당자 ${missing.length}명(${missing.join(", ")}) — 저장하면 담당에서 빠져요.`
-                  : "켠 사람들만 담당이 돼요."
-              }
-              onCancel={cancel}
-            />
-          </>
-        ) : (
-          <Shown now={current} label="담당자" onEdit={edit} />
-        )}
+    <div className={ROW}>
+      <span className={LABEL}>담당자</span>
+      <div className={FIELD}>
+        <Shown now={current} label="담당자" disabled={loading} onEdit={edit} />
 
         {/* 후보를 못 불러온 경우. `변경`을 다시 누르면 한 번 더 부른다 */}
         {people && !people.participants && <Result result={people} />}
         <Result result={result} />
       </div>
-    </form>
+
+      <WorkerPicker
+        open={open}
+        onOpenChange={setOpen}
+        loading={asking}
+        candidates={candidates}
+        picked={picked}
+        pending={pending}
+        /* 덮어쓰기라는 걸 그대로 적는다 — 안 켠 사람은 담당에서 빠진다 */
+        note={
+          missing.length > 0
+            ? `참여자 목록에 없는 담당자 ${missing.length}명(${missing.join(", ")}) — 저장하면 담당에서 빠져요.`
+            : "켠 사람들만 담당이 돼요."
+        }
+        onToggle={(userId) =>
+          setPicked((prev) =>
+            prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId],
+          )
+        }
+        onClear={() => setPicked([])}
+        onConfirm={() =>
+          save({ workerId: picked, workerName: pickedNames, shown: pickedNames })
+        }
+      />
+    </div>
   );
 }
 

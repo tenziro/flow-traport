@@ -52,6 +52,11 @@ export {
   Sparkles as IconChangelog,
   Magnifier as IconSearch,
   Flag as IconPriority,
+  /* 우선순위 네 단계 표시 — 낮음 ↓ / 보통 — / 높음 ↑ / 긴급 경보등. flow 화면이 쓰는 그림을
+     그대로 따른다. 위아래 화살은 표가 쓰는 것과 같아서(`IconArrowUp`·`IconArrowDown`)
+     없던 둘만 여기 더한다 (`task-actions.tsx` `PRIORITY_MARK`). */
+  Minus as IconMinus,
+  Siren as IconSiren,
   User as IconWorker,
   Sun as IconLight,
   Moon as IconDark,

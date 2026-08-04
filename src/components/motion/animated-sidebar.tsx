@@ -23,10 +23,14 @@
 //   4. 데스크톱 경계는 `md:`(768px)가 아니라 `lg:`(1024px)다 — 이 앱의 기준이다.
 //   5. 레일이 화면 전체 높이를 쓴다. 브랜드는 레일 머리에 있고 접기 단추는 본문 헤더에
 //      있어서, 상태가 레일 밖에서도 필요하다 — 그래서 Provider와 Trigger를 살렸다.
-//   6. 현재 항목 알약을 `bg-accent`에서 `bg-primary/10` + `text-primary`로 바꿨다
+//   6. 현재 항목 알약을 `bg-accent`에서 파란 알약 + 파란 글자로 바꿨다
 //      (v1.7.0). 원본의 회색 알약은 밝은 화면에서 흰 레일과 4% 차이라 어디에 있는지가
 //      한눈에 안 잡혔다. 좁은 화면 하단 탭이 이미 `text-primary`를 쓰고 있어서, 색을
 //      맞추면 두 크기의 메뉴가 "지금 여기"를 같은 방식으로 말한다.
+//   7. 그 알약 색을 토큰으로 뽑았다 (`--primary-bg` / `--primary-bg-foreground`).
+//      `bg-primary/10`은 어두운 화면에서 근검정 위 10%짜리 파랑이라 알약이 있는지조차
+//      안 보였다. 어둡게만 25%로 올리고 글자도 같이 밝힌다 — 면만 밝히면 브랜드 파랑이
+//      그 위에서 AA에 못 미친다 (globals.css의 토큰 주석).
 
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
@@ -216,7 +220,7 @@ export function SidebarLink({
       className={cn(
         "relative flex min-h-10 shrink-0 items-center gap-3 overflow-hidden rounded-lg px-3 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
         active
-          ? "font-semibold text-primary"
+          ? "font-semibold text-primary-bg-foreground"
           : "text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
     >
@@ -224,7 +228,7 @@ export function SidebarLink({
         <motion.span
           layoutId="sidebar-active"
           transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
-          className="absolute inset-0 rounded-lg bg-primary/10"
+          className="absolute inset-0 rounded-lg bg-primary-bg"
         />
       )}
       <span aria-hidden className="relative z-10 grid size-5 shrink-0 place-items-center">
