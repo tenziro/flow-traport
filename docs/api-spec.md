@@ -308,6 +308,23 @@ https://api.flow.team
 **응답 `data.participants[]`**: `inttId`*, `userId`*, `name`*
 **에러 추가**: `NOT_EXISTS_ERROR / 프로젝트가 존재하지 않습니다.`
 
+> **이 목록은 "참여자 전원"이 아니다 — 우리 기관 사람만이다** `(실측 2026-08-04)`. 프로젝트
+> 4곳 모두 5~7명이고 전원 `@traport.com`, `inttId`도 하나(우리 테넌트)다. MCP
+> `flow_list_project_participants`도 **같은 목록**을 준다. 잘린 게 아니다: `pageSize=100` ·
+> `lastCursor=0` · `page=2`를 붙여도 수가 그대로고 응답에 `hasNext`·`lastCursor`도 없다.
+>
+> 같은 프로젝트 업무(§6.1)의 실제 담당자는 3~41명이고 **그중 2~33명이 이 목록에 없다.**
+> 담당자 후보를 이 목록만으로 만들면 고객사 담당자를 고를 수가 없다.
+>
+> **후보를 채우는 방법**: §6.1 응답의 `WORKER_ID`·`RGSR_ID` 컬럼에서 `{customColumnData,
+> userName}`을 긁어 `userId`로 합친다. **`customColumnData`가 곧 `workerId`다** — 우리 기관
+> 사람은 이 값이 여기 `userId`와 같은 이메일(20~25자)이고, 타사 사용자는 6~10자 로그인 ID나
+> 타사 이메일(`naver.com` 등)이다. §6.4 `worker` PATCH가 받는 형식(`1~100자,
+> 소문자/숫자/-_@.`)이고, 업무를 맡거나 낸 사람은 참여자라 `프로젝트에 참여하지 않은 사용자를
+> 담당자로 지정할 수 없습니다`에 걸리지 않는다. 구현은 `rest.ts listParticipants`다.
+>
+> 타사 사용자의 부서·직급·사진은 여전히 못 온다 (§6.1의 등록자 표와 같은 사정).
+
 ### 5.5 `GET /user/projects/{projectId}/columns` — 프로젝트 업무 컬럼 ⭐
 
 업무 필드 해석의 전제 조건. 프로젝트별로 1회 캐싱해 두면 된다.

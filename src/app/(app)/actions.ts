@@ -359,7 +359,12 @@ export interface ParticipantResult extends ActionResult {
   participants?: Participant[];
 }
 
-/** 담당자 후보. 프로젝트마다 한 번, 누를 때만 부른다. */
+/**
+ * 담당자 후보. 프로젝트마다 한 번, 누를 때만 부른다.
+ *
+ * 참여자 API가 우리 기관 사람만 줘서 그 프로젝트 업무에 이름이 있는 사람을 더한다
+ * (`listParticipants`) — 그래서 REST 두 번이다. 누를 때만 부르는 이유가 여기 있다.
+ */
 export async function loadParticipants(
   _prev: ParticipantResult | null,
   form: FormData,

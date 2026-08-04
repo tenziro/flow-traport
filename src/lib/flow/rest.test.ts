@@ -6,6 +6,7 @@ import {
   isChangeLog,
   lastHumanComment,
   listMyTasks,
+  listParticipants,
   mergeMentionComments,
   resolvePostId,
   stripMentions,
@@ -473,5 +474,77 @@ describe('댓글에서 부른 이름 걷어 내기', () => {
       stripMentions('jslee@traport.com 으로 보냈어요 [완료]'),
       'jslee@traport.com 으로 보냈어요 [완료]',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 담당자 후보 — 참여자 목록 + 업무에 이름이 있는 사람 (PRD §13 A4)
+// ---------------------------------------------------------------------------
+
+describe('담당자 후보 모으기', () => {
+  /** URL마다 다른 응답이 필요하다 — 참여자 조회와 업무 조회를 같이 부른다. */
+  const stub = (participants: unknown, tasks: unknown[]) => {
+    process.env.FLOW_API_KEY = 'test-key';
+    globalThis.fetch = (async (url: string) => ({
+      ok: true,
+      json: async () => ({
+        response: {
+          success: true,
+          data: url.includes('/participants') ? { participants } : { tasks },
+        },
+      }),
+    })) as unknown as typeof fetch;
+  };
+
+  const worker = (userId: string, userName: string) => ({
+    defaultColumnType: 'WORKER_ID',
+    columnData: [{ customColumnData: userId, userName }],
+  });
+
+  it('참여자 목록에 없는 담당자도 후보가 된다 — 참여자 API는 우리 기관 사람만 준다', async () => {
+    stub([{ userId: 'jongseok.lee@traport.com', name: '이종석' }], [
+      filterTask([NAME_COL, worker('hong67', '홍성우')]),
+    ]);
+
+    const people = await listParticipants('2639815');
+    assert.deepEqual(people, [
+      // 우리 기관 사람이 먼저다
+      { userId: 'jongseok.lee@traport.com', name: '이종석' },
+      // 타사 담당자의 `customColumnData`가 곧 `workerId`다 (로그인 ID꼴)
+      { userId: 'hong67', name: '홍성우' },
+    ]);
+  });
+
+  it('같은 사람이 여러 업무에 있어도 한 번만, 등록자도 후보다', async () => {
+    stub([], [
+      filterTask([NAME_COL, worker('hong67', '홍성우')]),
+      filterTask([
+        NAME_COL,
+        worker('hong67', '홍성우'),
+        { defaultColumnType: 'RGSR_ID', columnData: [{ customColumnData: 'kim12', userName: '김가영' }] },
+      ]),
+    ]);
+
+    assert.deepEqual(await listParticipants('2639815'), [
+      // 이름순이다 — 업무에 나온 순서가 아니다
+      { userId: 'kim12', name: '김가영' },
+      { userId: 'hong67', name: '홍성우' },
+    ]);
+  });
+
+  it('업무 조회가 죽어도 참여자 목록은 남는다', async () => {
+    process.env.FLOW_API_KEY = 'test-key';
+    globalThis.fetch = (async (url: string) => ({
+      ok: url.includes('/participants'),
+      json: async () => ({
+        response: url.includes('/participants')
+          ? { success: true, data: { participants: [{ userId: 'a@traport.com', name: '이종석' }] } }
+          : { success: false, error: { message: '조회 실패' } },
+      }),
+    })) as unknown as typeof fetch;
+
+    assert.deepEqual(await listParticipants('2639815'), [
+      { userId: 'a@traport.com', name: '이종석' },
+    ]);
   });
 });

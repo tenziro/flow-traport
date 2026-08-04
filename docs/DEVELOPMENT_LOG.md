@@ -75,11 +75,34 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
 
 - Next.js 16 App Router · React 19 · Tailwind v4 · Motion · beUI(vendoring) · Reicon.
 - 색은 `globals.css`의 `light-dark()` 토큰 한 벌. 컴포넌트에 raw hex 금지 (PRD §7.1).
-- 유닛 테스트는 `node:test`. 현재 129건.
+- 유닛 테스트는 `node:test`. 현재 132건.
 
 ---
 
 ## 변경 이력
+
+### 2026-08-04 — 담당자 후보에 타사 사용자를 넣었다 (v3.2.0)
+
+`기능` **참여자 API가 우리 기관 사람만 줘서, 그 프로젝트 업무에 담당자·등록자로 이름이 있는
+사람을 후보에 더한다.**
+
+- **실측 2026-08-04**: `/user/projects/{id}/participants`는 프로젝트 4곳 모두 5~7명이고 전원
+  `@traport.com`이다. MCP `flow_list_project_participants`도 같은 목록이다(같은 `inttId`).
+  `pageSize`·`lastCursor`·`page`를 붙여도 수가 그대로라 잘린 게 아니다 — 우리 기관만 준다.
+  그런데 같은 프로젝트 업무의 실제 담당자는 3~41명이고 그중 2~33명이 그 목록에 없다.
+  고객사 담당자로 바꾸는 일이 실제로 불가능했다.
+- **`customColumnData`가 곧 `workerId`다.** 우리 기관 사람은 이 값이 참여자 목록의 `userId`와
+  같은 이메일(20~25자 `@traport.com`)이고, 타사 사용자는 6~10자 로그인 ID나 타사 이메일이다 —
+  쓰기 스펙(§6.4 `1~100자, 소문자/숫자/-_@.`)이 받는 형식이다. 업무를 맡거나 낸 사람은 그
+  프로젝트 참여자라 `프로젝트에 참여하지 않은 사용자를 담당자로 지정할 수 없습니다`에 걸리지
+  않는다.
+- `listParticipants`가 참여자 조회와 업무 조회(`tasks/filter?pageSize=100`)를 같이 부르고
+  `WORKER_ID`·`RGSR_ID`에서 사람을 긁어 `userId`로 합친다. 업무 조회는 곁가지다 — 죽어도
+  우리 기관 참여자만으로 고를 수 있다. 순서는 참여자 먼저, 나머지는 이름순이다.
+- 업무 첫 100건만 본다(`pageSize` 상한). 오래된 업무에만 있는 사람은 빠지고, 그때는 기존
+  `참여자 목록에 없는 담당자 N명` 안내가 그대로 뜬다. 커서를 돌리면 프로젝트마다 REST 6회다.
+- 관련 파일: `src/lib/flow/rest.ts`, `src/lib/flow/rest.test.ts`, `src/app/(app)/actions.ts`,
+  `src/components/task-actions.tsx`, `docs/api-spec.md`, `src/lib/changelog.ts`.
 
 ### 2026-08-04 — 머리의 상태 배지를 빼고 그 자리에 등록자 (v3.1.2)
 

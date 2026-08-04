@@ -702,12 +702,56 @@ export interface Participant {
   name: string;
 }
 
+/**
+ * 담당자 후보. 참여자 목록(§5.4)에 **그 프로젝트 업무에 이미 이름이 있는 사람**을 더한다.
+ *
+ * §5.4는 우리 기관 사람만 준다 `(실측 2026-08-04)` — 프로젝트 4곳 모두 5~7명이고 전원
+ * `@traport.com`이다. MCP `flow_list_project_participants`도 같은 목록이다. 그런데 같은
+ * 프로젝트 업무의 실제 담당자는 3~41명이고 그중 2~33명이 그 목록에 없다. 즉 참여자 목록만
+ * 쓰면 고객사 담당자를 고를 수가 없다.
+ *
+ * 그래서 업무 응답의 `WORKER_ID`·`RGSR_ID`에서 사람을 더 긁는다. **`customColumnData`가 곧
+ * `workerId`다** — 우리 기관 사람은 이 값이 참여자 목록의 `userId`와 같은 이메일이고, 타사
+ * 사용자는 6~10자 로그인 ID다 (쓰기 스펙이 받는 형식이다: 1~100자 소문자/숫자/`-_@.` §6.4).
+ * 업무를 맡거나 낸 사람은 그 프로젝트 참여자라서, flow의 `프로젝트에 참여하지 않은 사용자를
+ * 담당자로 지정할 수 없습니다`에 걸리지 않는다.
+ *
+ * 순서는 참여자 목록 먼저, 그다음 이름순이다 — 우리 팀이 위에 오고 나머지는 찾기 쉽게 선다.
+ *
+ * ponytail: 업무는 첫 100건만 본다 (`pageSize` 상한이 100이다). 600건짜리 프로젝트에서
+ * 오래된 업무에만 있는 사람은 빠지고, 그때는 화면이 누락 문구로 알린다. 커서를 돌리면
+ * 프로젝트마다 REST 여섯 번이다.
+ */
 export async function listParticipants(projectId: string): Promise<Participant[]> {
-  const data = await get<{ participants?: Participant[] }>(
-    `/user/projects/${projectId}/participants`,
-    "참여자 조회",
-  );
-  return data.participants ?? [];
+  const [data, tasks] = await Promise.all([
+    get<{ participants?: Participant[] }>(
+      `/user/projects/${projectId}/participants`,
+      "참여자 조회",
+    ),
+    // 곁가지다 — 이쪽이 죽어도 우리 기관 참여자만으로 고를 수 있어야 한다.
+    get<{ tasks?: FilterTask[] }>(
+      `/user/posts/projects/${projectId}/tasks/filter?pageSize=100`,
+      "참여자 조회",
+    ).catch(() => ({ tasks: [] as FilterTask[] })),
+  ]);
+
+  const listed = data.participants ?? [];
+  const seen = new Set(listed.map((p) => p.userId));
+  const extra = new Map<string, Participant>();
+  for (const task of tasks.tasks ?? []) {
+    for (const type of ["WORKER_ID", "RGSR_ID"]) {
+      for (const d of columnData(task, type)) {
+        const userId = d.customColumnData ?? "";
+        if (!userId || !d.userName || seen.has(userId) || extra.has(userId)) continue;
+        extra.set(userId, { userId, name: d.userName });
+      }
+    }
+  }
+
+  return [
+    ...listed,
+    ...[...extra.values()].sort((a, b) => a.name.localeCompare(b.name, "ko")),
+  ];
 }
 
 /* ── 방치된 업무 (api-spec §5.6·§6.1, PRD §13 B5) ─────────────────────── */
