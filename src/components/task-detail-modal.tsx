@@ -76,84 +76,96 @@ export function TaskDetailModal({
         </div>
       </div>
 
-      {/* 값 — 상태·마감일·등록일·우선순위·담당자 다섯 줄 */}
-      {projectId ? (
-        <div className="border-b border-border px-5 py-1">
-          <TaskEditFields
+      {/* 머리와 바닥은 제자리에 두고 가운데만 스크롤한다. 값·이유·본문·댓글이 다 도착하면
+          패널이 화면보다 길어지는데, 그때 업무명과 `닫기`가 같이 밀려 올라가면 지금 무엇을
+          보고 있는지와 나가는 길이 한꺼번에 사라진다.
+
+          높이는 `60vh`지만 화면이 낮으면 `100dvh - 16rem`이 이긴다 — 16rem은 패널 위아래
+          여백(4rem) + 머리(약 7.5rem) + 바닥(약 3rem)이다. 이 상한이 없으면 낮은 화면에서
+          패널이 화면보다 커져 오버레이가 대신 스크롤하고, 그러면 머리·바닥이 다시 밀린다.
+
+          아래 선은 칸이 갖는다 — 덩어리마다 붙은 `border-b`는 내용과 같이 밀려 올라가서
+          바닥과의 경계를 못 잡는다. 마지막 덩어리 것만 끈다(두 겹으로 보인다) */}
+      <div className="max-h-[min(60vh,calc(100dvh-16rem))] overflow-y-auto border-b border-border [&>*:last-child]:border-b-0">
+        {/* 값 — 상태·마감일·등록일·우선순위·담당자 다섯 줄 */}
+        {projectId ? (
+          <div className="border-b border-border px-5 py-1">
+            <TaskEditFields
+              projectId={projectId}
+              taskId={task.taskSrno}
+              title={task.title}
+              status={shown.status}
+              endDate={shown.endDate}
+              regDate={regDate}
+              path={path}
+              onSaved={onSaved}
+            />
+          </div>
+        ) : (
+          <p className="border-b border-border px-5 py-4 text-xs text-muted-foreground">
+            이 프로젝트는 flow에서 열어야 바꿀 수 있어요.
+          </p>
+        )}
+
+        {/* 왜 골랐는지 — 포커스 응답에만 있다. 점수만 보면 알 수 없고 이유를 같이 읽어야 한다 */}
+        {pick && (pick.reasons.length > 0 || pick.comments > 0 || pick.mentions > 0) && (
+          <div className="border-b border-border px-5 py-4">
+            <p className="text-xs font-semibold text-muted-foreground">이 업무를 고른 이유</p>
+            {top !== undefined && (
+              <Meter
+                total={top}
+                className="mt-2"
+                segments={[
+                  {
+                    value: pick.score,
+                    label: `위험 점수 ${Math.round(pick.score)}`,
+                    className: rank === 1 ? "bg-primary" : "bg-neutral",
+                  },
+                ]}
+              />
+            )}
+            {pick.reasons.length > 0 && (
+              <ul className="mt-2 flex flex-wrap gap-1">
+                {pick.reasons.map((reason) => (
+                  <li
+                    key={reason}
+                    className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] text-secondary-foreground"
+                  >
+                    {withUnit(reason)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="tabular mt-2 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+              {pick.comments > 0 && (
+                <span className="flex items-center gap-1">
+                  <IconComment size={11} />
+                  <span className="sr-only">댓글 </span>
+                  {pick.comments}개
+                </span>
+              )}
+              {pick.mentions > 0 && (
+                <span className="flex items-center gap-1">
+                  <IconMention size={11} />
+                  <span className="sr-only">피드백 </span>
+                  {pick.mentions}개
+                </span>
+              )}
+            </p>
+          </div>
+        )}
+
+        {/* 본문 + 댓글 — 열 때 부른다. 두 덩어리가 한 왕복에서 나와서 한 컴포넌트다 */}
+        {projectId && (
+          <TaskThread
             projectId={projectId}
             taskId={task.taskSrno}
             title={task.title}
-            status={shown.status}
-            endDate={shown.endDate}
-            regDate={regDate}
+            postId={"postId" in task ? task.postId : undefined}
             path={path}
-            onSaved={onSaved}
           />
-        </div>
-      ) : (
-        <p className="border-b border-border px-5 py-4 text-xs text-muted-foreground">
-          이 프로젝트는 flow에서 열어야 바꿀 수 있어요.
-        </p>
-      )}
-
-      {/* 왜 골랐는지 — 포커스 응답에만 있다. 점수만 보면 알 수 없고 이유를 같이 읽어야 한다 */}
-      {pick && (pick.reasons.length > 0 || pick.comments > 0 || pick.mentions > 0) && (
-        <div className="border-b border-border px-5 py-4">
-          <p className="text-xs font-semibold text-muted-foreground">이 업무를 고른 이유</p>
-          {top !== undefined && (
-            <Meter
-              total={top}
-              className="mt-2"
-              segments={[
-                {
-                  value: pick.score,
-                  label: `위험 점수 ${Math.round(pick.score)}`,
-                  className: rank === 1 ? "bg-primary" : "bg-neutral",
-                },
-              ]}
-            />
-          )}
-          {pick.reasons.length > 0 && (
-            <ul className="mt-2 flex flex-wrap gap-1">
-              {pick.reasons.map((reason) => (
-                <li
-                  key={reason}
-                  className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] text-secondary-foreground"
-                >
-                  {withUnit(reason)}
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="tabular mt-2 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
-            {pick.comments > 0 && (
-              <span className="flex items-center gap-1">
-                <IconComment size={11} />
-                <span className="sr-only">댓글 </span>
-                {pick.comments}개
-              </span>
-            )}
-            {pick.mentions > 0 && (
-              <span className="flex items-center gap-1">
-                <IconMention size={11} />
-                <span className="sr-only">피드백 </span>
-                {pick.mentions}개
-              </span>
-            )}
-          </p>
-        </div>
-      )}
-
-      {/* 본문 + 댓글 — 열 때 부른다. 두 덩어리가 한 왕복에서 나와서 한 컴포넌트다 */}
-      {projectId && (
-        <TaskThread
-          projectId={projectId}
-          taskId={task.taskSrno}
-          title={task.title}
-          postId={"postId" in task ? task.postId : undefined}
-          path={path}
-        />
-      )}
+        )}
+      </div>
 
       <div className="flex items-center justify-between px-5 py-3">
         <FlowLink href={task.link} />
