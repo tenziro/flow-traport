@@ -57,23 +57,31 @@ export function TaskDetailModal({
        머리·값·이유·댓글이 갈린다 */
     <>
       {/* 머리 — 어느 프로젝트의 어느 업무인지가 먼저다. 표가 뒤로 가려도 대상이 남는다 */}
-      <div className="border-b border-border px-5 pt-5 pb-4">
-        <p className="truncate text-xs text-muted-foreground">{task.project}</p>
-        <div className="mt-1 flex items-start gap-2">
-          <h2 id={descId} className="min-w-0 flex-1 text-base font-semibold">
-            {task.title}
-          </h2>
+      <div className="border-b border-border">
+        {/* 프로젝트명과 업무번호는 한 줄로 묶고 선으로 갈랐다 — 둘 다 "이게 어느 업무인가"를
+            가리키는 딱지고, 업무명은 그 안의 내용이다. 번호가 오른쪽 끝인 것은 왼쪽에서
+            읽히는 이름과 부딪히지 않게 하려는 것이다. 배경 칩을 뗀 것도 같은 이유다:
+            선이 이미 갈라 주는데 면까지 두면 머리에서 제일 무거운 게 번호가 된다.
+            선은 패널 폭 끝까지 닿는다 — 여백은 이 줄이 갖고 선은 감싼 칸이 그린다.
+            안쪽으로 물린 선은 덩어리를 가르는 게 아니라 밑줄로 읽힌다 */}
+        <div className="flex items-center gap-3 border-b border-border px-5 py-2.5">
+          <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{task.project}</p>
           {/* 업무번호는 flow에서 사람끼리 업무를 가리킬 때 쓰는 번호다 */}
-          <span className="tabular shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">
+          <span className="tabular shrink-0 text-[11px] text-muted-foreground">
             업무번호 {task.taskSrno}
           </span>
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <StatusPill status={shown.status} />
-          {shown.endDate ? <DDay days={shown.daysLeft} /> : null}
-          {rank !== undefined && (
-            <span className="text-xs text-muted-foreground">오늘 포커스 {rank}순위</span>
-          )}
+        <div className="px-5 pt-3 pb-4">
+          <h2 id={descId} className="text-base font-semibold">
+            {task.title}
+          </h2>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <StatusPill status={shown.status} />
+            {shown.endDate ? <DDay days={shown.daysLeft} /> : null}
+            {rank !== undefined && (
+              <span className="text-xs text-muted-foreground">오늘 포커스 {rank}순위</span>
+            )}
+          </div>
         </div>
       </div>
 
