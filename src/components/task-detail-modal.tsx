@@ -85,9 +85,13 @@ export function TaskDetailModal({
           패널이 화면보다 커져 오버레이가 대신 스크롤하고, 그러면 머리·바닥이 다시 밀린다.
 
           아래 선은 칸이 갖는다 — 덩어리마다 붙은 `border-b`는 내용과 같이 밀려 올라가서
-          바닥과의 경계를 못 잡는다. 마지막 덩어리 것만 끈다(두 겹으로 보인다) */}
-      <div className="max-h-[min(60vh,calc(100dvh-16rem))] overflow-y-auto border-b border-border [&>*:last-child]:border-b-0">
-        {/* 값 — 상태·마감일·등록일·우선순위·담당자 다섯 줄 */}
+          바닥과의 경계를 못 잡는다. 마지막 덩어리 것만 끈다(두 겹으로 보인다).
+
+          `bg-card`(라이트 #ffffff)로 패널 면(`bg-background` — #fafafa)보다 한 단 올린다.
+          읽는 자리와 머리·바닥을 면으로 갈라서, 스크롤이 어디서 시작하고 끝나는지가
+          선 하나에만 걸리지 않는다. 다크에서도 같은 방향이다 (#1c2537 vs #151c2c) */}
+      <div className="max-h-[min(60vh,calc(100dvh-16rem))] overflow-y-auto border-b border-border bg-card [&>*:last-child]:border-b-0">
+        {/* 값 — 상태·등록일·마감일·우선순위·담당자 다섯 줄 */}
         {projectId ? (
           <div className="border-b border-border px-5 py-1">
             <TaskEditFields

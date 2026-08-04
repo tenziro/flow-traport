@@ -452,8 +452,15 @@ https://api.flow.team
 |---|---|---|
 | `columnId` | `"11"` | 컬럼 ID (2.1 표의 `COLUMN_SRNO`) |
 | `columnType` | `"DATE"` | `USER` \| `TEXT` \| `STTS` \| `DATE` \| … |
-| `defaultColumnType` | `"END_DT"` | **의미를 정하는 필드.** 실측: `WORKER_ID`(담당자) · `TASK_NM`(업무명) · `STTS`(상태) · `END_DT`(마감일) · `RGSR_ID`(등록자) |
+| `defaultColumnType` | `"END_DT"` | **의미를 정하는 필드.** 실측: `WORKER_ID`(담당자) · `TASK_NM`(업무명) · `STTS`/`STATUS`(상태) · `END_DT`(마감일) · `PRIORITY`(우선순위) · `RGSR_ID`(등록자) · `RGSN_DTTM`(등록일시) · `EDTR_DTTM`(수정일시) · `PROGRESS`(진행률) · `TASK_NUM`(업무번호) |
 | `columnData` | | 값 배열. 담당자처럼 여러 명이면 원소가 여럿이다 |
+
+> **`RGSR_ID`(등록자 = 글 작성자)는 `columnType: USER`고 `userName`에 실명이 온다** `(실측
+> 2026-08-04, 프로젝트 4곳 100%)`. 담당자(`WORKER_ID`)와 형태가 같고, 담당자가 아예 없는
+> 프로젝트에도 이 컬럼은 있었다 — 업무를 만든 사람은 늘 있기 때문이다. **이 응답을 이미
+> 쓰는 화면(`/tasks` 내 업무 · `/risk` 리스크)은 호출을 늘리지 않고 작성자 열을 켤 수 있다.**
+> 워크리스트·포커스 MCP 응답에는 없어서 오늘·팀 화면은 업무마다 REST 1회가 더 붙는다 —
+> 등록일 열이 그 두 화면에만 없는 것과 같은 이유다.
 
 `columnData[]` 아이템:
 

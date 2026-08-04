@@ -132,7 +132,8 @@ export function MentionTable({
         ariaLabel="나를 부른 댓글"
         ariaDescribedBy={opened ? descIdOf(opened) : undefined}
         showCloseButton={false}
-        className="max-w-[34rem]"
+        // 업무 표 모달과 같은 폭이다 — 두 표가 나란히 있어서 다르면 어긋나 보인다
+        className="max-w-[34rem] lg:max-w-[44rem]"
       >
         {opened && <MentionDetail group={opened} path={path} onClose={close} />}
       </MorphingModal>
@@ -176,7 +177,12 @@ function MentionDetail({
         </div>
       </div>
 
-      <div className="border-b border-border px-5 py-4">
+      {/* 머리와 바닥은 제자리에 두고 알림 목록만 스크롤한다 — 열 몇 번 불린 업무는 패널이
+          화면보다 길어지고, 그때 업무명과 `닫기`가 같이 밀려 올라가면 지금 무엇을 보고
+          있는지와 나가는 길이 한꺼번에 사라진다. 높이 식은 업무 상세 모달과 같다
+          (task-detail-modal.tsx). 아래 선은 이 칸이 이미 갖고 있다.
+          면도 업무 상세 모달과 같다 — `bg-card`로 패널보다 한 단 올린다 */}
+      <div className="max-h-[min(60vh,calc(100dvh-16rem))] overflow-y-auto border-b border-border bg-card px-5 py-4">
         {/* 오래된 것부터 — 대화는 위에서 아래로 읽는다 (그룹 배열은 최신순이다) */}
         <ul className="space-y-3">
           {[...group.alarms].reverse().map((alarm, i) => (

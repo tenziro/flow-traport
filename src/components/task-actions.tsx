@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import {
   createComment,
   loadParticipants,
@@ -20,6 +20,7 @@ import { IconComment, IconLastComment, IconNormal } from "@/components/icons";
 import { Button } from "@/components/motion/button/base";
 import { Input } from "@/components/motion/input";
 import { type ReplyTarget } from "@/components/thread-view";
+import { StatusPill } from "@/components/status-pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, fmtDate } from "@/lib/utils";
 
@@ -66,7 +67,7 @@ const EDITING = "flex min-w-0 flex-1 flex-col items-start gap-2";
 const FROM = "shrink-0 text-xs leading-8 text-muted-foreground";
 
 /**
- * 상태·마감일·등록일·우선순위·담당자 다섯 줄 (PRD §6.1.4).
+ * 상태·등록일·마감일·우선순위·담당자 다섯 줄 (PRD §6.1.4).
  *
  * 우선순위·담당자·등록일은 워크리스트에 없다. **이 덩어리가 붙을 때 한 번만** 부른다 —
  * 업무 한 줄에 REST 한 번이라, 표의 모든 행이 미리 부르면 열 줄에 열 번이다. 상세 모달이
@@ -143,6 +144,16 @@ export function TaskEditFields({
         path={path}
         onSaved={(shown) => onSaved?.({ status: shown })}
       />
+      {/* 등록일만 읽기다 — flow가 바꿀 수 있는 값으로 열어 두지 않았다.
+          마감일 위에 둔다 — 업무가 언제 시작해서 언제까지인지가 시간 순서로 읽힌다 */}
+      <div className={ROW}>
+        <span className={LABEL}>등록일</span>
+        <div className={FIELD}>
+          <span className="min-w-0 flex-1 truncate text-xs leading-8">
+            {created ? fmtDate(created) : restNow("")}
+          </span>
+        </div>
+      </div>
       <EndDateField
         projectId={projectId}
         taskId={taskId}
@@ -151,15 +162,6 @@ export function TaskEditFields({
         /* 고른 값은 `YYYY-MM-DD`고 표는 flow 형식(`YYYYMMDD`)을 쓴다 */
         onSaved={(shown) => onSaved?.({ endDate: shown.replaceAll("-", "") })}
       />
-      {/* 등록일만 읽기다 — flow가 바꿀 수 있는 값으로 열어 두지 않았다 */}
-      <div className={ROW}>
-        <span className={LABEL}>등록일</span>
-        <div className={FIELD}>
-          <span className="min-w-0 flex-1 truncate text-sm leading-8">
-            {created ? fmtDate(created) : restNow("")}
-          </span>
-        </div>
-      </div>
       <PriorityField
         projectId={projectId}
         taskId={taskId}
@@ -239,10 +241,26 @@ function useSave(
 }
 
 /** 지금 값 + `변경`. 네 줄이 다 이 모양이라 값만 위아래로 훑어 읽힌다. */
-function Shown({ now, label, onEdit }: { now: string; label: string; onEdit: () => void }) {
+function Shown({
+  now,
+  label,
+  onEdit,
+}: {
+  /** 글자 그대로 두 줄이 대부분이고, 상태만 배지를 넣는다 (`StatusPill`). */
+  now: ReactNode;
+  label: string;
+  onEdit: () => void;
+}) {
   return (
     <>
-      <span className="min-w-0 flex-1 truncate text-sm leading-8">{now}</span>
+      {/* 32px 자리를 잡고 그 안에 세운다 — 글자만 있을 때는 `leading-8`로 충분했지만
+          상태 배지는 인라인 상자라 baseline에 걸려 몇 px 아래로 처진다 */}
+      <span className="flex h-8 min-w-0 flex-1 items-center">
+        {/* 라벨 열과 같은 `text-xs`다 — 지금 값은 읽고 지나가는 값이고, 이 다섯 줄에서
+            제일 크게 읽혀야 하는 건 위 머리의 업무명이다. 상태 줄은 배지가 자기 크기를
+            갖고 있어서 여기 크기와 무관하다 */}
+        <span className="min-w-0 truncate text-xs">{now}</span>
+      </span>
       {/* 버튼 넷이 다 `변경`이라 이름만으로는 어느 줄인지 안 읽힌다 */}
       <Button
         type="button"
@@ -396,7 +414,10 @@ function StatusField({
             <Save pending={pending} disabled={!picked} onCancel={cancel} />
           </>
         ) : (
-          <Shown now={current} label="상태" onEdit={edit} />
+          /* 상태만 글자가 아니라 배지다 — 값 자체가 색을 갖는 유일한 줄이고(요청·진행·
+             피드백·완료·보류), 머리에 있는 배지와 같은 모양이라 이 줄이 그 값을 가리킨다는
+             걸 따로 읽지 않아도 된다. 색만으로 말하지 않는다 — 라벨 글자가 같이 나간다 */
+          <Shown now={<StatusPill status={current} />} label="상태" onEdit={edit} />
         )}
 
         <Result result={result} />

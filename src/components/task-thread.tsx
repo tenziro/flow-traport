@@ -88,7 +88,8 @@ export function TaskThread({
           <p className="text-xs font-semibold text-muted-foreground">본문</p>
           {/* 줄바꿈을 살린다 — 본문이 목록으로 오는 경우가 많다.
               `wrap-anywhere` — 본문에 섞여 오는 링크는 띄어쓰기가 없다 (BUG-025) */}
-          <p className="mt-2 text-[13px] leading-relaxed whitespace-pre-line wrap-anywhere">
+          {/* 이 모달에서 제일 오래 읽는 글이라 값 다섯 줄(text-xs)보다 한 급 크다 */}
+          <p className="mt-2 text-sm leading-relaxed whitespace-pre-line wrap-anywhere">
             {got.body}
           </p>
         </div>

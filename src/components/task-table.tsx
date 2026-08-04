@@ -265,7 +265,10 @@ export function TaskTable({
         ariaLabel="업무 상세"
         ariaDescribedBy={opened ? descIdOf(opened) : undefined}
         showCloseButton={false}
-        className="max-w-[34rem]"
+        // `lg`부터 넓힌다 — 값 다섯 줄과 댓글이 한 폭을 나눠 쓰는데 34rem에서는 한 줄에
+        // 마흔 자쯤이라 본문·댓글이 자주 접힌다. 44rem이면 쉰 자다. `lg` 밑에서 넓히지
+        // 않는 것은 768px 화면에서 44rem이 오버레이 여백까지 밀어내기 때문이다
+        className="max-w-[34rem] lg:max-w-[44rem]"
       >
         {opened && openedShown && (
           <TaskDetailModal
