@@ -27,12 +27,19 @@ import {
  *
  * 줄 수는 실제 표의 기본 최대치가 아니라 **자주 나오는 건수**로 잡는다 — 표 높이가
  * `44 × (1 + 줄 수)`로 정해져 있어서 여기 숫자가 곧 카드 높이다.
+ *
+ * **오늘 일정 띠는 안 그린다** (머리와 요약 사이에 서는 그 띠 — page.tsx `TodaySchedule`).
+ * 그 띠는 오늘 잡힌 일정이 있을 때만 서고 높이도 건수를 따라간다. 있을지 없을지를 모르는
+ * 자리에 골격을 세우면 일정 없는 날마다 화면이 그만큼 위로 뛴다 — 탭 칸 수를 안 지어 그리는
+ * 것과 같은 이유다 (`TabBarSkeleton`).
  */
 export default function Loading() {
   return (
     <div aria-busy="true" aria-label="불러오는 중">
-      <HeadSkeleton className="mb-8" />
-      <KpiRowSkeleton count={4} meter />
+      {/* 머리 오른쪽 끝에 `챙길 일 N건`이 있다 */}
+      <HeadSkeleton className="mb-8" action="count" />
+      {/* 이 화면 요약만 점유율 %·`/ 전체`·막대를 갖는다 (`Stat`) */}
+      <KpiRowSkeleton count={4} share />
 
       <div className="space-y-4">
         {/* 포커스 — 상위 5건, 상태 칩 있음 */}
@@ -43,13 +50,13 @@ export default function Loading() {
         <PanelSkeleton meter>
           <TaskRowsSkeleton count={4} chips />
         </PanelSkeleton>
-        {/* 나를 부른 사람들 — 이 표만 칸이 다섯이고 상태 칩이 없다 */}
+        {/* 나를 부른 사람들 — 칸은 넷인데(업무명·프로젝트·부른 사람·시각) 상태 칩이 없다 */}
         <PanelSkeleton>
-          <TaskRowsSkeleton count={3} cols={5} />
+          <TaskRowsSkeleton count={3} />
         </PanelSkeleton>
-        {/* 방치된 업무 */}
+        {/* 방치된 업무 — 이 표만 `마지막 수정` 칸이 더 붙어 다섯이다 */}
         <PanelSkeleton>
-          <TaskRowsSkeleton count={3} chips />
+          <TaskRowsSkeleton count={3} cols={5} chips />
         </PanelSkeleton>
       </div>
     </div>

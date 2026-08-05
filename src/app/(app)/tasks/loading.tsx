@@ -1,7 +1,7 @@
 import {
   HeadSkeleton,
   KpiRowSkeleton,
-  SummaryCardsSkeleton,
+  ProjectCardsSkeleton,
   TabBarSkeleton,
 } from "@/components/skeletons";
 
@@ -13,6 +13,9 @@ import {
  *
  * 탭 줄은 KPI **아래**다 (실제 화면과 같은 순서). 여백도 실제와 같은 `mb-4` — 탭 칸과
  * 첫 카드 사이가 `TabsContent`의 `mt-4`다.
+ *
+ * 카드는 접힌 프로젝트 요약이다 — 이름 한 줄과 참여자·공개 여부·개설 정보 한 줄이고,
+ * 건수와 진행 막대는 펼친 뒤 표 위에 있다 (`ProjectCardsSkeleton`).
  */
 export default function Loading() {
   return (
@@ -20,7 +23,7 @@ export default function Loading() {
       <HeadSkeleton className="mb-8" />
       <KpiRowSkeleton count={3} />
       <TabBarSkeleton className="mb-4 max-w-md" />
-      <SummaryCardsSkeleton count={5} />
+      <ProjectCardsSkeleton count={5} />
     </div>
   );
 }

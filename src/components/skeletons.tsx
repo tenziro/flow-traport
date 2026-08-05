@@ -16,12 +16,28 @@ import { cn } from "@/lib/utils";
  * 클라이언트에서도 쓴다 (`thread-view.tsx`). 훅이 없어서 `"use client"`가 필요 없다.
  */
 
-/** 화면 제목 + 설명 한 줄. 아래 여백은 화면마다 달라서 밖에서 준다. */
-export function HeadSkeleton({ className }: { className?: string }) {
+/**
+ * 화면 제목 + 설명 한 줄. 아래 여백은 화면마다 달라서 밖에서 준다.
+ *
+ * `action`은 제목 오른쪽에 서는 한 조각이다 — 오늘은 `챙길 일 N건` 한 줄, 팀은
+ * `마크다운으로 복사` 단추다. 좁은 화면에서 이 조각이 아래로 접히면서 머리 높이가 한 단
+ * 늘어나기 때문에 안 그리면 명단이 도착할 때 그만큼 화면이 내려앉는다.
+ */
+export function HeadSkeleton({
+  className,
+  action,
+}: {
+  className?: string;
+  action?: "count" | "button";
+}) {
   return (
-    <div className={cn("mb-6", className)}>
-      <Skeleton className="h-7 w-56" />
-      <Skeleton className="mt-2 h-4 w-full max-w-md" />
+    <div className={cn("mb-6 flex flex-wrap items-start justify-between gap-3", className)}>
+      <div className="min-w-0 flex-1">
+        <Skeleton className="h-7 w-56" />
+        <Skeleton className="mt-2 h-4 w-full max-w-md" />
+      </div>
+      {action === "count" && <Skeleton className="h-4 w-20 shrink-0" />}
+      {action === "button" && <Skeleton className="h-8 w-36 shrink-0 rounded-md" />}
     </div>
   );
 }
@@ -29,14 +45,15 @@ export function HeadSkeleton({ className }: { className?: string }) {
 /**
  * 요약 KPI 줄. 실제 `Kpi`와 같은 격자·카드다.
  *
- * `meter`는 오늘 화면 전용이다 — 그쪽 칸에만 전체 대비 점유율 막대가 붙는다 (page.tsx `Stat`).
+ * `share`는 오늘 화면 전용이다 — 그쪽 칸(`Stat`)만 세 가지를 더 갖는다: 라벨 오른쪽 끝의
+ * 점유율 %, 숫자 옆의 `/ 전체`, 그 밑의 점유율 막대. 리스크·팀·내 업무의 `Kpi`에는 셋 다 없다.
  */
 export function KpiRowSkeleton({
   count,
-  meter = false,
+  share = false,
 }: {
   count: 3 | 4;
-  meter?: boolean;
+  share?: boolean;
 }) {
   return (
     <div
@@ -48,13 +65,18 @@ export function KpiRowSkeleton({
       {Array.from({ length: count }, (_, i) => (
         <Card key={i} size="sm" className="gap-2">
           <CardContent className="space-y-1.5">
-            {/* 실제와 같은 아이콘 칩 + 라벨 두 자리다 (`Kpi`, 오늘 화면 `Stat`) */}
+            {/* 실제와 같은 아이콘 칩 + 라벨이다 (`Kpi`, 오늘 화면 `Stat`) */}
             <div className="flex items-center gap-2">
               <Skeleton className="size-6 shrink-0 rounded-md" />
               <Skeleton className="h-3.5 w-20" />
+              {share && <Skeleton className="ml-auto h-3 w-7 shrink-0" />}
             </div>
-            <Skeleton className="h-7 w-14" />
-            {meter && <Skeleton className="h-1 w-full rounded-full" />}
+            {/* 숫자는 28px 한 줄. 오늘 화면은 그 옆에 `/ 전체`가 붙는다 */}
+            <div className="flex h-7 items-center gap-1">
+              <Skeleton className="h-7 w-14" />
+              {share && <Skeleton className="h-3 w-10" />}
+            </div>
+            {share && <Skeleton className="h-1 w-full rounded-full" />}
             <Skeleton className="h-2.5 w-24" />
           </CardContent>
         </Card>
@@ -64,35 +86,48 @@ export function KpiRowSkeleton({
 }
 
 /**
- * 탭 한 줄 자리 (부서 전환 · 프로젝트 보기).
+ * 탭 한 줄 자리 (부서 전환 · 프로젝트 보기 · 부서 보기).
  *
  * 칸을 하나씩 그리지 않고 줄 하나로 비운다 — 칸 수는 서버가 답을 줘야 안다(부서 수, 비어
  * 있지 않은 무리 수). 모르는 수를 지어 그리면 실제 탭이 도착할 때 칸이 늘거나 줄어든다.
- * 높이는 실제와 같다 (`p-0.5` + 칸 `min-h-8` = 36px).
+ *
+ * 높이는 어느 쪽이든 36px이다 — `sm` 위는 칩 줄(`p-0.5` + 칸 `min-h-8`), 아래는 고르개
+ * (`py-2` + 14px 한 줄)다 (`TabsSelect`). 모서리도 둘 다 8px다. 다만 폭은 다르다: 칩 줄은
+ * 내용만큼이고 고르개는 한 줄을 다 쓴다 — 그래서 폰에서는 밖에서 준 `max-w-*`를 푼다.
  */
 export function TabBarSkeleton({ className }: { className?: string }) {
-  return <Skeleton className={cn("mb-6 h-9 w-full max-w-xs rounded-lg", className)} />;
+  return (
+    <Skeleton className={cn("mb-6 h-9 w-full rounded-lg max-sm:max-w-none", className)} />
+  );
 }
 
 /**
  * 카드 한 장. 제목 줄은 실제와 같은 세 자리다 — 아이콘, 이름, 오른쪽 건수.
  *
- * `meter`는 제목 아래 분포 막대다 (오늘 화면의 밀리는 업무 카드만 갖는다).
+ * `icon`은 제목 앞 아이콘 칩이다. 오늘 화면 카드는 갖고(`TitleMark`) 팀 화면 멤버 카드는
+ * 사람 이름으로 시작해서 안 갖는다.
+ *
+ * `meter`는 제목 아래 분포 막대다 — 오늘 화면은 밀리는 업무 카드만, 팀 화면은 모든 멤버
+ * 카드가 갖는다(부하 막대).
  */
 export function PanelSkeleton({
   children,
   className,
+  icon = true,
   meter = false,
 }: {
   children: React.ReactNode;
   className?: string;
+  icon?: boolean;
   meter?: boolean;
 }) {
   return (
     <Card className={className}>
       <CardHeader className="gap-2">
-        <div className="flex items-center gap-2">
-          <Skeleton className="size-7 shrink-0 rounded-md" />
+        {/* 줄 높이를 박는다 — 칩이 있으면 칩(28px)이, 없으면 제목 글자(16px × 1.375)가
+            줄 높이를 정하는데 회색 막대는 둘 다보다 낮다 */}
+        <div className={cn("flex items-center gap-2", icon ? "h-7" : "h-5.5")}>
+          {icon && <Skeleton className="size-7 shrink-0 rounded-md" />}
           <Skeleton className="h-4 w-28" />
           <Skeleton className="ml-auto h-3 w-16" />
         </div>
@@ -120,7 +155,12 @@ export function TaskRowsSkeleton({
   chips = false,
 }: {
   count: number;
-  /** 칸 수. 오늘·팀은 넷(업무명·프로젝트·진행상태·마감일), 멘션 표만 다섯이다. */
+  /**
+   * 칸 수. 넷이 기본이다 — 업무명·프로젝트·진행상태·마감일 (오늘의 포커스·밀리는 업무,
+   * 팀 화면). 멘션 표도 넷이다(업무명·프로젝트·부른 사람·시각). 다섯은 칸을 하나 더 켠
+   * 표들이다: 방치된 업무는 `마지막 수정`, 내 업무는 `등록자`와 `등록일`을 켜고
+   * 프로젝트 칸을 꺼서 역시 다섯이다 (`TaskTable`).
+   */
   cols?: 4 | 5;
   chips?: boolean;
 }) {
@@ -164,30 +204,79 @@ function Cells({
 }
 
 /**
- * 접힌 요약 카드들 — 이름 한 줄 + 건수 + 진행 막대 + 셰브론.
+ * 리스크 화면의 접힌 프로젝트 카드들 (`RollupCard`) — 앞에 등급 분포 한 줄이 붙는다.
  *
- * 리스크의 프로젝트 카드와 내 업무의 프로젝트 카드가 같은 모양이다. `rank`는 리스크 화면
- * 전용이다 — 그쪽만 카드 왼쪽에 순위 숫자를 박는다.
+ * 둘을 한 부품으로 묶은 건 실제 화면에서 둘이 같이 서고 같이 사라지기 때문이다 (page.tsx —
+ * 둘 다 `rollups.length > 0`일 때만 있다). 카드 사이 간격도 그 줄까지 포함한 `space-y-4`다.
+ *
+ * 카드 한 장은 세 줄이다: 등급 점·이름·오른쪽 통계 한 줄, 점수 막대, 담당자 한 줄. 한때
+ * 카드 왼쪽에 순위 숫자가 있었지만 v4.7.0에 뺐다 — 위에서 아래로 세운 순서가 곧 순위다.
  */
-export function SummaryCardsSkeleton({
-  count,
-  rank = false,
-}: {
-  count: number;
-  rank?: boolean;
-}) {
+export function RollupCardsSkeleton({ count }: { count: number }) {
+  return (
+    <div className="space-y-4">
+      {/* 등급 분포 줄. 카드와 같은 면이지만 카드가 아니다 — 막대 하나에 이름표 셋이다 */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl bg-card px-4 py-2.5 ring-1 ring-foreground/10">
+        <Skeleton className="h-1.5 min-w-40 flex-1 basis-full rounded-full sm:basis-auto" />
+        {[0, 1, 2].map((i) => (
+          <Skeleton key={i} className="h-3 w-14" />
+        ))}
+      </div>
+      {Array.from({ length: count }, (_, i) => (
+        <Card key={i}>
+          <CardContent className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              {/* 세 자리가 실제와 같이 접힌다 — 폰에서는 프로젝트명이 한 줄을 통째로 써서
+                  (`basis-full`) 등급·이름·통계가 세 줄로 선다. 줄 높이를 자리마다 박는 건
+                  이름만 16px 글자고 나머지 둘은 12px라서다 */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <div className="flex h-4 shrink-0 items-center">
+                  <Skeleton className="h-3 w-12" />
+                </div>
+                <div className="flex h-6 basis-full items-center sm:basis-auto">
+                  <Skeleton className={cn("h-4 w-full", i % 2 ? "sm:w-40" : "sm:w-56")} />
+                </div>
+                <div className="flex h-4 shrink-0 items-center sm:ml-auto">
+                  <Skeleton className="h-3 w-36" />
+                </div>
+              </div>
+              <Skeleton className="mt-1.5 h-1 w-full rounded-full" />
+              <div className="mt-1 flex h-4 items-center">
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+            <Skeleton className="mt-0.5 size-4 shrink-0" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 내 업무 화면의 접힌 프로젝트 카드들 (`ProjectCard`).
+ *
+ * 접힌 카드가 내는 건 업무 건수가 아니라 **프로젝트가 어떤 판인지**다 (v4.4.0) — 아이콘과
+ * 이름 한 줄, 그 밑에 참여자 수·공개 여부·개설 정보를 가운뎃점으로 이은 한 줄이다. 건수와
+ * 진행 막대는 펼친 뒤 표 위로 내려갔다.
+ *
+ * 설명 줄은 안 그린다 — 실측 59개 중 7개만 채워져 있어서 없는 카드가 훨씬 흔하다.
+ */
+export function ProjectCardsSkeleton({ count }: { count: number }) {
   return (
     <div className="space-y-3">
       {Array.from({ length: count }, (_, i) => (
         <Card key={i}>
           <CardContent className="flex items-start gap-3">
-            {rank && <Skeleton className="mt-0.5 h-3 w-5 shrink-0" />}
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-3">
+              <div className="flex h-6 items-center gap-2">
+                <Skeleton className="size-4 shrink-0 rounded-sm" />
                 <Skeleton className={cn("h-4", i % 2 ? "w-40" : "w-56")} />
-                <Skeleton className="ml-auto h-3 w-24 shrink-0" />
               </div>
-              <Skeleton className="mt-1.5 h-1 w-full rounded-full" />
+              {/* 위 `mt-1`(요약 덩어리) + `mt-2`(잇는 줄) = 12px다 */}
+              <div className="mt-3 flex h-4 items-center">
+                <Skeleton className="h-3 w-52" />
+              </div>
             </div>
             <Skeleton className="mt-0.5 size-4 shrink-0" />
           </CardContent>
