@@ -61,6 +61,8 @@ export {
   Repeat as IconRepeat,
   UserCheck as IconAttending,
   BellRing as IconNews,
+  /** 소식 알림 스위치가 꺼진 자리. 켜지면 `IconNews`로 바뀐다 (`use-news-notify.ts`). */
+  BellOff as IconNewsOff,
   Sparkles as IconChangelog,
   Magnifier as IconSearch,
   Flag as IconPriority,

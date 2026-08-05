@@ -3,13 +3,15 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { markMentionsRead } from "@/app/(app)/actions";
-import { IconCheck, IconInbox, IconNews } from "@/components/icons";
+import { IconCheck, IconInbox, IconNews, IconNewsOff } from "@/components/icons";
 import { BottomSheet } from "@/components/motion/bottom-sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
+import { StatHint } from "@/components/stat-hint";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTaskModal } from "@/components/use-task-modal";
 import type { TaskNews } from "@/lib/flow/queries";
 import { useNarrowScreen } from "@/lib/hooks/use-narrow-screen";
+import { useNewsNotify } from "@/lib/hooks/use-news-notify";
 import { cn, fmtDateTime } from "@/lib/utils";
 
 /**
@@ -17,6 +19,17 @@ import { cn, fmtDateTime } from "@/lib/utils";
  * (제목·링크는 캐시에 있다 — `NEWS_BRIEF_TTL`). 분당 상한 120번 중 2번이다.
  */
 const NEWS_POLL_MS = 60_000;
+
+/**
+ * 알림 스위치가 상태마다 하는 말. 아이콘 하나뿐인 단추라 `title`이 유일한 설명이고,
+ * 화면 낭독기에는 같은 말이 `sr-only`로 간다.
+ */
+const NOTIFY_HINT = {
+  off: "새 소식이 오면 알림 받기",
+  on: "새 소식 알림 켜짐 — 누르면 꺼요",
+  denied: "브라우저가 이 사이트의 알림을 막아 뒀어요",
+  unsupported: "",
+} as const;
 
 /** 소식 한 줄의 껍데기. 단추(보통)와 링크(못 연 줄)가 같은 모양이어야 한다. */
 const NEWS_ROW =
@@ -62,14 +75,21 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
   const items = live ?? news;
   const unread = items?.filter((n) => n.unread).length ?? 0;
 
+  const notify = useNewsNotify(news);
+  const { fire, awake } = notify;
+
   useEffect(() => {
     const pull = async () => {
-      if (document.hidden) return;
+      // 숨어 있을 때는 보통 쉰다. 알림을 켜 뒀으면 그때가 오히려 알림이 쓸모 있는 때라
+      // 계속 당긴다 — 다른 앱을 보는 동안 오는 소식이 알림으로 갈 유일한 길이다.
+      if (document.hidden && !awake.current) return;
       const fresh = await fetch("/api/news")
         .then((r) => (r.ok ? (r.json() as Promise<TaskNews[] | null>) : null))
         .catch(() => null);
       // 실패는 조용히 넘긴다 — 다음 분에 다시 부른다.
-      if (fresh) setLive(fresh);
+      if (!fresh) return;
+      setLive(fresh);
+      fire(fresh);
     };
     const timer = setInterval(pull, NEWS_POLL_MS);
     // 탭을 다시 보면 그 자리에서 한 번 당긴다 — 숨어 있던 동안 건너뛴 몫이다.
@@ -78,7 +98,7 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", pull);
     };
-  }, []);
+  }, [fire, awake]);
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const [tab, setTab] = useState<"all" | "unread" | "read">("all");
@@ -142,17 +162,47 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        {/* 안 읽은 게 없으면 누를 일이 없어서 끈다. 확인 단계는 두지 않는다 — 이전 상태가
-            "안 읽음" 하나고 잃는 데이터가 없다 (PRD §8.1) */}
-        <button
-          type="button"
-          disabled={pending || unread === 0}
-          onClick={() => markRead(...(items ?? []).filter((n) => n.unread).map((n) => n.id))}
-          className="flex min-h-8 shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
-        >
-          <IconCheck size={14} aria-hidden />
-          전체 읽음
-        </button>
+        <div className="flex shrink-0 items-center gap-0.5">
+          {/* 알림 스위치. 브라우저가 못 하는 환경에서는 줄 자체가 없다. 권한을 묻는 건
+              여기서만 — 사람이 직접 누른 자리가 아니면 브라우저가 안 받는다.
+              막힌 상태(`denied`)도 끄지 않고 흐리게 남긴다: 왜 안 오는지가 여기 적힌다 */}
+          {notify.state !== "unsupported" && (
+            <StatHint hint={NOTIFY_HINT[notify.state]}>
+              <button
+                type="button"
+                aria-pressed={notify.state === "on"}
+                // `disabled`가 아니라 `aria-disabled`다 — 막힌 단추는 포인터 이벤트가 죽어서
+                // 툴팁이 안 뜨는데, 하필 그 상태가 설명이 가장 필요한 자리다. 누르는 쪽은
+                // `toggle`이 이미 막고 있다
+                aria-disabled={notify.state === "denied"}
+                onClick={notify.toggle}
+                className={cn(
+                  "flex min-h-8 shrink-0 items-center rounded-md px-2 transition-colors hover:bg-accent hover:text-foreground",
+                  notify.state === "on" ? "text-foreground" : "text-muted-foreground",
+                  notify.state === "denied" ? "cursor-default opacity-40" : "cursor-pointer",
+                )}
+              >
+                {notify.state === "on" ? (
+                  <IconNews size={14} aria-hidden />
+                ) : (
+                  <IconNewsOff size={14} aria-hidden />
+                )}
+                <span className="sr-only">{NOTIFY_HINT[notify.state]}</span>
+              </button>
+            </StatHint>
+          )}
+          {/* 안 읽은 게 없으면 누를 일이 없어서 끈다. 확인 단계는 두지 않는다 — 이전 상태가
+              "안 읽음" 하나고 잃는 데이터가 없다 (PRD §8.1) */}
+          <button
+            type="button"
+            disabled={pending || unread === 0}
+            onClick={() => markRead(...(items ?? []).filter((n) => n.unread).map((n) => n.id))}
+            className="flex min-h-8 shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+          >
+            <IconCheck size={14} aria-hidden />
+            전체 읽음
+          </button>
+        </div>
       </div>
 
       {shown.length === 0 ? (

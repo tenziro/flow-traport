@@ -4,8 +4,12 @@ import type { MetadataRoute } from 'next';
  * PWA 매니페스트. 파일 컨벤션이라 Next가 `/manifest.webmanifest`로 내고 `<link>`까지
  * 알아서 넣는다 — `metadata.manifest`에 손으로 적을 필요가 없다.
  *
- * 홈 화면에 얹어두고 바로 여는 용도까지다. 서비스 워커·오프라인 캐시는 넣지 않았다.
- * 이 앱은 열 때마다 flow에서 새로 읽어야 의미가 있어서, 캐시된 화면은 틀린 화면이다.
+ * 홈 화면에 얹어두고 바로 여는 용도까지다. **오프라인 캐시는 넣지 않았다** — 이 앱은 열
+ * 때마다 flow에서 새로 읽어야 의미가 있어서, 캐시된 화면은 틀린 화면이다.
+ *
+ * 서비스 워커는 `public/sw.js` 하나가 있는데 그 이유가 아니다. `fetch`에 끼어들지 않고
+ * 알림만 띄운다 — 안드로이드 크롬과 설치한 iOS PWA가 `registration.showNotification()`
+ * 말고는 안 받아서다 (`use-news-notify.ts`). 소식 알림을 켠 사람에게만 등록된다.
  *
  * 색은 `globals.css`의 `--background` 어두운 쪽(#0a0b09)과 같은 값이다. 매니페스트는
  * CSS 변수를 못 읽어서 두 곳에 적히고, 밝기 두 벌을 담을 자리도 없다 (`theme_color`는
