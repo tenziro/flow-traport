@@ -307,6 +307,47 @@
       opacity 0.22s ease-out,
       overflow 0.01s 0.34s allow-discrete;
   }
+  /*
+   * 탭 내용이 바뀔 때 살짝 올라온다 (tabs.tsx).
+   *
+   * **`backwards`도 지연도 없다 — 그게 이 규칙의 전부다.** 전에는 `motion/react`의
+   * `initial`로 줬는데, 그러면 서버가 `style="opacity:0"`을 박은 HTML을 내고 하이드레이션이
+   * 끝나야 걷힌다. 내 업무 화면은 이 칸 안에 DOM이 1만 줄이라 그 사이 몇 초 동안 내용이
+   * 통째로 안 보였다 (BUG-044). CSS는 JS를 안 기다린다 — 첫 프레임부터 그려지고, 지연이
+   * 없으니 `from`에 붙들려 있는 구간도 없다.
+   */
+  @keyframes pane-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+  .pane-in {
+    animation: pane-in 0.18s ease-out;
+  }
+  /*
+   * 첨부 이미지 뷰어 — 네이티브 `<dialog>`다 (image-viewer.tsx). 업무 모달(morphing-modal.tsx)과
+   * 같은 리듬으로 뜬다: 0.2s, 살짝 커지며. 나갈 때는 안 준다 — `<dialog>`는 닫는 순간
+   * 그림에서 빠져서, 나가는 걸 그리려면 닫힘을 우리가 붙들고 있어야 한다.
+   */
+  .viewer[open] {
+    animation: viewer-in 0.2s ease-out;
+  }
+  .viewer[open]::backdrop {
+    animation: viewer-fade 0.2s ease-out;
+  }
+  @keyframes viewer-in {
+    from {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+  }
+  @keyframes viewer-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -318,9 +359,12 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
-    /* `*`는 이 의사 요소를 안 잡는다 — 따로 적어야 여닫힘이 즉시로 돌아온다. */
+    /* `*`는 이 의사 요소들을 안 잡는다 — 따로 적어야 즉시로 돌아온다. */
     .disclose::details-content {
       transition-duration: 0.01ms !important;
+    }
+    .viewer[open]::backdrop {
+      animation-duration: 0.01ms !important;
     }
   }
 }

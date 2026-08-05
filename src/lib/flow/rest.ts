@@ -707,6 +707,8 @@ interface RawAttachment {
   FILE_SIZE?: string;
   ATCH_URL?: string;
   THUM_IMG_PATH?: string;
+  WIDTH?: string;
+  HEIGHT?: string;
 }
 
 /**
@@ -784,7 +786,12 @@ export async function getPostBrief(postId: string, ttl?: number) {
     })),
     files: [
       ...(d.attachments ?? []).map(toFile),
-      ...(d.imageAttachments ?? []).map((a) => ({ ...toFile(a), thumb: tidy(a.THUM_IMG_PATH) })),
+      ...(d.imageAttachments ?? []).map((a) => ({
+        ...toFile(a),
+        thumb: tidy(a.THUM_IMG_PATH),
+        w: Number(a.WIDTH) || 0,
+        h: Number(a.HEIGHT) || 0,
+      })),
     ].filter((f) => f.name && f.url),
   };
 }
@@ -809,6 +816,12 @@ function toFile(a: RawAttachment) {
     size: Number(a.FILE_SIZE) || 0,
     url: tidy(a.ATCH_URL),
     thumb: undefined as string | undefined,
+    /**
+     * 원본 픽셀. 이미지 첨부만 `WIDTH`·`HEIGHT`를 준다 (실측 14/14). 뷰어가 자리를 미리
+     * 잡는 값이고, 못 받으면 0이라 그때는 `next/image`에 어림값을 준다.
+     */
+    w: 0,
+    h: 0,
   };
 }
 

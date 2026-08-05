@@ -894,6 +894,8 @@ describe('게시글 상세에서 관계·첨부 읽기', () => {
           FILE_SIZE: '20653',
           ATCH_URL: 'https://flow.team/flowImg/a.png',
           THUM_IMG_PATH: 'https://flow.team/flowImg/a_thumb.png',
+          WIDTH: '1536',
+          HEIGHT: '211',
         },
       ],
     });
@@ -903,12 +905,16 @@ describe('게시글 상세에서 관계·첨부 읽기', () => {
         size: 13014262,
         url: 'https://flow.team/FLOW_DOWNLOAD_R001.act?RAND_KEY=k',
         thumb: undefined,
+        w: 0,
+        h: 0,
       },
       {
         name: '화면.png',
         size: 20653,
         url: 'https://flow.team/flowImg/a.png',
         thumb: 'https://flow.team/flowImg/a_thumb.png',
+        w: 1536,
+        h: 211,
       },
     ]);
   });

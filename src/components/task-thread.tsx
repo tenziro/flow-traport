@@ -11,6 +11,7 @@ import {
   IconOpen,
   IconUpTask,
 } from "@/components/icons";
+import { ImageViewer } from "@/components/image-viewer";
 import { LinkedText } from "@/components/linked-text";
 import { Button } from "@/components/motion/button/base";
 import { CommentRowsSkeleton } from "@/components/skeletons";
@@ -203,6 +204,8 @@ export function TaskThread({
   const [reload, setReload] = useState(0);
   /** 답글을 달 댓글. 비어 있으면 입력칸이 일반 댓글이다. */
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
+  /** 뷰어로 크게 보는 이미지의 자리. 비어 있으면 뷰어가 닫힌 것이다. */
+  const [viewing, setViewing] = useState<number | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -235,6 +238,8 @@ export function TaskThread({
   const comments = got.comments ?? [];
   const shown = tail(comments);
   const hidden = comments.length - shown.length;
+  /** 썸네일이 있는 첨부 = 이미지다. 격자에 그리는 순서가 뷰어에서 넘기는 순서다. */
+  const images = got.files?.filter((f) => f.thumb) ?? [];
 
   return (
     <>
@@ -270,32 +275,32 @@ export function TaskThread({
           <p className="tabular text-xs font-semibold text-muted-foreground">
             첨부 {got.files.length}개
           </p>
-          {got.files.some((f) => f.thumb) && (
+          {images.length > 0 && (
             <ul className="flex flex-wrap gap-2">
-              {got.files
-                .filter((f) => f.thumb)
-                .map((f) => (
-                  <li key={f.url}>
-                    <a
-                      href={f.url}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      title={f.name}
-                      className="block rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                    >
-                      {/* 원본은 몇 MB짜리 스크린샷이라 목록에는 flow가 만든 썸네일을 쓴다.
-                          `flow.team/flowImg/**`는 이미 허용 호스트다 (`next.config.ts`) */}
-                      <Image
-                        src={f.thumb as string}
-                        alt={f.name}
-                        width={72}
-                        height={72}
-                        className="size-18 rounded-md border border-border object-cover"
-                      />
-                      <span className="sr-only"> (새 창)</span>
-                    </a>
-                  </li>
-                ))}
+              {images.map((f, n) => (
+                <li key={f.url}>
+                  {/* 전에는 flow 원본으로 나가는 새 창 링크였다. 원본이 썸네일과 같은 호스트라
+                      (`flow.team/flowImg/**`) 여기서 크게 보여 줄 수 있었다 — flow 링크는
+                      뷰어 안으로 내렸다 (`TaskRow`와 같은 손질이다) */}
+                  <button
+                    type="button"
+                    onClick={() => setViewing(n)}
+                    title={f.name}
+                    className="block cursor-pointer rounded-md outline-none transition-opacity hover:opacity-80 focus-visible:ring-3 focus-visible:ring-ring/50"
+                  >
+                    {/* 목록에는 flow가 만든 썸네일을 쓴다. `flow.team/flowImg/**`는 이미
+                        허용 호스트다 (`next.config.ts`) */}
+                    <Image
+                      src={f.thumb as string}
+                      alt=""
+                      width={72}
+                      height={72}
+                      className="size-18 rounded-md border border-border object-cover"
+                    />
+                    <span className="sr-only">{f.name} 크게 보기</span>
+                  </button>
+                </li>
+              ))}
             </ul>
           )}
           {got.files
@@ -372,6 +377,11 @@ export function TaskThread({
           onSaved={onSaved}
         />
       </div>
+
+      {/* 뷰어는 열 때만 붙인다 — 안 붙으면 `<dialog>`도 없어서 키를 가로챌 일이 없다 */}
+      {viewing !== null && (
+        <ImageViewer files={images} at={viewing} onClose={() => setViewing(null)} />
+      )}
     </>
   );
 }

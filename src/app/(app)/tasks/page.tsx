@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/motion/ta
 import { ProjectPanel } from "@/components/project-panel";
 import { StatHint } from "@/components/stat-hint";
 import { TaskTable } from "@/components/task-table";
+import { WhenOpen } from "@/components/when-open";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadMyTasks, type MyTasksData, type MyTasksProject } from "@/lib/flow/my-tasks";
 import type { WorklistTask } from "@/lib/flow/queries";
@@ -243,16 +244,20 @@ function Rows({
   projectId: string;
 }) {
   return (
-    <TaskTable
-      rows={tasks.map((task) => ({ ...task, depth: task.depth ?? 0, projectId }))}
-      path={PATH}
-      showProject={false}
-      showAuthor
-      showRegDate
-      filterable
-      // 한 프로젝트에 실측 최대 300건이다. 12줄까지 펼치고 그 아래는 표가 스크롤한다
-      maxRows={12}
-    />
+    // 카드를 펼쳐야 표를 만든다 (BUG-045) — 40장이 다 접힌 첫 화면에서 표 60개를 미리
+    // 만드느라 메인 스레드가 잠겼다
+    <WhenOpen>
+      <TaskTable
+        rows={tasks.map((task) => ({ ...task, depth: task.depth ?? 0, projectId }))}
+        path={PATH}
+        showProject={false}
+        showAuthor
+        showRegDate
+        filterable
+        // 한 프로젝트에 실측 최대 300건이다. 12줄까지 펼치고 그 아래는 표가 스크롤한다
+        maxRows={12}
+      />
+    </WhenOpen>
   );
 }
 

@@ -14,6 +14,7 @@ import { NewTaskForm } from '@/components/new-task-form';
 import { StaleScan } from '@/components/stale-scan';
 import { StatHint } from '@/components/stat-hint';
 import { TaskTable } from '@/components/task-table';
+import { WhenOpen } from '@/components/when-open';
 import { Card, CardContent } from '@/components/ui/card';
 import { RISK_GRADE_LABEL, type ProjectRollup } from '@/lib/aggregate';
 import { loadRisk } from '@/lib/flow/queries';
@@ -312,16 +313,19 @@ function RollupCard({
             여기는 남의 업무가 섞여 있어서 누구 것인지가 정보다.
             급함은 마감일 칸의 D+/D- 배지가 말한다 (밀림/임박 아이콘이 하던 일이다) */}
           <div className="mt-3 border-t border-border pt-3">
-            <TaskTable
-              rows={rollup.tasks.map((task) => ({
-                ...task,
-                projectId: rollup.projectId,
-              }))}
-              path={PATH}
-              showProject={false}
-              showOwner
-              emptyState="밀리거나 임박한 업무가 없어요"
-            />
+            {/* 카드를 펼쳐야 표를 만든다 (BUG-045) — 내 업무 화면과 같은 이유다 */}
+            <WhenOpen>
+              <TaskTable
+                rows={rollup.tasks.map((task) => ({
+                  ...task,
+                  projectId: rollup.projectId,
+                }))}
+                path={PATH}
+                showProject={false}
+                showOwner
+                emptyState="밀리거나 임박한 업무가 없어요"
+              />
+            </WhenOpen>
           </div>
 
           {rollup.projectId && (

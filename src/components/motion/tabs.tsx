@@ -5,6 +5,9 @@
 // 접근 가능한 이름이 있어야 하는데 원본은 넘길 구멍이 없었다 (select.tsx의
 // `aria-labelledby`와 같은 이유의 최소 개조).
 //
+// 한 군데는 바꿨다: 켜진 칸이 들어오는 움직임을 `motion`에서 CSS로 내렸다 — 서버가
+// `opacity:0`을 박아서 하이드레이션 전까지 내용이 안 보였다 (`TabsContent` 주석).
+//
 // 부서 전환(`dept-tabs.tsx`)이 `variant="segment"`, 소식 함(`news-bell.tsx`)이
 // `variant="underline"`로 쓴다. `pill`은 남겨 뒀지만 쓰는 곳이 없다 — 이 앱의 모서리는
 // 카드 기준 8px이고 알약은 그 계열에서 혼자 튄다.
@@ -19,7 +22,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { EASE_OUT } from "@/lib/ease";
 import { cn } from "@/lib/utils";
 
 type Variant = "pill" | "underline" | "segment";
@@ -196,7 +198,6 @@ export function TabsTrigger({
 
 export function TabsContent({ value, children, className }: { value: string; children: ReactNode; className?: string }) {
   const { value: current } = useTabs();
-  const reduce = useReducedMotion();
   const active = current === value;
   // Inactive panels stay mounted but hidden, so their content (e.g. source
   // code) is present in the server-rendered HTML for crawlers and assistive
@@ -208,15 +209,16 @@ export function TabsContent({ value, children, className }: { value: string; chi
       </div>
     );
   }
+  /*
+   * 들어오는 움직임은 CSS다 (`.pane-in`, globals.css). beUI 원본은 `motion.div`에
+   * `initial={{ opacity: 0 }}`을 걸었는데, 그러면 **서버가 `style="opacity:0"`으로
+   * 내보내고 하이드레이션이 끝나야 걷힌다.** 내 업무 화면은 이 칸 하나에 DOM이 1만 줄이라
+   * 그 사이 몇 초 동안 화면이 비어 보였다 (BUG-044). 키가 바뀌면 요소가 새로 붙어서
+   * 애니메이션도 다시 돈다 — 탭을 옮길 때 움직임은 그대로다.
+   */
   return (
-    <motion.div
-      key={value}
-      initial={{ opacity: 0, y: reduce ? 0 : 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.18, ease: EASE_OUT }}
-      className={cn("mt-4", className)}
-    >
+    <div key={value} className={cn("pane-in mt-4", className)}>
       {children}
-    </motion.div>
+    </div>
   );
 }
