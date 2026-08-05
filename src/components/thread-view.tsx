@@ -1,12 +1,68 @@
 "use client";
 
+import { type ReactNode, useState } from "react";
 import { type ThreadComment } from "@/app/(app)/actions";
 import { IconHistory, IconLastComment, IconSubTask } from "@/components/icons";
 import { LinkedText } from "@/components/linked-text";
+import { Button } from "@/components/motion/button/base";
+import { tail } from "@/lib/thread";
 import { cn, fmtDateTime } from "@/lib/utils";
 
 /** 답글을 달 대상. `id`는 flow의 댓글 번호(`colabo_remark_srno`)다. */
 export type ReplyTarget = { id: string; from: string };
+
+/**
+ * 갯수 줄 + `댓글 다 보기` + 댓글 목록. 업무 상세 모달과 멘션 상세 모달이 같이 쓴다.
+ *
+ * 접힌 기본값은 최신 최상위 댓글 `SHOWN`개와 거기 딸린 답글 전부다 (`tail`). 실측 14건 중
+ * 10건이 시스템 기록(담당자·마감일 변경)이라 전량을 그대로 쌓으면 사람이 남긴 말이 기록
+ * 사이에 묻힌다.
+ *
+ * 갯수와 펼치기는 한 줄 양 끝이다 — 둘 다 "이 목록이 전부냐"에 대한 답이라 같은 줄에서
+ * 읽힌다. 버튼을 아래 줄에 따로 두면 목록의 첫 줄처럼 보였다.
+ */
+export function CommentList({
+  comments,
+  empty,
+  onReply,
+  replyingTo,
+}: {
+  comments: ThreadComment[];
+  /** 댓글이 없을 때 목록 자리에 낼 것 (보통 서버가 준 안내 한 줄). */
+  empty?: ReactNode;
+  onReply?: (target: ReplyTarget) => void;
+  replyingTo?: string;
+}) {
+  const [all, setAll] = useState(false);
+  const shown = all ? comments : tail(comments);
+  const hidden = comments.length - shown.length;
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <p className="tabular text-xs font-semibold text-muted-foreground">
+          댓글{comments.length > 0 && ` ${comments.length}개`}
+        </p>
+        {hidden > 0 && (
+          // `-my-1` — 버튼(h-7)이 줄 높이를 밀어 본문 간격이 어긋나는 걸 막는다
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => setAll(true)}
+            className="-my-1 h-7 px-2"
+          >
+            <IconLastComment size={13} />
+            댓글 다 보기
+          </Button>
+        )}
+      </div>
+      {comments.length === 0 ? empty : (
+        <CommentRows comments={shown} onReply={onReply} replyingTo={replyingTo} />
+      )}
+    </>
+  );
+}
 
 /**
  * 댓글 줄들. 멘션 상세 모달(`MentionDetail`)과 업무 상세 모달(`TaskThread`)이 같이 쓴다 —

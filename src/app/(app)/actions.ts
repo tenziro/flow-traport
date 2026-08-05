@@ -17,12 +17,14 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { DAY_MS, kstYmd } from "@/lib/aggregate/date";
+import { DAY_MS, diffDays, kstYmd, parseFlowDeadline } from "@/lib/aggregate/date";
 import { getApiKey, getSession } from "@/lib/auth";
+import type { WorklistTask } from "@/lib/flow/queries";
 import {
   createComment as createFlowComment,
   createTask as createFlowTask,
   describeSystemComment,
+  findTaskByPost,
   FlowRestError,
   getEvent,
   getPostBrief,
@@ -54,6 +56,7 @@ import {
   type StaleTask,
   type TaskFields,
 } from "@/lib/flow/rest";
+import { flowPostUrl } from "@/lib/flow/urls";
 import { TASK_PRIORITY, type TaskPriority } from "@/lib/task-priority";
 import { TASK_STATUS, type TaskStatus } from "@/lib/task-status";
 
@@ -248,43 +251,6 @@ export interface ThreadComment {
   called?: boolean;
 }
 
-export interface ThreadResult extends ActionResult {
-  comments?: ThreadComment[];
-}
-
-/**
- * 전체 댓글 스레드 (PRD §13 A1). **누를 때만 부른다** — 화면을 열 때 다 부르면
- * 업무 한 줄에 REST 한 번씩이라 열 줄이면 열 번이다.
- *
- * `postId`를 이미 아는 곳(멘션 알림)은 그대로 넘기고, 모르는 곳(업무 행)은 `taskId`+업무명으로
- * 해소한다 (`resolvePostId` — BUG-005).
- */
-export async function loadThread(
-  _prev: ThreadResult | null,
-  form: FormData,
-): Promise<ThreadResult> {
-  const known = String(form.get("postId") ?? "");
-  const projectId = String(form.get("projectId") ?? "");
-  const taskId = String(form.get("taskId") ?? "");
-  const title = String(form.get("title") ?? "");
-
-  try {
-    const postId = known || (projectId && taskId ? await resolvePostId(projectId, taskId, title) : null);
-    if (!postId) return { ok: false, message: "이 업무의 댓글은 flow에서 볼 수 있어요." };
-
-    const [comments, session] = await Promise.all([
-      listComments(postId).then((list) => fillReplies(postId, list)),
-      getSession(),
-    ]);
-    const rows = toThread(comments, session?.userId);
-    if (!rows.length) return { ok: true, message: "아직 댓글이 없어요." };
-
-    return { ok: true, message: `댓글 ${rows.length}건을 가져왔어요.`, comments: rows };
-  } catch (error) {
-    return { ok: false, message: reasonOf(error) };
-  }
-}
-
 /**
  * 답글이 10건을 넘는 댓글만 나머지를 마저 받는다 (`replyHasNext` — api-spec §13.3).
  * `listComments`가 이미 10건까지 줬으니 보통은 호출이 0회다 — 실측에서 아직 참인 걸 못 봤다.
@@ -306,7 +272,7 @@ async function fillReplies(postId: string, comments: FlowComment[]): Promise<Flo
 }
 
 /**
- * 댓글 원본 → 화면에 낼 줄. `loadThread`·`loadTaskPost`가 같이 쓴다.
+ * 댓글 원본 → 화면에 낼 줄. `loadTaskPost`가 쓴다 — 업무 상세 모달과 멘션 모달 둘 다.
  *
  * **정렬은 두 층이다.** 최상위 댓글끼리 시각순으로 세우고, 답글은 자기 부모 바로 뒤에 붙인다
  * (그 안에서는 다시 시각순). 전부 한 줄로 섞어 시각순으로 세우면 답글이 부모에서 떨어져 나가
@@ -410,6 +376,63 @@ export async function loadTaskPost(input: {
     };
   } catch (error) {
     return { ok: false, body: "", message: reasonOf(error) };
+  }
+}
+
+export interface NewsTaskResult extends ActionResult {
+  task?: WorklistTask;
+}
+
+/**
+ * 알림 한 줄 → 상세 모달이 그릴 업무 (PRD §6.1.4). 헤더 알림을 누를 때 한 번 부른다.
+ *
+ * 알림은 `postId`만 준다. 상세 모달은 `taskSrno`를 요구해서(상태·마감일·우선순위 쓰기가 다
+ * 그 값을 쓴다) 업무 목록을 거꾸로 뒤져 `postId`가 같은 줄을 고른다 (`findTaskByPost`).
+ *
+ * 업무명·프로젝트명·링크는 **알림 목록이 이미 들고 있는 값을 그대로 받는다** —
+ * `loadNews`가 게시글 상세로 풀어 붙인 것이라, 여기서 다시 부르면 같은 왕복이 두 번이다.
+ * 업무명은 검색어로만 쓰고 최종 판정은 `postId` 일치다.
+ *
+ * 업무가 아닌 글(공지·회의록)은 업무 목록에 없다. 그때는 실패로 돌려주고 화면이 flow 링크로
+ * 안내한다 — 값도 쓰기도 없는 빈 모달을 여는 것보다 낫다.
+ */
+export async function loadNewsTask(input: {
+  projectId: string;
+  postId: string;
+  /** 알림이 푼 업무명. 없으면(상세 조회 실패) 찾을 방법이 없다. */
+  title?: string;
+  /** 알림이 푼 프로젝트명. 모달 머리에 그대로 쓴다. */
+  project?: string;
+  /** 알림이 든 `connectUrl`. 로그인 화면을 건너서도 대상을 지킨다 (BUG-024). */
+  url?: string;
+}): Promise<NewsTaskResult> {
+  try {
+    const found = input.title
+      ? await findTaskByPost(input.projectId, input.title, input.postId)
+      : null;
+    if (!found) return { ok: false, message: "이 소식은 flow에서 볼 수 있어요." };
+
+    const deadline = parseFlowDeadline(found.endDate);
+    return {
+      ok: true,
+      message: "",
+      task: {
+        taskSrno: Number(found.taskId),
+        title: found.title,
+        status: found.status,
+        project: input.project ?? "",
+        endDate: found.endDate,
+        regDate: found.regDate,
+        author: found.author,
+        editDate: found.editDate || undefined,
+        priority: found.priority || undefined,
+        postId: found.postId,
+        daysLeft: deadline === null ? 0 : diffDays(Date.now(), deadline),
+        link: input.url || flowPostUrl(input.projectId, found.postId),
+      },
+    };
+  } catch (error) {
+    return { ok: false, message: reasonOf(error) };
   }
 }
 

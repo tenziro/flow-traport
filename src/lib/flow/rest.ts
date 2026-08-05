@@ -1102,6 +1102,58 @@ export interface FlowTask {
   upTaskId: string;
 }
 
+/**
+ * 업무 필터 응답 한 줄 → `FlowTask`.
+ *
+ * 커스텀 상태를 먼저 본다. base `STTS`는 커스텀 프로젝트에서 `0`으로 평평하게 와서,
+ * 그걸 읽으면 `진행`이 `대기`로 보인다 (BUG-028과 같은 함정).
+ */
+function toFlowTask(task: FilterTask): FlowTask {
+  const cell = columnData(task, "STATUS")[0] ?? columnData(task, "STTS")[0];
+  return {
+    taskId: task.taskId,
+    postId: task.postId,
+    title: columnData(task, "TASK_NM")[0]?.customColumnData ?? "제목 없는 업무",
+    endDate: columnData(task, "END_DT")[0]?.customColumnData ?? "",
+    regDate: regDateOf(task),
+    editDate: columnData(task, "EDTR_DTTM")[0]?.customColumnData ?? "",
+    author: authorOf(task),
+    workers: columnData(task, "WORKER_ID")
+      .map((d) => ({ userId: d.customColumnData ?? "", name: d.userName ?? "" }))
+      .filter((w) => w.userId),
+    status: cell?.optionName?.trim() || STTS_LABEL[cell?.customColumnData ?? ""] || "",
+    priority: columnData(task, "PRIORITY")[0]?.customColumnData ?? "",
+    done: cell?.optionCategory === "2",
+    upTaskId: task.upTaskId || "-1",
+  };
+}
+
+/**
+ * `postId` → 업무 한 건. `getTaskFields`의 반대 방향이다.
+ *
+ * 알림은 `postId`만 준다. 상세 모달은 `taskSrno`를 요구해서(상태·마감일 쓰기가 그 값을
+ * 쓴다) 같은 필터 조회를 돌려 세운다 — 업무명으로 좁히고 `postId` 일치로 고른다.
+ *
+ * 업무가 아닌 글(공지·회의록)은 이 목록에 없다. 그때는 `null`이고, 화면이 flow 링크로 안내한다.
+ *
+ * ponytail: 첫 페이지(100건)만 본다 — `getTaskFields`와 같은 상한이다.
+ */
+export async function findTaskByPost(
+  projectId: string,
+  title: string,
+  postId: string,
+): Promise<FlowTask | null> {
+  const query = `pageSize=100&searchWord=${encodeURIComponent(title)}`;
+  const data = await get<{ tasks?: FilterTask[] }>(
+    `/user/posts/projects/${projectId}/tasks/filter?${query}`,
+    "업무 조회",
+    undefined,
+    TASK_TTL,
+  );
+  const task = data.tasks?.find((t) => t.postId === postId);
+  return task ? toFlowTask(task) : null;
+}
+
 /** 담당자 필터가 걸리는 컬럼 번호. `WORKER_ID`가 기본 1번이다 (api-spec §6.1). */
 const WORKER_COLUMN = "1";
 
@@ -1173,27 +1225,7 @@ export async function listWorkerTasks(
       TASK_TTL,
     );
 
-    for (const task of data.tasks ?? []) {
-      // 커스텀 상태를 먼저 본다. base `STTS`는 커스텀 프로젝트에서 `0`으로 평평하게
-      // 와서, 그걸 읽으면 `진행`이 `대기`로 보인다 (BUG-028과 같은 함정).
-      const cell = columnData(task, "STATUS")[0] ?? columnData(task, "STTS")[0];
-      tasks.push({
-        taskId: task.taskId,
-        postId: task.postId,
-        title: columnData(task, "TASK_NM")[0]?.customColumnData ?? "제목 없는 업무",
-        endDate: columnData(task, "END_DT")[0]?.customColumnData ?? "",
-        regDate: regDateOf(task),
-        editDate: columnData(task, "EDTR_DTTM")[0]?.customColumnData ?? "",
-        author: authorOf(task),
-        workers: columnData(task, "WORKER_ID")
-          .map((d) => ({ userId: d.customColumnData ?? "", name: d.userName ?? "" }))
-          .filter((w) => w.userId),
-        status: cell?.optionName?.trim() || STTS_LABEL[cell?.customColumnData ?? ""] || "",
-        priority: columnData(task, "PRIORITY")[0]?.customColumnData ?? "",
-        done: cell?.optionCategory === "2",
-        upTaskId: task.upTaskId || "-1",
-      });
-    }
+    for (const task of data.tasks ?? []) tasks.push(toFlowTask(task));
 
     if (!data.hasNext || data.lastCursor === undefined || data.lastCursor < 0) break;
     if (page === TASK_MAX_PAGES - 1) hasMore = true;

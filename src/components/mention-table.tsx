@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { loadThread, type ThreadResult } from "@/app/(app)/actions";
+import { loadTaskPost, type TaskPostResult } from "@/app/(app)/actions";
 import { FlowLink } from "@/components/flow-link";
 import { IconLastComment } from "@/components/icons";
 import { LinkedText } from "@/components/linked-text";
@@ -11,8 +11,9 @@ import { MorphingModal } from "@/components/motion/morphing-modal";
 import { Table, type TableColumn } from "@/components/motion/table";
 import { CommentRowsSkeleton } from "@/components/skeletons";
 import { StatusPill } from "@/components/status-pill";
-import { CommentRows } from "@/components/thread-view";
+import { CommentList } from "@/components/thread-view";
 import type { MentionGroup } from "@/lib/aggregate";
+import { SHOWN } from "@/lib/thread";
 import { cn, fmtDateTime } from "@/lib/utils";
 
 /** 표 한 줄. 프로젝트명은 알림에 없어서(`projectId`만 온다) 화면이 붙여 준다. */
@@ -71,14 +72,12 @@ export function MentionTable({
           >
             <span className="min-w-0 truncate">{row.title}</span>
             {/* 말풍선 + 숫자. 업무명 뒤에 붙는다 — 앞에 두면 줄 번호처럼 읽히고, 알아야 하는
-                건 업무명이 먼저다. 안 읽은 게 남았으면 꽉 채운다: 옅은 배경(다 읽은 줄)과
-                나란히 놓였을 때 눈이 먼저 가는 쪽이 아직 답 안 한 쪽이다 */}
+                건 업무명이 먼저다. **면은 두지 않는다** — 칩이 줄마다 서면 표에서 제일 무거운
+                게 숫자가 되고, 업무명보다 먼저 읽힌다. 안 읽음/읽음은 색으로만 가른다 */}
             <span
               className={cn(
-                "tabular inline-flex h-5 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-semibold",
-                row.unread > 0
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-primary/15 text-primary",
+                "tabular inline-flex shrink-0 items-center gap-1 text-xs font-semibold",
+                row.unread > 0 ? "text-primary" : "text-muted-foreground",
               )}
             >
               <IconLastComment size={11} />
@@ -151,10 +150,16 @@ const descIdOf = (group: MentionTableRow) => `mention-detail-${group.taskId}`;
 /**
  * 멘션 상세 모달. 표 줄은 마지막 말 한 줄만 보여주니, 앞뒤 대화는 여기서 읽는다.
  *
- * **열면 바로 스레드 전량을 부른다** (v4.2.0). 알림은 나를 부른 댓글만 주는데, 부른 이유는
- * 대개 그 앞뒤 말에 있다 — 눌러야 나오는 `댓글 다 보기`를 두면 맥락 없는 두세 줄이 기본
- * 화면이 된다. 대신 **나를 부른 줄은 면과 아이콘 색을 올려서** 스무 줄 사이에서도 찾는다
- * (`ThreadComment.called` — 본문의 멘션 마크업으로 서버가 표시한다).
+ * **본문도 같이 낸다** (v4.9.0 — `loadTaskPost`). 부른 이유는 댓글에 있지만 무슨 일인지는
+ * 본문에 있다 — 업무 상세 모달에서 읽던 글을 여기서만 못 읽을 이유가 없다. 본문과 댓글이
+ * 한 왕복에서 같이 와서 호출 수는 그대로다.
+ *
+ * **열면 바로 스레드 전량을 부르고, 접는 건 화면에서만 한다** (v4.2.0 · v4.9.0). 알림은
+ * 나를 부른 댓글만 주는데 부른 이유는 대개 그 앞뒤 말에 있다 — 그래서 받는 건 전량이다.
+ * 다만 실측 14건 중 10건이 시스템 기록이라 그대로 쌓으면 사람이 남긴 말이 묻혀서, 업무 상세
+ * 모달과 같이 최신 두 줄만 펴고 나머지는 `댓글 다 보기`다 (`CommentList`). **나를 부른 줄은
+ * 접히지 않고**, 면과 아이콘 색도 올라간다 (`ThreadComment.called` — 본문의 멘션 마크업으로
+ * 서버가 표시한다).
  *
  * 못 가져오면 **알림 목록으로 돌아간다.** 알림은 이미 손에 있어서 공짜고, 스레드 한 번
  * 실패했다고 모달이 비면 표에서 보이던 것보다 못한 화면이 된다.
@@ -171,7 +176,9 @@ function MentionDetail({
   const descId = descIdOf(group);
   const { postId } = group;
   /** 어느 게시글의 결과인지 같이 들고 있는다 — 다른 줄을 열면 앞의 댓글이 잠깐 남는다. */
-  const [loaded, setLoaded] = useState<{ postId: string; result: ThreadResult | null } | null>(null);
+  const [loaded, setLoaded] = useState<{ postId: string; result: TaskPostResult | null } | null>(
+    null,
+  );
 
   // 모달을 열 때 한 번. 다른 줄을 열면 `postId`가 바뀌어 다시 부른다 — 모달 하나를 표가
   // 돌려 써서 컴포넌트가 다시 마운트되지 않는다.
@@ -179,9 +186,7 @@ function MentionDetail({
     if (!postId) return;
     let alive = true;
 
-    const form = new FormData();
-    form.set("postId", postId);
-    loadThread(null, form)
+    loadTaskPost({ postId })
       .catch(() => null)
       .then((result) => {
         if (alive) setLoaded({ postId, result });
@@ -191,8 +196,8 @@ function MentionDetail({
     };
   }, [postId]);
 
-  const thread = loaded && loaded.postId === postId ? loaded.result : null;
-  /** 아직 오는 중. 실패(`thread`가 있는데 `comments`가 없다)와 갈라야 골격을 언제 걷을지 안다. */
+  const post = loaded && loaded.postId === postId ? loaded.result : null;
+  /** 아직 오는 중. 실패(`post`가 있는데 `comments`가 없다)와 갈라야 골격을 언제 걷을지 안다. */
   const loading = !!postId && (!loaded || loaded.postId !== postId);
 
   return (
@@ -217,28 +222,44 @@ function MentionDetail({
           (task-detail-modal.tsx). 아래 선은 이 칸이 이미 갖고 있다.
           면도 업무 상세 모달과 같다 — `bg-card`로 패널보다 한 단 올린다 */}
       <div className="max-h-[min(60vh,calc(100dvh-16rem))] overflow-y-auto border-b border-border bg-card px-5 py-4">
+        {/* 본문 — 부른 이유는 댓글에 있지만 무슨 일인지는 본문에 있다. 업무 글은 비어 있는
+            경우가 흔해서 (api-spec §6.2) 없으면 덩어리째 뺀다. 모양은 업무 상세 모달과 같다
+            (`TaskThread`) — 두 모달에서 같은 글을 읽는다 */}
+        {post?.body && (
+          <div className="mb-4 border-b border-border pb-4">
+            <p className="text-xs font-semibold text-muted-foreground">본문</p>
+            {/* 줄바꿈을 살린다 — 본문이 목록으로 오는 경우가 많다.
+                `wrap-anywhere` — 본문에 섞여 오는 링크는 띄어쓰기가 없다 (BUG-025) */}
+            <p className="mt-2 text-sm leading-relaxed whitespace-pre-line wrap-anywhere">
+              <LinkedText text={post.body} />
+            </p>
+          </div>
+        )}
+
         {loading ? (
           // 도착하면 이 자리에 글자만 앉는다 — 알림 목록을 먼저 그렸다가 댓글로 갈아 끼우면
           // 같은 말이 자리를 옮겨 다시 서서, 읽던 줄을 눈으로 다시 찾아야 한다
           <>
             <p role="status" className="mb-2 text-xs text-muted-foreground">
-              댓글을 가져오는 중…
+              본문과 댓글을 가져오는 중…
             </p>
-            <CommentRowsSkeleton count={Math.min(group.count, 4)} />
+            {/* 접힌 기본값의 최소 줄 수다 — 도착하면 이 자리에 글자만 앉는다 */}
+            <CommentRowsSkeleton count={SHOWN} />
           </>
-        ) : thread?.comments ? (
-          <>
-            <p className="tabular mb-2 text-xs text-muted-foreground">{thread.message}</p>
-            {/* 나를 부른 줄은 서버가 표시해서 온다 (`ThreadComment.called`) */}
-            <CommentRows comments={thread.comments} />
-          </>
+        ) : post?.comments ? (
+          // 접고 펼치는 규칙은 업무 상세 모달과 같다 (`CommentList`) — 최신 두 줄이 기본이고
+          // 나머지는 `댓글 다 보기`다. 나를 부른 줄은 접히지 않으니 이 모달의 질문("내가 왜
+          // 불렸나")은 펼치지 않아도 답이 나온다 (`tail`)
+          <div className="space-y-3">
+            <CommentList comments={post.comments} />
+          </div>
         ) : (
           <>
             {/* 스레드를 못 가져왔을 때의 자리. 알림은 나를 부른 댓글만이라 앞뒤가 없지만,
                 빈 화면보다는 낫다 */}
-            {thread && (
+            {post && (
               <p role="status" className="mb-2 text-xs text-muted-foreground">
-                {thread.message}
+                {post.message}
               </p>
             )}
             {/* 오래된 것부터 — 대화는 위에서 아래로 읽는다 (그룹 배열은 최신순이다) */}

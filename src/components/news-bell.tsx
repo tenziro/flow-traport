@@ -2,12 +2,15 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { markMentionsRead } from "@/app/(app)/actions";
+import { loadNewsTask, markMentionsRead } from "@/app/(app)/actions";
 import { IconCheck, IconInbox, IconNews } from "@/components/icons";
 import { BottomSheet } from "@/components/motion/bottom-sheet";
+import { MorphingModal } from "@/components/motion/morphing-modal";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
+import { descIdOf, TaskDetailModal } from "@/components/task-detail-modal";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { TaskNews } from "@/lib/flow/queries";
+import { diffDays, parseFlowDeadline } from "@/lib/aggregate/date";
+import type { TaskNews, WorklistTask } from "@/lib/flow/queries";
 import { useNarrowScreen } from "@/lib/hooks/use-narrow-screen";
 import { cn, fmtDateTime } from "@/lib/utils";
 
@@ -16,6 +19,10 @@ import { cn, fmtDateTime } from "@/lib/utils";
  * (제목·링크는 캐시에 있다 — `NEWS_BRIEF_TTL`). 분당 상한 120번 중 2번이다.
  */
 const NEWS_POLL_MS = 60_000;
+
+/** 소식 한 줄의 껍데기. 단추(보통)와 링크(못 연 줄)가 같은 모양이어야 한다. */
+const NEWS_ROW =
+  "flex w-full min-w-0 flex-col gap-1.5 rounded-lg px-2.5 py-3 outline-none transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50";
 
 /**
  * 헤더 알림 종 (PRD §13 B1·B2).
@@ -81,6 +88,18 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
   const [open, setOpen] = useState(false);
   const narrow = useNarrowScreen();
 
+  /** 지금 여는 중인 소식 id. 서버에서 업무를 찾는 동안만 켜진다. */
+  const [opening, setOpening] = useState<string | null>(null);
+  /** 업무를 못 찾은 소식 id. 그 줄만 flow 링크로 돌아간다. */
+  const [failed, setFailed] = useState<string | null>(null);
+  /**
+   * 열린 업무. 닫는 동안 내용이 남아야 접히는 게 보여서 닫을 때 안 비운다 (task-table과 같다).
+   * `projectId`를 같이 든다 — 쓰기 줄이 그 값을 요구하는데 업무 한 줄에는 안 들어 있고,
+   * 알림이 들고 있다.
+   */
+  const [opened, setOpened] = useState<{ task: WorklistTask; projectId: string } | null>(null);
+  const [taskOpen, setTaskOpen] = useState(false);
+
   // 새 탭이 열리는 동안 이 탭에서는 읽음 처리만 한다. 액션이 revalidate까지 해서 배지와
   // 점이 그 자리에서 줄어든다 — 그게 처리됐다는 신호다.
   // 이름은 멘션에서 왔지만 하는 일은 `alarmId` 읽음 처리라 그대로 쓴다 (actions.ts).
@@ -100,6 +119,34 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
   const shown = (items ?? []).filter(
     (n) => tab === "all" || (tab === "unread" ? n.unread : !n.unread),
   );
+
+  /**
+   * 한 줄을 누르면 그 업무의 상세 모달이 이 화면에서 열린다.
+   *
+   * 알림이 든 건 `postId`뿐이라 상세 모달이 요구하는 `taskSrno`를 서버에서 한 번 찾아온다
+   * (`loadNewsTask`). 못 찾는 줄 — 업무가 아닌 글 — 은 링크로 돌려준다.
+   */
+  const openTask = (item: TaskNews) => {
+    if (item.unread) markRead(item.id);
+    setOpening(item.id);
+    setFailed(null);
+    loadNewsTask({
+      projectId: item.projectId,
+      postId: item.postId,
+      title: item.title,
+      project: item.project,
+      url: item.url,
+    })
+      .catch(() => null)
+      .then((result) => {
+        setOpening(null);
+        if (!result?.task) return setFailed(item.id);
+        // 목록은 닫는다 — 모달이 그 위에 겹치면 뒤에 남은 목록이 배경으로 어른거린다.
+        setOpen(false);
+        setOpened({ task: result.task, projectId: item.projectId });
+        setTaskOpen(true);
+      });
+  };
 
   const panel = (
     <>
@@ -153,15 +200,9 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
         // 이 상한이 시트의 키도 정한다: 시트는 내용 높이만큼만 서므로(`snapPoints=["auto"]`)
         // 목록이 여기서 멈추면 시트도 화면의 4분의 3쯤에서 멈춘다.
         <ul className="max-h-[min(28rem,60vh)] overflow-y-auto p-2">
-          {shown.map((item) => (
-            <li key={item.id}>
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noreferrer noopener"
-                onClick={item.unread ? () => markRead(item.id) : undefined}
-                className="flex min-w-0 flex-col gap-1.5 rounded-lg px-2.5 py-3 outline-none transition-colors hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
-              >
+          {shown.map((item) => {
+            const body = (
+              <>
                 <span className="flex min-w-0 items-center justify-between gap-3">
                   {/* 점과 제목을 한 줄짜리 flex로 묶는다 — `align-middle`로는 글자 상자
                       기준이라 점이 살짝 위에 떴다. 여기서는 `items-center`가 두 개를
@@ -180,8 +221,10 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
                       {item.title || item.project}
                     </span>
                   </span>
+                  {/* 여는 동안 시각 자리가 진행을 말한다 — 목록이 그대로 있는 채로 한 박자
+                      기다리게 되는데, 아무 반응이 없으면 안 눌린 줄 알고 또 누른다 */}
                   <span className="tabular shrink-0 text-xs text-muted-foreground">
-                    {fmtDateTime(item.at)}
+                    {opening === item.id ? "여는 중…" : fmtDateTime(item.at)}
                   </span>
                 </span>
                 {/* 업무명이 제목 자리로 올라갔을 때만 프로젝트명이 아래에 붙는다. 업무명을
@@ -193,9 +236,40 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
                 )}
                 <span className="line-clamp-2 text-[13px] text-foreground">{item.message}</span>
                 <span className="text-xs text-muted-foreground">{item.from}</span>
-              </a>
-            </li>
-          ))}
+                {failed === item.id && (
+                  <span className="text-xs text-danger-foreground">
+                    여기서는 못 열어요 — 한 번 더 누르면 flow에서 열려요
+                  </span>
+                )}
+              </>
+            );
+
+            // 못 연 줄만 링크로 돌아간다. 실패한 자리에서 새 탭을 우리가 열면 브라우저가
+            // 팝업으로 보고 막는다 — 사람이 직접 누른 링크는 안 막힌다.
+            return (
+              <li key={item.id}>
+                {failed === item.id ? (
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className={cn(NEWS_ROW, "cursor-pointer")}
+                  >
+                    {body}
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    aria-busy={opening === item.id}
+                    onClick={() => openTask(item)}
+                    className={cn(NEWS_ROW, "cursor-pointer text-left")}
+                  >
+                    {body}
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -251,6 +325,48 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
       >
         {panel}
       </BottomSheet>
+
+      {/* 표가 쓰는 것과 같은 상세 모달이다 (task-table). 알림에서 열어도 상태·마감일·
+          우선순위·담당자를 여기서 바로 고칠 수 있다 — flow로 나갈 일이 없다 */}
+      <MorphingModal
+        viewId={taskOpen && opened ? String(opened.task.taskSrno) : null}
+        onClose={() => setTaskOpen(false)}
+        ariaLabel="업무 상세"
+        ariaDescribedBy={opened ? descIdOf(opened.task) : undefined}
+        showCloseButton={false}
+        className="max-w-[34rem] lg:max-w-[44rem]"
+      >
+        {opened && (
+          <TaskDetailModal
+            task={opened.task}
+            shown={opened.task}
+            projectId={opened.projectId}
+            path={pathname}
+            onClose={() => setTaskOpen(false)}
+            onSaved={(patch) =>
+              setOpened((prev) => (prev ? { ...prev, task: patched(prev.task, patch) } : prev))
+            }
+          />
+        )}
+      </MorphingModal>
     </>
   );
+}
+
+/**
+ * 방금 저장한 값을 얹는다. 표와 달리 열려 있는 업무가 하나뿐이라 낙관값도 한 벌이다 —
+ * `base` 스위치가 필요 없다 (표는 서버가 다시 그려 주는 줄과 맞대야 해서 든다).
+ */
+function patched(task: WorklistTask, patch: { status?: string; endDate?: string }): WorklistTask {
+  const endDate = patch.endDate ?? task.endDate;
+  return {
+    ...task,
+    status: patch.status ?? task.status,
+    endDate,
+    // 마감일이 바뀌면 남은 일수도 그 값에서 다시 센다 — 안 그러면 옛 D+가 그대로 남는다.
+    daysLeft:
+      endDate === task.endDate
+        ? task.daysLeft
+        : diffDays(Date.now(), parseFlowDeadline(endDate) ?? Date.now()),
+  };
 }

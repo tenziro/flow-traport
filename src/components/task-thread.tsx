@@ -2,27 +2,23 @@
 
 import Image from "next/image";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { loadTaskPost, type TaskPostResult, type ThreadComment } from "@/app/(app)/actions";
+import { loadTaskPost, type TaskPostResult } from "@/app/(app)/actions";
 import {
   IconAttach,
   IconChevronDown,
   IconDownTask,
-  IconLastComment,
   IconOpen,
   IconUpTask,
 } from "@/components/icons";
 import { ImageViewer } from "@/components/image-viewer";
 import { LinkedText } from "@/components/linked-text";
-import { Button } from "@/components/motion/button/base";
 import { CommentRowsSkeleton } from "@/components/skeletons";
 import { CommentForm } from "@/components/task-actions";
-import { CommentRows, type ReplyTarget } from "@/components/thread-view";
+import { CommentList, type ReplyTarget } from "@/components/thread-view";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { PostFile, PostLink } from "@/lib/flow/rest";
+import { SHOWN } from "@/lib/thread";
 import { cn } from "@/lib/utils";
-
-/** 접힌 채로 보여줄 **최상위** 댓글 수. 이보다 많으면 `댓글 다 보기`로 나머지를 펼친다. */
-const SHOWN = 2;
 
 /** 파일 크기. 1MB 밑은 KB로 — 소수점 아래를 읽을 사람이 없다. */
 const fmtSize = (bytes: number) =>
@@ -158,18 +154,6 @@ function TaskRow({ link, children }: { link: PostLink; children: ReactNode }) {
 }
 
 /**
- * 접었을 때 남길 줄. 끝에서 최상위 댓글 `SHOWN`개가 시작하는 자리부터 끝까지다.
- *
- * 답글은 수에 안 세고 **부모를 따라간다** — 목록이 `부모 → 그 답글들` 순서라 자르는 자리
- * 하나로 둘 다 된다. 답글까지 세어 자르면 부모 없는 `↳` 줄이 첫 줄로 서서, 화살표가 가리킬
- * 대상이 화면에 없다.
- */
-function tail(comments: ThreadComment[]): ThreadComment[] {
-  const tops = comments.flatMap((c, i) => (c.reply ? [] : [i]));
-  return comments.slice(tops.length > SHOWN ? tops[tops.length - SHOWN] : 0);
-}
-
-/**
  * 상세 모달의 본문 + 댓글 (PRD §6.1.4).
  *
  * **열 때 한 번 부른다** (`loadTaskPost` — 본문 1회 + 댓글 1회). 전에는 댓글을 `댓글 다 보기`를
@@ -177,9 +161,7 @@ function tail(comments: ThreadComment[]): ThreadComment[] {
  * 업무명을 눌러 여는 자리라 열린 업무가 하나뿐이다 — 여기까지 들어온 사람은 이 업무를 보러
  * 온 것이니 열자마자 채운다.
  *
- * 최신 최상위 댓글 두 개와 **거기 딸린 답글 전부**를 펼쳐 둔다 (`tail`). 실측 14건 중 10건이
- * 시스템 기록(담당자·마감일 변경)이라 전량을 그대로 쌓으면 사람이 남긴 말이 기록 사이에
- * 묻힌다. 나머지는 `댓글 다 보기`다.
+ * 접고 펼치는 규칙은 `CommentList`에 있다 — 멘션 상세 모달과 같은 목록이다.
  *
  * 순서는 위에서 아래로 읽는 대화 그대로다 — 오래된 것이 위, 최신이 아래, 그 아래가 입력칸이다.
  * 그래서 접었을 때 남는 것은 목록의 **끝**이고, 펼치는 버튼은 목록 위에 붙는다.
@@ -199,7 +181,6 @@ export function TaskThread({
   path: string;
 }) {
   const [got, setGot] = useState<TaskPostResult | null>(null);
-  const [all, setAll] = useState(false);
   /** 댓글을 남긴 뒤 다시 부르는 스위치. 방금 남긴 말이 목록에 안 보이면 남았는지 알 수 없다. */
   const [reload, setReload] = useState(0);
   /** 답글을 달 댓글. 비어 있으면 입력칸이 일반 댓글이다. */
@@ -236,8 +217,6 @@ export function TaskThread({
   }
 
   const comments = got.comments ?? [];
-  const shown = tail(comments);
-  const hidden = comments.length - shown.length;
   /** 썸네일이 있는 첨부 = 이미지다. 격자에 그리는 순서가 뷰어에서 넘기는 순서다. */
   const images = got.files?.filter((f) => f.thumb) ?? [];
 
@@ -330,41 +309,19 @@ export function TaskThread({
       )}
 
       <div className="space-y-3 border-b border-border px-5 py-4">
-        {/* 갯수와 펼치기를 한 줄 양 끝에 둔다 — 둘 다 "이 목록이 전부냐"에 대한 답이라
-            같은 줄에서 읽힌다. 버튼을 아래 줄에 따로 두면 목록의 첫 줄처럼 보였다 */}
-        <div className="flex items-center justify-between gap-2">
-          <p className="tabular text-xs font-semibold text-muted-foreground">
-            댓글{comments.length > 0 && ` ${comments.length}개`}
-          </p>
-          {hidden > 0 && !all && (
-            // `-my-1` — 버튼(h-7)이 줄 높이를 밀어 본문 간격이 어긋나는 걸 막는다
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => setAll(true)}
-              className="-my-1 h-7 px-2"
+        <CommentList
+          comments={comments}
+          onReply={setReplyTo}
+          replyingTo={replyTo?.id}
+          empty={
+            <p
+              role="status"
+              className={cn("text-xs", got.ok ? "text-muted-foreground" : "text-danger-foreground")}
             >
-              <IconLastComment size={13} />
-              댓글 다 보기
-            </Button>
-          )}
-        </div>
-
-        {comments.length === 0 ? (
-          <p
-            role="status"
-            className={cn("text-xs", got.ok ? "text-muted-foreground" : "text-danger-foreground")}
-          >
-            {got.message}
-          </p>
-        ) : (
-          <CommentRows
-            comments={all ? comments : shown}
-            onReply={setReplyTo}
-            replyingTo={replyTo?.id}
-          />
-        )}
+              {got.message}
+            </p>
+          }
+        />
 
         {/* 입력칸은 제일 아래다 — 위의 대화를 읽고 그 끝에 말을 붙이는 순서다 */}
         <CommentForm
