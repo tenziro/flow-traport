@@ -361,7 +361,7 @@ export interface FlowReply {
 /** api-spec §13.1 `Comment`. 화면에 쓰는 것만 적었다. */
 export interface FlowComment {
   commentId: string;
-  /** 본문. `@[이름](id)` 마크업이 그대로 온다 — `stripMentions`로 벗긴다. */
+  /** 본문. `@[이름](id)` 마크업이 그대로 온다 — `maskMentions`로 id를 뗀다. */
   contents: string;
   /**
    * 변경 로그 표시. **truthy 여부로 판정하면 안 된다** — `isChangeLog`를 쓴다 (BUG-035).
@@ -464,13 +464,18 @@ export function lastHumanComment(comments: FlowComment[]): FlowComment | FlowRep
 }
 
 /**
- * `@[서동조](djseo7)` → `서동조`. 알림은 걷어서 주는데 댓글 API는 안 걷는다.
+ * `@[서동조](djseo7)` → `@[서동조]`. 알림은 걷어서 주는데 댓글 API는 안 걷는다.
  *
- * `@`까지 뗀다. 여기서 이름을 부르는 건 flow 안에서 알림을 보내는 동작이라 우리 화면에서는
- * 누를 데도 없는 표시고, 한 댓글에 서너 명이 불려 있으면 `@`가 줄머리를 채워 본문이 안 읽힌다.
+ * **괄호 안의 id는 여기서 뗀다.** 화면에 낼 일이 없는 값인데 이 앱에서는 그게 사내 메일
+ * 주소다 (`@[이종석](jongseok.lee@traport.com)`) — 안 그려도 되는 개인정보를 브라우저까지
+ * 보낼 이유가 없다 (PRD §6.6).
+ *
+ * 이름은 표시(`@[…]`)를 붙인 채 보낸다. 예전에는 여기서 표시까지 다 걷어 평문으로 냈는데,
+ * 그러면 화면에서 어디까지가 부른 이름인지 알 수 없어 본문에 그대로 묻혔다. 표시를 벗기고
+ * 굵기·색을 입히는 건 그리는 쪽 일이다 (`LinkedText`).
  */
-export const stripMentions = (contents: string) =>
-  contents.replace(/@\[([^\]]*)\]\([^)]*\)/g, "$1");
+export const maskMentions = (contents: string) =>
+  contents.replace(/@\[([^\]]*)\]\([^)]*\)/g, "@[$1]");
 
 /**
  * 이 댓글이 **나를 불렀나**. 괄호 안의 id가 세션의 `userId`와 같은 값이다 (실측 2026-08-04:
@@ -762,8 +767,11 @@ export async function getPostBrief(postId: string, ttl?: number) {
   return {
     title: d.title?.trim() || null,
     url: d.connectUrl?.trim() || null,
-    /** 본문 평문(`outContent`). HTML 쪽(`content`)은 안 쓴다 — 그릴 때 태그를 다시 지워야 한다. */
-    body: d.outContent?.trim() ?? "",
+    /**
+     * 본문 평문(`outContent`). HTML 쪽(`content`)은 안 쓴다 — 그릴 때 태그를 다시 지워야 한다.
+     * 본문에도 사람을 부를 수 있어서 댓글과 같이 id를 뗀다 (`maskMentions`).
+     */
+    body: maskMentions(d.outContent?.trim() ?? ""),
     // 업무가 아닌 글(공지·회의록)은 `tasks`가 비어 있다 — 그때는 상태가 없다.
     status: taskStatus(d.tasks?.[0]),
     /** 이 업무를 품은 상위 업무. 실측 20건 중 11건이고 늘 **한 건**이다. */

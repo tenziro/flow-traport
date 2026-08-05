@@ -1,5 +1,6 @@
 import { CollectNotice } from '@/components/collect-notice';
 import {
+  IconCalendar,
   IconFocus,
   IconImminent,
   IconMention,
@@ -13,22 +14,28 @@ import { NumberTicker } from '@/components/motion/number-ticker';
 import { TaskTable } from '@/components/task-table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { groupMentions } from '@/lib/aggregate';
-import { loadToday } from '@/lib/flow/queries';
-import { cn } from '@/lib/utils';
+import { loadToday, loadWeekEvents } from '@/lib/flow/queries';
+import type { FlowEvent } from '@/lib/flow/rest';
+import { cn, fmtTime } from '@/lib/utils';
 
 export const metadata = { title: '오늘 · flow Cockpit' };
 
 /**
  * 배치:
  *
- * 1. KPI 4칸 — 건수 + 전체 점유율 막대. 숫자만 있으면 크고 작음이 안 읽힌다.
- * 2. 표 네 개를 한 단으로 쌓는다 — 급한 순서다: 포커스 → 밀리는 업무 → 나를 부른
+ * 1. 오늘 일정 띠 — **오늘 잡힌 게 있을 때만** 선다.
+ * 2. KPI 4칸 — 건수 + 전체 점유율 막대. 숫자만 있으면 크고 작음이 안 읽힌다.
+ * 3. 표 네 개를 한 단으로 쌓는다 — 급한 순서다: 포커스 → 밀리는 업무 → 나를 부른
  *    사람들 → 방치된 업무.
  *
  * 한때 4단이 더 있었다. "알고만 있으면 되는 것들" 자리로 업무 소식과 오늘 일정을 뒀는데,
  * 소식은 헤더 종으로(news-bell.tsx), 일정은 계정 팝오버의 서랍으로 올라갔다
  * (app-shell.tsx, v1.6.0). 둘 다 이 화면에서만 보이던 것이라 다른 화면에서는 없는
  * 기능이었다 — 셸로 올리니 어디서나 같은 자리에 있고, 이 화면은 챙길 일만 남는다.
+ *
+ * 그 일정이 **오늘치만** 맨 위로 돌아왔다 (v4.12.1). 서랍은 그대로 이레를 열고, 여기 띠는
+ * 오늘 잡힌 것만 낸다 — 챙길 일을 세기 전에 몇 시에 자리를 비우는지가 먼저다. "오늘 무엇을
+ * 할까"에 답하려면 남은 시간이 얼마인지부터 알아야 하는데, 그게 서랍을 열어야 보였다.
  *
  * **8:4 2단을 접었다.** 업무를 표로 바꾸면서다 — 표는 칸 폭이 고정 비율이라 12칸 중 4칸에
  * 넣으면 다섯 칸이 다 눌려 업무명이 열 글자에서 잘린다. 한 단으로 쌓으니 어느 표든
@@ -38,9 +45,23 @@ export const metadata = { title: '오늘 · flow Cockpit' };
  * 화면마다 다르게 생기면 같은 것인지 알아보는 데 시간이 든다.
  */
 export default async function TodayPage() {
-  const { now, worklist, focus, stale, projectIds, truncated, failed } =
-    await loadToday();
+  /*
+   * 일정은 셸(`layout.tsx`)이 이미 같은 창으로 부른다 — 같은 요청 안의 같은 GET이라
+   * Next가 한 번만 나간다. 그래서 `loadToday`와 나란히 불러도 REST 호출이 안 늘어난다.
+   */
+  const [{ now, worklist, focus, stale, projectIds, truncated, failed }, week] =
+    await Promise.all([loadToday(), loadWeekEvents()]);
   const { counts } = worklist;
+  /*
+   * 오늘 시작하는 것만. 서랍의 하루 묶음과 같은 기준이다 (`ScheduleList`) — 거기서는
+   * 어제 시작해 오늘까지 가는 일정도 어제 칸에 선다. 두 자리가 다른 기준을 쓰면 서랍에는
+   * 있는 일정이 띠에는 없거나 그 반대가 된다.
+   *
+   * 일정을 못 가져왔으면(`null`) 띠를 안 세운다 — 그 사정은 서랍이 적는다.
+   */
+  const events = (week.events ?? []).filter(
+    (event) => event.eventStartDateTime.slice(0, 8) === week.today,
+  );
   /** 워크리스트는 projectId를 안 준다 — 프로젝트 이름으로 해소한다 (queries.ts). */
   const idOf = (project: string) => projectIds.get(project) ?? null;
   /** 반대 방향. 멘션 알림은 프로젝트 이름 없이 id만 준다 (rest.ts). */
@@ -104,6 +125,8 @@ export default async function TodayPage() {
           건
         </p>
       </header>
+
+      {events.length > 0 && <TodaySchedule events={events} />}
 
       {/* KPI는 한 줄로 세운다. 2×2로 접으면 4칸이 두 덩어리로 보여서 순위가 안 읽힌다 */}
       <section
@@ -330,6 +353,49 @@ function Stat({
         <p className="text-[11px] leading-snug text-muted-foreground">{note}</p>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * 오늘 잡힌 일정 띠. 머리 바로 밑, 요약 넉 장 위다 — 챙길 일을 세기 전에 **몇 시에 자리를
+ * 비우는지**가 먼저 읽혀야 한다.
+ *
+ * 요약 카드처럼 면을 쓰되 카드로 안 만든다. 카드로 세우면 요약 넉 장과 같은 급이 되어
+ * "다섯 칸짜리 요약"으로 읽히는데, 이건 세는 값이 아니라 오늘의 사정이다. 그래서 한 줄 띠고,
+ * 오늘 잡힌 게 없으면 아예 안 선다 — "일정 없어요" 칸이 매일 자리를 차지할 이유가 없다.
+ *
+ * 이레치는 셸의 서랍이 그대로 맡는다 (`ScheduleList`). 여기서 늘어놓으면 오늘 화면이
+ * 달력이 된다.
+ */
+function TodaySchedule({ events }: { events: FlowEvent[] }) {
+  return (
+    <section
+      aria-label="오늘 일정"
+      className="rise mb-8 rounded-lg bg-primary/8 px-4 py-3 ring-1 ring-primary/20"
+      style={{ '--i': 0 } as React.CSSProperties}
+    >
+      <p className="flex items-center gap-2 text-xs font-medium text-primary">
+        <IconCalendar size={14} aria-hidden />
+        오늘 일정 {events.length}건
+      </p>
+      {/* 시각을 폭 고정으로 앞에 세운다 — 이름 길이가 달라도 시각이 한 줄로 맞아서
+          하루 흐름이 위아래로 읽힌다 (서랍의 목록과 같은 모양이다) */}
+      <ul className="mt-2 space-y-1">
+        {events.map((event) => (
+          <li
+            key={event.eventSrno}
+            className="tabular flex items-baseline gap-2 text-sm"
+          >
+            <span className="w-10 shrink-0 font-medium text-primary">
+              {event.allDayYn === 'Y'
+                ? '종일'
+                : fmtTime(event.eventStartDateTime)}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{event.eventName}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

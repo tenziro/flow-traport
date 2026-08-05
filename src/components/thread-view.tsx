@@ -26,12 +26,15 @@ export function CommentList({
   empty,
   onReply,
   replyingTo,
+  replyForm,
 }: {
   comments: ThreadComment[];
   /** 댓글이 없을 때 목록 자리에 낼 것 (보통 서버가 준 안내 한 줄). */
   empty?: ReactNode;
   onReply?: (target: ReplyTarget) => void;
   replyingTo?: string;
+  /** 답글 입력칸. `replyingTo`인 댓글 바로 아래에 붙는다 (`CommentRows`). */
+  replyForm?: ReactNode;
 }) {
   const [all, setAll] = useState(false);
   const shown = all ? comments : tail(comments);
@@ -58,7 +61,12 @@ export function CommentList({
         )}
       </div>
       {comments.length === 0 ? empty : (
-        <CommentRows comments={shown} onReply={onReply} replyingTo={replyingTo} />
+        <CommentRows
+          comments={shown}
+          onReply={onReply}
+          replyingTo={replyingTo}
+          replyForm={replyForm}
+        />
       )}
     </>
   );
@@ -76,12 +84,19 @@ export function CommentRows({
   comments,
   onReply,
   replyingTo,
+  replyForm,
 }: {
   comments: ThreadComment[];
   /** 주면 사람 댓글에 `답글` 버튼이 붙는다. 시스템 기록에는 안 붙인다 — 답할 상대가 없다. */
   onReply?: (target: ReplyTarget) => void;
   /** 지금 답글을 달고 있는 댓글. 입력칸이 어느 말에 붙는지 목록에서도 보인다. */
   replyingTo?: string;
+  /**
+   * 답글 입력칸. **답하는 말 바로 아래**에 붙는다 — 목록 맨 끝에 두면 스무 줄짜리
+   * 스레드에서 위쪽 댓글에 답할 때 입력칸이 화면 밖이라, 누가 어느 말에 답하는 중인지가
+   * 입력칸에 적힌 이름 한 줄로만 남았다.
+   */
+  replyForm?: ReactNode;
 }) {
   return (
     <ul className="space-y-2.5">
@@ -161,6 +176,8 @@ export function CommentRows({
                   본문보다 댓글로 더 자주 온다 */}
               <LinkedText text={comment.body} />
             </p>
+            {/* 답글 입력칸. 댓글 본문과 같은 열에 서서 이 말에 붙은 것으로 읽힌다 */}
+            {replyForm && replyingTo === comment.id && <div className="mt-2">{replyForm}</div>}
           </div>
         </li>
         );

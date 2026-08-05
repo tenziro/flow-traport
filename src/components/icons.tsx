@@ -44,11 +44,13 @@ export {
   ChevronLeft as IconChevronLeft,
   ChevronRight as IconChevronRight,
   Check as IconCheck,
-  Logout as IconSignOut,
+  /** 로그아웃. reicon 이름은 `Login4`(문과 화살표)다 — 뜻은 앱 이름 쪽이 정한다. */
+  Login4 as IconSignOut,
   /* 표(`motion/table`)가 쓰는 것들. beUI 원본은 lucide를 쓰는데 이 앱은 아이콘셋이
      하나여야 해서 여기서 갈아 끼운다. reicon에 없는 짝은 뜻이 같은 것으로 바꿨다 —
      `GripVertical`(잡이)은 `Menu`, `Arrow*ToLine`(앞/뒤에 끼우기)은 방향 화살표다. */
-  ChevronUp as IconChevronUp,
+  /** 표 머리의 정렬 표시 — 아직 안 누른 칸. 누르면 `IconArrowUp`·`IconArrowDown`이 된다. */
+  SortV as IconSortV,
   Menu as IconGrip,
   MoreH as IconMoreH,
   More as IconMoreV,

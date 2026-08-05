@@ -2,7 +2,7 @@ import { IconOpen } from "@/components/icons";
 import { splitLinks } from "@/lib/utils";
 
 /**
- * 글에 섞여 온 `http`·`https` 주소를 새 창 링크로 바꿔 낸다.
+ * 글에 섞여 온 `http`·`https` 주소를 새 창 링크로, 부른 사람 이름(`@[이름]`)을 강조로 바꿔 낸다.
  *
  * 업무 본문(`task-thread.tsx`)과 댓글(`thread-view.tsx`), 멘션 알림 내용
  * (`mention-table.tsx`)이 같이 쓴다 — flow 본문에 붙는 주소는 대개 댓글로 다시 오고,
@@ -31,6 +31,14 @@ export function LinkedText({ text }: { text: string }) {
             <IconOpen size={11} aria-hidden className="ml-0.5 inline align-baseline" />
             <span className="sr-only"> (새 창)</span>
           </a>
+        ) : part.mention ? (
+          /* 부른 사람. `@`는 안 낸다 — flow 안에서 알림을 보내는 표시라 우리 화면에서는 누를
+             데도 없고, 한 댓글에 서너 명이 불려 있으면 `@`가 줄머리를 채운다. 대신 굵기와
+             색으로 가른다: 이름만 남겨 놓으면 본문에 섞여서 누구를 부른 말인지 안 보였다.
+             밑줄은 안 긋는다 — 그건 링크 자리다 */
+          <strong key={i} className="font-semibold text-primary">
+            {part.text}
+          </strong>
         ) : (
           part.text
         ),

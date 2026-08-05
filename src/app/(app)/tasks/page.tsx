@@ -4,7 +4,13 @@ import { FlowLink } from "@/components/flow-link";
 import { IconChevronDown, IconFeed, IconMyTasks, IconNormal, IconRisk } from "@/components/icons";
 import { Kpi } from "@/components/kpi";
 import { Meter } from "@/components/meter";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/motion/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsSelect,
+  TabsTrigger,
+} from "@/components/motion/tabs";
 import { ProjectPanel } from "@/components/project-panel";
 import { StatHint } from "@/components/stat-hint";
 import { TaskTable } from "@/components/task-table";
@@ -110,7 +116,16 @@ export default async function TasksPage() {
         </Card>
       ) : (
         <Tabs defaultValue={tabs[0].value} variant="segment">
-          <TabsList aria-label="프로젝트 보기" className="flex-wrap bg-secondary">
+          {/* 폰에서는 칩 줄 대신 고르개 한 줄이다. 세 칸의 이름이 길어서 폰에서는 늘 두 줄로
+              접혔다 — 접힌 둘째 줄이 아래 프로젝트 목록의 첫 줄처럼 보였다 */}
+          <TabsSelect
+            aria-label="프로젝트 보기"
+            options={tabs.map(({ value, label, count }) => ({
+              value,
+              label: `${label} ${count}`,
+            }))}
+          />
+          <TabsList aria-label="프로젝트 보기" className="flex-wrap bg-secondary max-sm:hidden">
             {tabs.map(({ value, label, count }) => (
               <TabsTrigger key={value} value={value} className="min-h-8">
                 {label}

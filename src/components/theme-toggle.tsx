@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { flushSync } from "react-dom";
 import { IconDark, IconLight, IconSystem } from "@/components/icons";
 import { THEME_COOKIE, type Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -35,13 +36,39 @@ function apply(next: Theme) {
   document.cookie = `${THEME_COOKIE}=${next}; path=/; max-age=${ONE_YEAR}; samesite=lax`;
 }
 
+/**
+ * 색이 갈리는 걸 화면 전환(View Transition)으로 덮는다 — 새 색이 아래에서 위로 올라온다
+ * (`globals.css`의 `theme-reveal`, beUI theme-toggle의 `rectangle`+`bottom-up`).
+ *
+ * `commit`은 눌린 칸을 옮기는 `setState`다. `flushSync`로 전환 안에서 돌린다 — 브라우저는
+ * 콜백이 끝난 직후를 "새 화면"으로 찍는데 React는 기본적으로 클릭 처리가 다 끝난 뒤에
+ * 다시 그려서, 그대로 두면 눌린 칸만 전환 밖에 남아 색이 다 바뀐 뒤에 따라온다.
+ *
+ * 여기도 `apply`와 같은 이유로 컴포넌트 밖이다 (React 컴파일러).
+ */
+function reveal(next: Theme, commit: () => void) {
+  if (!document.startViewTransition) {
+    commit();
+    apply(next);
+    return;
+  }
+  const root = document.documentElement;
+  // 이 표시가 붙은 동안만 아래에서 올라온다. 안 지우면 다음 전환까지 같은 모양이 된다.
+  root.dataset.themeVt = "";
+  const clear = () => {
+    delete root.dataset.themeVt;
+  };
+  document
+    .startViewTransition(() => {
+      flushSync(commit);
+      apply(next);
+    })
+    // 전환이 중간에 걸러지면 `finished`가 거절된다 — 어느 쪽이든 표시는 지운다.
+    .finished.then(clear, clear);
+}
+
 export function ThemeToggle({ theme: initial }: { theme: Theme }) {
   const [theme, setTheme] = useState(initial);
-
-  function pick(next: Theme) {
-    setTheme(next);
-    apply(next);
-  }
 
   return (
     <fieldset className="flex shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5">
@@ -68,10 +95,12 @@ export function ThemeToggle({ theme: initial }: { theme: Theme }) {
               name="theme"
               value={value}
               checked={on}
-              onChange={() => pick(value)}
+              onChange={() => reveal(value, () => setTheme(value))}
               className="sr-only"
             />
-            <Icon size={14} />
+            {/* 고른 칸은 아이콘을 채운다. 판(`muted`)과 켠 칸(`background`)의 색 차이가
+                밝게에서 특히 얇아서, 흐린 그림자 하나로만 갈리던 자리다 */}
+            <Icon size={14} weight={on ? "Filled" : "Outline"} />
             <span className="sr-only">{label}</span>
           </label>
         );

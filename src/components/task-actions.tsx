@@ -737,16 +737,26 @@ export function CommentForm({
    */
   onSaved?: () => void;
 }) {
+  const input = useRef<HTMLInputElement>(null);
+  /**
+   * 쓴 글을 우리가 든다. 폼 액션이 끝나면 React가 폼을 되감아 주지만(`requestFormReset`)
+   * 그건 DOM 값을 지우는 것이고, beUI `Input`은 제 값을 state로 들고 그리는 컴포넌트라
+   * 다음 렌더에서 방금 지운 자리에 옛 글자를 다시 써 넣는다 — 남기고 나도 입력칸에 그대로
+   * 남아 있던 이유다. 우리가 들면 성공한 자리에서 비울 수 있다.
+   */
+  const [text, setText] = useState("");
+  /** 비우기와 다시 부르기 둘 다 **성공한 자리**에서 한다 — 다섯 줄의 즉시 저장과 같다 (`useField`). */
   const [result, action, pending] = useActionState<ActionResult | null, FormData>(
-    createComment,
+    async (prev, form) => {
+      const next = await createComment(prev, form);
+      if (next.ok) {
+        setText("");
+        onSaved?.();
+      }
+      return next;
+    },
     null,
   );
-  const input = useRef<HTMLInputElement>(null);
-
-  // `useActionState` 결과는 다음 제출까지 같은 객체다 — 한 번 남기면 한 번만 부른다.
-  useEffect(() => {
-    if (result?.ok) onSaved?.();
-  }, [result, onSaved]);
 
   // `답글`은 목록 위쪽에서도 누른다 — 커서를 옮겨 주지 않으면 입력칸을 다시 찾아 눌러야 한다.
   useEffect(() => {
@@ -788,6 +798,8 @@ export function CommentForm({
         ref={input}
         id={`comment-${taskId}`}
         name="content"
+        value={text}
+        onChange={setText}
         placeholder={replyTo ? "답글 남기기" : "댓글 남기기"}
         maxLength={2000}
         className="min-w-0 flex-1"

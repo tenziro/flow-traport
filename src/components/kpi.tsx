@@ -10,9 +10,11 @@ import { cn } from "@/lib/utils";
  * v1.7.0에 `face`를 더했다. 그전에는 색이 글자와 막대에만 있어서 요약 넉 장이 전부
  * 같은 흰 상자였고, 급한 숫자와 안 급한 숫자가 훑어서 안 갈렸다.
  *
- * `neutral`만 `face`가 비어 있다 — 일부러다. 넉 장을 다 물들이면 물든 게 기본이 돼서
- * 다시 아무 신호도 아니게 된다. **면에 색이 있다 = 지금 볼 것**이라는 뜻을 지키려면
- * 평상시 숫자는 흰 상자로 남아 있어야 한다.
+ * `neutral`도 v4.12.1에 면을 받았다. 한때 비워 뒀다 — "면에 색이 있다 = 지금 볼 것"을
+ * 지키려면 평상시 숫자는 흰 상자여야 한다고 봤다. 그런데 `neutral`이 실제로 놓이는 자리는
+ * 오늘·팀 화면의 넷째 칸(방치된 업무) 둘뿐이라, 물든 셋 옆에 흰 상자 하나가 남아
+ * **덜 그려진 칸**으로 읽혔다. 급하지 않다는 뜻은 면을 빼서가 아니라 무채색으로 낸다 —
+ * 넷 중 가장 조용한 면이고, 훑을 때 눈이 마지막에 닿는다.
  *
  * 면은 배경색이 아니라 위→아래로 옅어지는 그러데이션이다. `bg-card`를 덮어쓰지 않아서
  * (background-image는 background-color 위에 얹힌다) 어둡게에서도 카드가 배경보다
@@ -40,7 +42,7 @@ export const KPI_TONE = {
   neutral: {
     text: "text-neutral-foreground",
     chip: "bg-muted text-muted-foreground",
-    face: "",
+    face: "from-neutral/10 to-neutral/0 ring-neutral/20",
     bar: "bg-neutral",
   },
   /** 완료. `StatusPill`의 `완료`와 `Meter`의 `bg-done` 조각과 같은 보라다. */

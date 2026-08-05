@@ -1,9 +1,11 @@
 "use client";
 // beui.dev/components/motion/tabs
 //
-// beUI 원본에서 한 군데 더했다: `TabsList`에 `aria-label` 통과. `role="tablist"`는
-// 접근 가능한 이름이 있어야 하는데 원본은 넘길 구멍이 없었다 (select.tsx의
-// `aria-labelledby`와 같은 이유의 최소 개조).
+// beUI 원본에서 두 군데 더했다:
+// 1. `TabsList`에 `aria-label` 통과. `role="tablist"`는 접근 가능한 이름이 있어야 하는데
+//    원본은 넘길 구멍이 없었다 (select.tsx의 `aria-labelledby`와 같은 이유의 최소 개조).
+// 2. `TabsSelect` — 좁은 화면에서 칩 줄 대신 서는 고르개. 원본에 없는 컴포넌트지만 탭
+//    상태를 그대로 쓰는 게 핵심이라 컨텍스트가 있는 여기 산다 (아래 주석).
 //
 // 한 군데는 바꿨다: 켜진 칸이 들어오는 움직임을 `motion`에서 CSS로 내렸다 — 서버가
 // `opacity:0`을 박아서 하이드레이션 전까지 내용이 안 보였다 (`TabsContent` 주석).
@@ -22,6 +24,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/motion/select";
 import { cn } from "@/lib/utils";
 
 type Variant = "pill" | "underline" | "segment";
@@ -116,6 +125,59 @@ export function TabsList({
     <div role="tablist" aria-label={ariaLabel} className={cn(listClasses[variant], className)}>
       {children}
     </div>
+  );
+}
+
+/**
+ * 폰에서 칩 줄을 대신하는 고르개 (`sm` 아래에서만 선다). `TabsList`에는 `max-sm:hidden`을
+ * 붙여 짝을 맞춘다.
+ *
+ * 칸이 셋만 돼도 폰에서 칩 줄이 두 줄로 접히고, 접힌 둘째 줄은 목록의 첫 줄처럼 보인다 —
+ * 고르는 것과 고른 결과가 붙어 버린다. 한 줄짜리 고르개면 높이가 칸 수와 무관하다.
+ *
+ * 목록은 beUI `Select`가 그린다 (브라우저 기본 목록이 아니다). 폰에서만 OS 위젯이
+ * 튀어나오지 않고, 열고 닫히는 모양이 이 앱의 다른 레이어와 같다.
+ *
+ * 고르면 탭 상태를 그대로 바꾼다 — 컨트롤한테 따로 알릴 게 없다. 주소를 미는 화면
+ * (`dept-tabs.tsx`)은 `Tabs`의 `onValueChange`가 이미 그 일을 하고 있어서 여기서도 같이
+ * 밀린다.
+ *
+ * 칸 이름은 넘겨받는다. `TabsTrigger`의 자식은 건수 `<span>`이 섞인 JSX라 그대로는 고르개
+ * 한 줄에 못 들어간다 (`SelectItem`은 문자열 자식만 이름으로 등록한다).
+ */
+export function TabsSelect({
+  options,
+  "aria-label": ariaLabel,
+  className,
+}: {
+  options: { value: string; label: string }[];
+  /** 스크린 리더가 읽을 이름. 짝인 `TabsList`의 `aria-label`과 같은 말로 둔다. */
+  "aria-label": string;
+  className?: string;
+}) {
+  const { value, setValue } = useTabs();
+  // 트리거 id는 `Select` 안에서 만들어져서 바깥 `<label htmlFor>`로 못 묶는다 —
+  // 컴포넌트가 열어 둔 `aria-labelledby`에 숨은 이름표를 물린다 (select.tsx 3번).
+  const labelId = useId();
+
+  return (
+    <Select value={value} onValueChange={setValue} className={cn("sm:hidden", className)}>
+      <span id={labelId} className="sr-only">
+        {ariaLabel}
+      </span>
+      {/* 8px — 카드·칩과 같은 모서리다 (`--radius`). beUI 기본은 12라 이 고르개만 혼자
+          둥글었다. 트리거와 목록에 같은 값을 준다 (select.tsx 4번) */}
+      <SelectTrigger aria-labelledby={labelId} radius={8} className="font-medium">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent radius={8}>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

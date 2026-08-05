@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
+import { Tabs, TabsList, TabsSelect, TabsTrigger } from "@/components/motion/tabs";
 import type { Division } from "@/lib/flow/queries";
 
 /**
@@ -32,7 +32,16 @@ export function DeptTabs({
       variant="segment"
       className="mb-6"
     >
-      <TabsList aria-label="부서" className="flex-wrap bg-secondary">
+      {/* 폰에서는 칩 줄 대신 고르개 한 줄이다. 둘 다 같은 `onValueChange`를 거쳐서
+          어느 쪽으로 골라도 `?dept=`가 밀린다 */}
+      <TabsSelect
+        aria-label="부서"
+        options={divisions.map(({ divisionName }) => ({
+          value: divisionName,
+          label: divisionName,
+        }))}
+      />
+      <TabsList aria-label="부서" className="flex-wrap bg-secondary max-sm:hidden">
         {divisions.map(({ divisionCode, divisionName }) => (
           <TabsTrigger key={divisionCode} value={divisionName} className="min-h-8">
             {divisionName}

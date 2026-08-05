@@ -183,7 +183,10 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
                 )}
               >
                 {notify.state === "on" ? (
-                  <IconNews size={14} aria-hidden />
+                  /* 켜진 종은 채운다. 색만으로는 `text-foreground`와 `muted-foreground`
+                     차이라 14px 아이콘 하나에서는 거의 안 갈렸다 — 켜짐/꺼짐은 이 단추가
+                     말하는 전부다 */
+                  <IconNews size={14} weight="Filled" aria-hidden />
                 ) : (
                   <IconNewsOff size={14} aria-hidden />
                 )}
@@ -319,7 +322,9 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
           title="업무 소식"
           className="relative flex min-h-9 cursor-pointer items-center rounded-md px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground data-open:text-foreground"
         >
-          <IconNews size={18} />
+          {/* 안 읽은 게 있으면 종이 흔들린다 (`bell-ring` — globals.css). 배지는 이미 있지만
+              10px 숫자 하나라 헤더를 안 보고 있으면 안 보인다 — 움직임은 곁눈에 걸린다 */}
+          <IconNews size={18} className={cn(unread > 0 && "bell-ring")} />
           <span className="sr-only">업무 소식{unread > 0 && ` — 안 읽은 소식 ${unread}건`}</span>
           {/* 안 읽은 것만 배지로 센다. 다 읽은 줄까지 세면 배지가 늘 켜져 있어서 신호가 죽는다 */}
           {unread > 0 && (
@@ -340,12 +345,16 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
       {/* `max-w-none`은 폭을 화면에 맞추려는 것이다 — 시트 기본값 `max-w-2xl`(672px)로는
           768~1023px에서 양옆에 틈이 생겨서 아래가 잘린 카드처럼 보인다.
           `p-0`은 탭 줄과 집계 줄의 구분선이 시트 폭을 가로지르게 하려는 것이고(팝오버와 같다),
-          아래 여백은 홈 인디케이터 몫이다 — 없으면 집계 줄이 그 아래로 들어간다 */}
+          아래 여백은 홈 인디케이터 몫이다 — 없으면 집계 줄이 그 아래로 들어간다.
+
+          스냅은 둘이다. 열 때는 내용 높이(`auto`)로 서고, 핸들을 끌어 올리면 화면 가득이다 —
+          소식이 쌓이면 시트 안쪽만 스크롤하게 되는데 그때 길게 보는 길이 손끝에 있어야 한다.
+          내리면 다시 내용 높이, 거기서 더 내리면 닫힌다 */}
       <BottomSheet
         open={open && narrow}
         onOpenChange={setOpen}
         title="업무 소식"
-        snapPoints={["auto"]}
+        snapPoints={["auto", 0.92]}
         className="max-w-none"
         bodyClassName="p-0 pb-[env(safe-area-inset-bottom)]"
       >

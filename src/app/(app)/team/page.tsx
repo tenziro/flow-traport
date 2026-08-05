@@ -55,6 +55,8 @@ export default async function TeamPage({
   );
   /** 부하 막대의 분모. 팀에서 가장 많이 물고 있는 사람이 100%다. */
   const peak = Math.max(...ranked.map(urgent), 1);
+  /** 급한 업무를 하나라도 든 사람 수. `인원` 칸의 곁줄이다 — 8명 중 몇 명이 바쁜지. */
+  const busy = members.filter((m) => urgent(m) > 0).length;
   const stale = members.reduce((sum, m) => sum + m.staleCount, 0);
 
   return (
@@ -83,6 +85,11 @@ export default async function TeamPage({
           unit="명"
           Icon={IconTeam}
           tone="primary"
+          /* 나머지 셋과 같이 숫자 밑에 한 줄을 둔다. 이 칸만 비어 있으면 넉 장의 키가
+             어긋나고, 무엇보다 "8명"이 몇 명이 바쁜 8명인지를 안 말한다 */
+          note={
+            busy > 0 ? `급한 업무를 든 ${busy}명` : '급한 업무를 든 사람이 없어요'
+          }
         />
         <Kpi
           i={2}
@@ -232,9 +239,14 @@ function MemberCard({
          * 오늘 일정은 업무가 아니라 "이 사람이 지금 자리에 있나"다. 그래서 업무 줄 위,
          * 부하 막대 바로 밑에 둔다 — 밀림 3건인 사람이 종일 외부 미팅이면 그게 먼저 읽혀야 한다.
          * 카드가 3분의 1 칸이라 일정 이름은 한 줄로 자른다.
+         *
+         * **면을 깔고 위아래로 띄웠다.** 전에는 윗선 하나에 기대 막대와 표 사이에 끼어
+         * 있었는데, 바로 아래 표에도 머리 줄이 있어서 표의 윗단처럼 읽혔다 — 업무가 아닌
+         * 유일한 줄인데 업무 표에 붙어 보인 셈이다. 옅은 파란 면과 테두리로 한 덩어리를
+         * 만들어 떼어 놓는다 (요약 카드의 `primary` 면과 같은 값이다).
          */}
         {events.length > 0 && (
-          <ul className="space-y-0.5 border-t border-border/60 pt-1.5">
+          <ul className="my-1 space-y-1 rounded-md bg-primary/8 px-2.5 py-2 ring-1 ring-primary/20">
             {events.map((event) => (
               <li
                 key={event.eventSrno}
@@ -244,12 +256,17 @@ function MemberCard({
                   size={12}
                   className="mt-0.5 shrink-0 text-primary"
                 />
-                <span className="shrink-0 text-muted-foreground">
+                {/* 시각은 굵기와 색으로 올린다 — 자리를 비우는 시간대가 이 줄의 요점이다 */}
+                <span className="shrink-0 font-medium text-primary">
                   {event.allDayYn === 'Y'
                     ? '종일'
                     : fmtTime(event.eventStartDateTime)}
                 </span>
-                <span className="min-w-0 flex-1 truncate">
+                {/* `w-0` — `flex-1`만으로는 이 줄의 **최소폭이 일정 이름 전체**로 잡힌다.
+                    카드는 그리드 칸이라 최소폭 아래로 안 줄고(`min-width: auto`), 그래서 이름이
+                    긴 하루엔 카드가 칸을 넘고 막대·띠가 카드 밖으로 삐져나왔다. 폭을 0으로
+                    두면 최소폭이 아이콘+시각까지로 내려가고, `flex-1`이 남은 자리를 채운다 */}
+                <span className="w-0 min-w-0 flex-1 truncate">
                   {event.eventName}
                 </span>
               </li>

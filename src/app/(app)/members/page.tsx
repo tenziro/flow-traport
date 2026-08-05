@@ -1,7 +1,13 @@
 import Image from "next/image";
 import { CopyButton } from "@/components/copy-button";
 import { IconComment } from "@/components/icons";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/motion/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsSelect,
+  TabsTrigger,
+} from "@/components/motion/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { loadMembers, type Member, type MemberDivision } from "@/lib/flow/members";
 import { cn } from "@/lib/utils";
@@ -31,7 +37,7 @@ export default async function MembersPage({
 }) {
   const [{ dept }, { divisions, total }] = await Promise.all([searchParams, loadMembers()]);
   // 없는 부서명이 오면 `전체`다 — 맞는 탭이 없으면 `Tabs`가 아무 칸도 안 그린다.
-  const picked = divisions.some((d) => d.name === dept) ? dept : "all";
+  const picked = dept && divisions.some((d) => d.name === dept) ? dept : "all";
 
   return (
     <>
@@ -45,7 +51,21 @@ export default async function MembersPage({
       {/* `key`를 같이 바꾼다 — `defaultValue`는 처음 한 번만 읽혀서, 같은 화면에서 `?dept=`만
           갈아 끼우면(검색으로 다른 부서 사람을 또 고르면) 탭이 안 움직인다 */}
       <Tabs key={picked} defaultValue={picked} variant="segment">
-        <TabsList aria-label="부서 보기" className="mb-8 flex-wrap bg-secondary">
+        {/* 폰에서는 칩 줄 대신 고르개 한 줄이다. 여기 칸은 전부 이미 그려져 있어서
+            (`TabsContent`) 고르개도 칩과 똑같이 화면 안에서만 바꾼다 — 서버에 다시 안 묻는다.
+            사람 수는 이름 뒤에 붙인다, 칩과 같은 정보다 */}
+        <TabsSelect
+          aria-label="부서 보기"
+          className="mb-8"
+          options={[
+            { value: "all", label: `전체 ${total}` },
+            ...divisions.map(({ name, members }) => ({
+              value: name,
+              label: `${name} ${members.length}`,
+            })),
+          ]}
+        />
+        <TabsList aria-label="부서 보기" className="mb-8 flex-wrap bg-secondary max-sm:hidden">
           <TabsTrigger value="all" className="min-h-8">
             전체
             {/* 골라진 칸은 글자색이 반전되므로 색이 아니라 투명도로 낮춘다 (`/tasks`와 같다) */}

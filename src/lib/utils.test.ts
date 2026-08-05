@@ -116,6 +116,36 @@ test("splitLinks: 한 본문에 주소가 여럿이면 다 가른다", () => {
   ]);
 });
 
+test("splitLinks: 부른 사람은 이름만 남기고 조각으로 가른다", () => {
+  // `@`와 대괄호는 flow 안에서만 뜻이 있는 표시라 화면에 안 낸다 — 대신 굵기와 색이 붙는다.
+  assert.deepEqual(splitLinks("@[서동조] 확인 부탁드립니다"), [
+    { text: "서동조", mention: true },
+    { text: " 확인 부탁드립니다" },
+  ]);
+  assert.deepEqual(splitLinks("@[이종석] @[장혜진] 회의 잡을게요"), [
+    { text: "이종석", mention: true },
+    { text: " " },
+    { text: "장혜진", mention: true },
+    { text: " 회의 잡을게요" },
+  ]);
+});
+
+test("splitLinks: 부른 사람과 주소가 한 줄에 있어도 각자 조각이다", () => {
+  assert.deepEqual(splitLinks("@[서동조] https://a.io 봐주세요"), [
+    { text: "서동조", mention: true },
+    { text: " " },
+    { text: "https://a.io", url: "https://a.io" },
+    { text: " 봐주세요" },
+  ]);
+});
+
+test("splitLinks: 표시가 없는 @나 대괄호는 그냥 글이다", () => {
+  // 메일 주소와 대괄호 목록이 본문에 그대로 온다.
+  assert.deepEqual(splitLinks("jslee@traport.com 으로 보냈어요 [완료]"), [
+    { text: "jslee@traport.com 으로 보냈어요 [완료]" },
+  ]);
+});
+
 /* 일정 창 — 오늘을 1일째로 세서 오늘 + 엿새 */
 
 test("일정 창은 오늘부터 이레다", () => {

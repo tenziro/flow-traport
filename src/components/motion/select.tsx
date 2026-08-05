@@ -1,11 +1,13 @@
 "use client";
 // beui.dev/components/motion/select
 
-// 원본 beUI에서 바꾼 것 세 가지:
+// 원본 beUI에서 바꾼 것 네 가지:
 // 1. 아이콘은 Reicon으로 교체 (원본은 lucide-react). 앱에 아이콘 체계는 하나만 둔다.
 // 2. `--color-border-strong` 토큰이 이 앱에 없다 → hover/focus를 앱 Button과 같은 ring 토큰으로.
 // 3. SelectTrigger에 `aria-labelledby`를 열어둔다 — 트리거 id는 내부 useId라서
 //    바깥 <label htmlFor>로는 못 묶는다.
+// 4. SelectContent에도 `radius`를 열었다. 원본은 12가 애니메이션 값에 박혀 있어서 트리거만
+//    줄이면 목록이 혼자 둥글다 — 이 앱의 모서리는 카드 기준 8px이다.
 import {
   motion,
   type Transition,
@@ -268,9 +270,11 @@ export function SelectValue({ placeholder, className }: SelectValueProps) {
 export interface SelectContentProps {
   className?: string;
   children: ReactNode;
+  /** 모서리 반경(px). 트리거와 같은 값을 준다 — 여기만 다르면 열렸을 때 두 조각이 따로 논다. */
+  radius?: number;
 }
 
-export function SelectContent({ className, children }: SelectContentProps) {
+export function SelectContent({ className, children, radius = 12 }: SelectContentProps) {
   const ctx = useSelectContext("SelectContent");
   const innerRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
@@ -306,7 +310,7 @@ export function SelectContent({ className, children }: SelectContentProps) {
   // stranded square corner when the placement flips between opens.
   const isTop = ctx.placement === "top";
   const nearGap = open ? 8 : 0;
-  const nearRadius = open ? 12 : 0;
+  const nearRadius = open ? radius : 0;
 
   const gapT: Transition = open
     ? { type: "spring", duration: 0.6, bounce: 0.5, delay: 0.12 }
@@ -336,10 +340,10 @@ export function SelectContent({ className, children }: SelectContentProps) {
               marginTop: isTop ? 0 : nearGap,
               marginBottom: isTop ? nearGap : 0,
               // near corners go flat->round; far corners stay rounded
-              borderTopLeftRadius: isTop ? 12 : nearRadius,
-              borderTopRightRadius: isTop ? 12 : nearRadius,
-              borderBottomLeftRadius: isTop ? nearRadius : 12,
-              borderBottomRightRadius: isTop ? nearRadius : 12,
+              borderTopLeftRadius: isTop ? radius : nearRadius,
+              borderTopRightRadius: isTop ? radius : nearRadius,
+              borderBottomLeftRadius: isTop ? nearRadius : radius,
+              borderBottomRightRadius: isTop ? nearRadius : radius,
             }
       }
       transition={
@@ -364,6 +368,9 @@ export function SelectContent({ className, children }: SelectContentProps) {
         transformOrigin: isTop ? "bottom" : "top",
         overflow: "hidden",
         pointerEvents: open ? "auto" : "none",
+        // 움직임을 줄인 환경에서는 위 `animate`가 모서리를 안 건드린다 — 그때 쓰이는 값이다
+        // (평소에는 모서리마다 따로 애니메이션한 값이 이걸 덮는다).
+        borderRadius: radius,
       }}
       // flush against the trigger, then separates into its own rounded pill;
       // sits above or below depending on available space

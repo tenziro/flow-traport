@@ -249,13 +249,19 @@ function RollupCard({
           <summary className="flex cursor-pointer list-none items-start gap-3">
             <span className="min-w-0 flex-1">
               <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span
-                  className={cn(
-                    'size-2 shrink-0 self-center rounded-full',
-                    grade.dot,
-                  )}
-                />
                 <span className={cn('text-xs font-semibold', grade.text)}>
+                  {/* 점은 등급 글자 **안에** 둔다. 형제로 두고 `self-center`를 주면
+                    줄 전체의 한가운데인데, 그 줄 높이는 옆의 프로젝트명(16px)이 정해서
+                    12px짜리 등급 글자보다 1.6px 위에 섰다. 글자 안에서는 기본
+                    정렬(베이스라인)이 곧 글자 한가운데다 — 8px 점의 아래가 베이스라인에
+                    닿으면 점 중심이 「위험」 글자 중심과 0.4px 안에서 만난다
+                    (`align-middle`은 라틴 x-height 기준이라 오히려 1.6px 내려간다). */}
+                  <span
+                    className={cn(
+                      'mr-3 inline-block size-2 rounded-full',
+                      grade.dot,
+                    )}
+                  />
                   {RISK_GRADE_LABEL[rollup.grade]}
                 </span>
                 {/* 카드의 제목이라 본문(14px)보다 한 급 크다 — `내 업무`의 프로젝트 카드

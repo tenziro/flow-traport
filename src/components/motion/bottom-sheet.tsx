@@ -1,7 +1,7 @@
 "use client";
 // beui.dev/components/motion/bottom-sheet
 //
-// beUI 원본에서 고친 것은 다섯이다.
+// beUI 원본에서 고친 것은 여섯이다.
 // 1. 마운트 감지를 `useEffect(() => setMounted(true))`에서 `useSyncExternalStore`로
 //    바꿨다. 원본 패턴이 React 19 린트에 걸린다 — morphing-modal.tsx와 같은 이유·같은 방식.
 // 2. **Escape로 닫고, 열 때 시트로 포커스를 넣고 닫을 때 열었던 자리로 되돌린다.** 원본에는
@@ -13,6 +13,9 @@
 // 4. `bodyClassName`을 더했다. 본문의 여백을 밖에서 정한다 — 소식 레이어는 탭 줄과 집계 줄의
 //    구분선이 시트 폭을 가로질러야 해서 `p-0`이고, 아래 여백은 홈 인디케이터를 피해야 한다.
 // 5. 스크림의 읽어 주는 이름을 한국어로 바꿨다. 이 앱의 UI 문구는 전부 한국어다.
+// 6. 스냅 높이를 `style`에서 Motion `animate`로 옮겼다. 원본은 스냅이 바뀌면 높이가 한 프레임
+//    만에 갈아치워져서, 핸들을 끌어 올려 놓는 순간 시트가 커지는 게 아니라 다른 시트로 바뀐 것처럼
+//    보인다. 스냅이 하나뿐일 때는 안 드러나던 자리다.
 // 모서리(`rounded-t-3xl`)는 그대로 둔다 — 이 앱의 `--radius`가 8px이라 3xl이 17.6px이다.
 
 import {
@@ -162,8 +165,10 @@ export function BottomSheet({
   };
 
   const snapValue = snapPoints[snap];
-  const heightStyle =
-    snapValue === "auto" ? { maxHeight: "92vh" } : { height: `${snapValue * 100}vh` };
+  // 스냅 높이. `style`에 박으면 스냅이 바뀌는 순간 한 프레임 만에 갈아치워져서, 손을 뗀 자리에서
+  // 시트가 순간이동한 것처럼 보인다 — 끌 때는 고무처럼 따라오다가 놓으면 튀는 꼴이다.
+  // Motion에 맡기면 늘고 주는 게 보인다 (`auto`도 재서 애니메이션한다).
+  const height = snapValue === "auto" ? "auto" : `${snapValue * 100}vh`;
 
   // Portal to <body>: an ancestor with backdrop-filter or transform becomes
   // the containing block for fixed descendants, which would position the
@@ -198,10 +203,15 @@ export function BottomSheet({
             dragMomentum={false}
             onDragEnd={onDragEnd}
             initial={reduce ? { y: 0, opacity: 0 } : { y: "100%" }}
-            animate={reduce ? { y: 0, opacity: 1 } : { y: 0 }}
+            animate={reduce ? { y: 0, opacity: 1, height } : { y: 0, height }}
             exit={reduce ? { y: 0, opacity: 0 } : { y: "100%" }}
-            transition={reduce ? { duration: 0.18, ease: EASE_DRAWER } : DRAWER}
-            style={heightStyle}
+            // 높이만 따로 짧게 간다. 들어오는 0.5초는 아래에서 올라오는 거리에 맞춘 길이라,
+            // 손끝에서 일어나는 스냅에 그대로 쓰면 늦게 따라오는 것처럼 느껴진다.
+            transition={{
+              ...(reduce ? { duration: 0.18, ease: EASE_DRAWER } : DRAWER),
+              height: reduce ? { duration: 0 } : { duration: 0.3, ease: EASE_DRAWER },
+            }}
+            style={{ maxHeight: "92vh" }}
             className={cn(
               "pointer-events-auto absolute bottom-0 left-0 right-0 mx-auto flex max-w-2xl flex-col overflow-hidden rounded-t-3xl outline-hidden will-change-transform",
               "border border-border bg-background shadow-xl",

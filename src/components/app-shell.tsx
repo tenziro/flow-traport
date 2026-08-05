@@ -143,16 +143,22 @@ export function AppShell({
                 화면에 나오는 글자는 한국어로 쓴다 (docs/TEXT_GUIDE.md) */}
             <SidebarSection>업무 공간</SidebarSection>
 
-            {NAV.map(({ href, label, Icon }) => (
-              <SidebarLink
-                key={href}
-                href={href}
-                icon={<Icon size={18} />}
-                active={href === active.href}
-              >
-                {label}
-              </SidebarLink>
-            ))}
+            {/* 지금 있는 화면은 아이콘을 채운다. 알약(배경)과 글자 굵기가 이미 말하고
+                있지만 둘 다 판 전체를 칠하는 신호라, 접힌 레일에서는 아이콘 하나만
+                남는다 — 그때 채움이 유일한 표시다 */}
+            {NAV.map(({ href, label, Icon }) => {
+              const here = href === active.href;
+              return (
+                <SidebarLink
+                  key={href}
+                  href={href}
+                  icon={<Icon size={18} weight={here ? 'Filled' : 'Outline'} />}
+                  active={here}
+                >
+                  {label}
+                </SidebarLink>
+              );
+            })}
           </AnimatedSidebar>
 
           <div className="flex min-w-0 flex-1 flex-col">
@@ -225,7 +231,7 @@ export function AppShell({
                   {here && (
                     <span className="absolute inset-x-6 top-0 h-0.5 rounded-full bg-primary" />
                   )}
-                  <Icon size={20} />
+                  <Icon size={20} weight={here ? 'Filled' : 'Outline'} />
                   {label}
                 </Link>
               );
@@ -776,7 +782,7 @@ function HeaderSchedule({
         onOpenChange={setOpen}
         title="나의 일정"
         description={count > 0 ? `${count}건이에요.` : undefined}
-        snapPoints={['auto']}
+        snapPoints={['auto', 0.92]}
         className="max-w-none"
         bodyClassName="px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
       >

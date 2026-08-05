@@ -1,5 +1,6 @@
 "use client";
 
+import { DetailHeader } from "@/components/detail-header";
 import { FlowLink } from "@/components/flow-link";
 import { IconComment, IconMention } from "@/components/icons";
 import { Meter } from "@/components/meter";
@@ -58,48 +59,31 @@ export function TaskDetailModal({
     /* 패널 패딩을 안 주고 덩어리마다 각자 갖는다 — 경계선이 패널 폭 끝까지 닿아야
        머리·값·이유·댓글이 갈린다 */
     <>
-      {/* 머리 — 어느 프로젝트의 어느 업무인지가 먼저다. 표가 뒤로 가려도 대상이 남는다 */}
-      <div className="border-b border-border">
-        {/* 프로젝트명과 업무번호는 한 줄로 묶고 선으로 갈랐다 — 둘 다 "이게 어느 업무인가"를
-            가리키는 딱지고, 업무명은 그 안의 내용이다. 번호가 오른쪽 끝인 것은 왼쪽에서
-            읽히는 이름과 부딪히지 않게 하려는 것이다. 배경 칩을 뗀 것도 같은 이유다:
-            선이 이미 갈라 주는데 면까지 두면 머리에서 제일 무거운 게 번호가 된다.
-            선은 패널 폭 끝까지 닿는다 — 여백은 이 줄이 갖고 선은 감싼 칸이 그린다.
-            안쪽으로 물린 선은 덩어리를 가르는 게 아니라 밑줄로 읽힌다 */}
-        <div className="flex items-center gap-3 border-b border-border px-5 py-2.5">
-          <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{task.project}</p>
-          {/* 업무번호는 flow에서 사람끼리 업무를 가리킬 때 쓰는 번호다 */}
-          <span className="tabular shrink-0 text-[11px] text-muted-foreground">
-            업무번호 {task.taskSrno}
+      {/* 머리 — 어느 프로젝트의 어느 업무인지가 먼저다. 표가 뒤로 가려도 대상이 남는다.
+          멘션 상세 모달과 같은 것을 쓴다 (`DetailHeader`) */}
+      <DetailHeader
+        project={task.project}
+        // 업무번호는 flow에서 사람끼리 업무를 가리킬 때 쓰는 번호다
+        badge={`업무번호 ${task.taskSrno}`}
+        title={task.title}
+        titleId={descId}
+      >
+        {/* 업무명 아래 줄 — 상태 배지는 여기 두지 않는다. 바로 아래 `상태` 줄이 같은 값을
+            같은 배지로 이미 보여줘서 한 화면에 두 번 나왔다. 그 자리를 등록자가 받는다:
+            이 값은 어디서도 바꿀 수 없어서 고치는 줄들과 섞일 이유가 없고, 원판 없이
+            이름만으로 충분하다 (flow가 이 컬럼에 사진을 안 준다) */}
+        {/* 등록자가 이 줄의 첫 자리다 — 누가 맡긴 일인지가 남은 날보다 먼저 읽힌다.
+            D-day는 색과 굵기로 이미 눈에 걸려서 순서가 앞일 필요가 없다 */}
+        {/* `등록자`는 딱지고 이름이 값이다 — 같은 밝기로 두면 넉 자짜리 딱지가 이름과
+            같은 무게로 읽힌다. 딱지는 흐리게 두고 이름만 본문 밝기로 올린다 */}
+        {author && (
+          <span>
+            등록자 <span className="text-foreground">{author}</span>
           </span>
-        </div>
-        <div className="px-5 pt-3 pb-4">
-          <h2 id={descId} className="text-base font-semibold">
-            {task.title}
-          </h2>
-          {/* 업무명 아래 줄 — 상태 배지는 여기 두지 않는다. 바로 아래 `상태` 줄이 같은 값을
-              같은 배지로 이미 보여줘서 한 화면에 두 번 나왔다. 그 자리를 등록자가 받는다:
-              이 값은 어디서도 바꿀 수 없어서 고치는 줄들과 섞일 이유가 없고, 원판 없이
-              이름만으로 충분하다 (flow가 이 컬럼에 사진을 안 준다) */}
-          {(shown.endDate || author || rank !== undefined) && (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {/* 등록자가 이 줄의 첫 자리다 — 누가 맡긴 일인지가 남은 날보다 먼저 읽힌다.
-                  D-day는 색과 굵기로 이미 눈에 걸려서 순서가 앞일 필요가 없다 */}
-              {/* `등록자`는 딱지고 이름이 값이다 — 같은 밝기로 두면 넉 자짜리 딱지가 이름과
-                  같은 무게로 읽힌다. 딱지는 흐리게 두고 이름만 본문 밝기로 올린다 */}
-              {author && (
-                <span className="text-xs text-muted-foreground">
-                  등록자 <span className="text-foreground">{author}</span>
-                </span>
-              )}
-              {shown.endDate ? <DDay days={shown.daysLeft} /> : null}
-              {rank !== undefined && (
-                <span className="text-xs text-muted-foreground">오늘 포커스 {rank}순위</span>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+        )}
+        {shown.endDate ? <DDay days={shown.daysLeft} /> : null}
+        {rank !== undefined && <span>오늘 포커스 {rank}순위</span>}
+      </DetailHeader>
 
       {/* 머리와 바닥은 제자리에 두고 가운데만 스크롤한다. 값·이유·본문·댓글이 다 도착하면
           패널이 화면보다 길어지는데, 그때 업무명과 `닫기`가 같이 밀려 올라가면 지금 무엇을

@@ -4,11 +4,13 @@ import { motion } from "motion/react";
 import { type PointerEvent as ReactPointerEvent, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
+  IconArrowDown,
   IconArrowLeft,
   IconArrowRight,
-  IconChevronUp,
+  IconArrowUp,
   IconGrip,
   IconMoreH,
+  IconSortV,
   IconTrash,
 } from "@/components/icons";
 import { Checkbox } from "@/components/motion/checkbox";
@@ -21,7 +23,7 @@ import type {
   SortState,
   TableColumn,
 } from "./types";
-import { alignFlex, alignText, COLUMN_ACTIVE_SHADOW } from "./utils";
+import { alignFlex, alignText, COLUMN_ACTIVE_SHADOW, HEADER_EDGE_SHADOW } from "./utils";
 
 export interface TableHeaderProps<T> {
   columns: TableColumn<T>[];
@@ -184,7 +186,10 @@ export function TableHeader<T>({
       <thead>
       <tr style={{ height: rowHeight }}>
         {selectable ? (
-          <th className="sticky top-0 z-10 border-border border-b bg-card">
+          <th
+            style={{ boxShadow: HEADER_EDGE_SHADOW }}
+            className="sticky top-0 z-10 bg-card"
+          >
             <div className="flex items-center justify-center">
               <Checkbox
                 checked={allSelected}
@@ -208,7 +213,9 @@ export function TableHeader<T>({
               }}
               onPointerEnter={() => onColumnActivate?.(column.key)}
               onPointerLeave={() => onColumnDeactivate?.()}
-              style={isActive ? { boxShadow: COLUMN_ACTIVE_SHADOW } : undefined}
+              // 위 선은 활성 칸일 때만, 아래 선은 늘. 둘 다 그림자라 한 값에 겹쳐 넣는다 —
+              // 하나만 쓰면 활성일 때 아래 선이 지워진다
+              style={{ boxShadow: isActive ? COLUMN_ACTIVE_SHADOW : HEADER_EDGE_SHADOW }}
               aria-sort={
                 active
                   ? sort?.direction === "asc"
@@ -223,7 +230,7 @@ export function TableHeader<T>({
                   : undefined
               }
               className={cn(
-                "group sticky top-0 z-10 border-border border-b bg-card p-0 font-medium text-muted-foreground",
+                "group sticky top-0 z-10 bg-card p-0 font-medium text-muted-foreground",
                 "data-[drop=true]:before:absolute data-[drop=true]:before:inset-y-0 data-[drop=true]:before:left-0 data-[drop=true]:before:w-0.5 data-[drop=true]:before:bg-primary",
                 "data-[dropend=true]:after:absolute data-[dropend=true]:after:inset-y-0 data-[dropend=true]:after:right-0 data-[dropend=true]:after:w-0.5 data-[dropend=true]:after:bg-primary",
               )}
@@ -267,20 +274,28 @@ export function TableHeader<T>({
                     )}
                   >
                     <span className="truncate">{column.header}</span>
+                    {/* 정렬 표시는 세 가지다 — 안 누른 칸은 위아래 화살(`sort-v`)로 "여기서
+                        세울 수 있다"만 말하고, 누르면 오름차순 ↑ · 내림차순 ↓ 로 바뀐다.
+                        전에는 ∧ 하나를 흐리게 두고 내림차순일 때 180° 돌렸다: 흐린 ∧가
+                        "정렬 안 됨"인지 "오름차순인데 흐림"인지 그림만으로는 안 갈렸다.
+                        도는 대신 그림이 바뀌니 회전값도 뺀다 */}
                     <motion.span
                       aria-hidden
                       className="inline-flex shrink-0"
-                      animate={{
-                        rotate: active && sort?.direction === "desc" ? 180 : 0,
-                        opacity: active ? 1 : 0.35,
-                      }}
+                      animate={{ opacity: active ? 1 : 0.35 }}
                       transition={
                         reduce
                           ? { duration: 0 }
                           : { duration: 0.18, ease: EASE_OUT }
                       }
                     >
-                      <IconChevronUp size={14} />
+                      {!active ? (
+                        <IconSortV size={14} />
+                      ) : sort?.direction === "desc" ? (
+                        <IconArrowDown size={14} />
+                      ) : (
+                        <IconArrowUp size={14} />
+                      )}
                     </motion.span>
                   </button>
                 ) : onColumnRename ? (
@@ -325,7 +340,8 @@ export function TableHeader<T>({
         })}
         <th
           aria-hidden
-          className="sticky top-0 z-10 border-border border-b bg-card"
+          style={{ boxShadow: HEADER_EDGE_SHADOW }}
+          className="sticky top-0 z-10 bg-card"
         />
       </tr>
     </thead>

@@ -217,6 +217,26 @@ export function TaskThread({
   }
 
   const comments = got.comments ?? [];
+  /**
+   * 쓰기 칸은 하나다. 답글을 달 때는 이 그대로 목록 안, **답하는 말 바로 아래**로 들어간다
+   * (`CommentList.replyForm`) — 두 벌을 두면 어느 칸에 쓰고 있는지가 갈리고, 하나가 답글
+   * 대상을 들고 있는 동안 다른 하나에 쓴 글이 일반 댓글로 나간다.
+   *
+   * 자리를 옮기면 React가 이 컴포넌트를 새로 붙인다 — 쓰다 만 글은 사라지고 커서는
+   * 새 자리로 간다 (`CommentForm`의 focus). 답글을 누르는 건 "여기 말고 저기에 쓰겠다"는
+   * 뜻이라 그게 맞는 동작이다.
+   */
+  const form = (
+    <CommentForm
+      projectId={projectId}
+      taskId={taskId}
+      title={title}
+      path={path}
+      replyTo={replyTo}
+      onCancelReply={cancelReply}
+      onSaved={onSaved}
+    />
+  );
   /** 썸네일이 있는 첨부 = 이미지다. 격자에 그리는 순서가 뷰어에서 넘기는 순서다. */
   const images = got.files?.filter((f) => f.thumb) ?? [];
 
@@ -313,6 +333,7 @@ export function TaskThread({
           comments={comments}
           onReply={setReplyTo}
           replyingTo={replyTo?.id}
+          replyForm={form}
           empty={
             <p
               role="status"
@@ -323,16 +344,9 @@ export function TaskThread({
           }
         />
 
-        {/* 입력칸은 제일 아래다 — 위의 대화를 읽고 그 끝에 말을 붙이는 순서다 */}
-        <CommentForm
-          projectId={projectId}
-          taskId={taskId}
-          title={title}
-          path={path}
-          replyTo={replyTo}
-          onCancelReply={cancelReply}
-          onSaved={onSaved}
-        />
+        {/* 새 댓글은 제일 아래다 — 위의 대화를 읽고 그 끝에 말을 붙이는 순서다.
+            답글일 때는 이 자리가 비고 칸이 그 말 아래로 올라간다 */}
+        {!replyTo && form}
       </div>
 
       {/* 뷰어는 열 때만 붙인다 — 안 붙으면 `<dialog>`도 없어서 키를 가로챌 일이 없다 */}
