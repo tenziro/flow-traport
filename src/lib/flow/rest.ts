@@ -26,7 +26,7 @@
 
 import { DAY_MS, kstYmd } from "@/lib/aggregate/date";
 import { ALLOWED_DOMAIN, getApiKey, type FlowProfile } from "@/lib/auth";
-import type { FlowSearchEmployeesData } from "@/lib/flow/types";
+import type { FlowSearchEmployeesData, FlowSearchEvent } from "@/lib/flow/types";
 import { flowPostUrl } from "@/lib/flow/urls";
 import type { TaskPriority } from "@/lib/task-priority";
 import type { TaskStatus } from "@/lib/task-status";
@@ -1485,7 +1485,7 @@ export async function getEvent(
   };
 }
 
-/* ── 검색 (api-spec §9.1~9.2, PRD §6.4) ───────────────────────────────── */
+/* ── 검색 (api-spec §9.1~9.4, PRD §6.4) ───────────────────────────────── */
 
 /**
  * 검색 결과의 글 한 건. **제목·본문에 `!#!…!#!` 하이라이트가 들어 있다** — flow가 맞은
@@ -1524,12 +1524,24 @@ export interface SearchProject {
  * 딥링크는 여기 없다. 게시글 상세를 따로 불러야 `connectUrl`이 나오는데(`getPostBrief`)
  * 결과 전체를 미리 푸는 건 검색 한 번에 호출 여덟 번이라, 눌린 것만 푼다 (`/api/go`).
  *
- * ponytail: 첫 페이지만 본다. `score`+`pageTargetId`로 다음 장을 받을 수 있지만
- * (api-spec §9.1) 상위 몇 줄이 안 맞으면 검색어를 고치는 게 빠르다.
+ * **고르는 건 flow, 줄 세우는 건 여기다.** `orderType` 기본값이 `SCORE`(관련도)라 받은 순서를
+ * 그대로 그리면 날짜가 뒤죽박죽으로 읽힌다. 그렇다고 `LATEST`로 부르면 관련도를 버리는 거라
+ * 안 맞는 최신 글이 자리를 차지한다. 관련도로 상위 몇 줄을 받고 **그 안에서 최신순**으로 세운다.
+ *
+ * `hasNext`를 같이 돌려준다 — 화면의 `더 보기`가 나올지 말지를 이 값이 정한다. 우리가 센
+ * 줄 수로 짐작하지 않는다: 딱 `size`만큼 왔는데 그게 전부인 경우와 구분이 안 된다.
+ *
+ * ponytail: 페이지 토큰(`score`+`pageTargetId`, api-spec §9.1)은 안 쓴다. 더 보려면 같은
+ * 검색어를 `size`만 키워 다시 부른다 — 어차피 왕복 한 번이고, 이어 붙일 때 겹치는 줄을
+ * 걸러 낼 일도 없다. 그 대신 첫 여섯 줄을 다시 받는 낭비가 있다.
  */
-export async function searchPosts(searchWord: string, size: number): Promise<SearchPost[]> {
+export async function searchPosts(
+  searchWord: string,
+  size: number,
+): Promise<{ posts: SearchPost[]; hasNext: boolean }> {
   const query = new URLSearchParams({ searchWord, size: String(size) });
   const data = await get<{
+    hasNext?: boolean;
     posts?: {
       postId: string;
       projectId: string;
@@ -1541,15 +1553,21 @@ export async function searchPosts(searchWord: string, size: number): Promise<Sea
     }[];
   }>(`/user/search/posts?${query}`, "글 검색");
 
-  return (data.posts ?? []).map((p) => ({
-    postId: p.postId,
-    projectId: p.projectId,
-    title: p.commtTtl?.trim() ?? "",
-    content: p.content?.trim() ?? "",
-    project: p.ttl?.trim() ?? "",
-    registerName: p.registerName ?? "",
-    at: p.registeredDateTime ?? "",
-  }));
+  return {
+    hasNext: data.hasNext ?? false,
+    posts: (data.posts ?? [])
+      .map((p) => ({
+        postId: p.postId,
+        projectId: p.projectId,
+        title: p.commtTtl?.trim() ?? "",
+        content: p.content?.trim() ?? "",
+        project: p.ttl?.trim() ?? "",
+        registerName: p.registerName ?? "",
+        at: p.registeredDateTime ?? "",
+      }))
+      // `YYYYMMDDHHmmss` 고정폭이라 문자열 비교가 곧 시간 비교다. 최신이 위.
+      .sort((a, b) => b.at.localeCompare(a.at)),
+  };
 }
 
 /**
@@ -1575,6 +1593,64 @@ export async function searchProjects(
     participantCount: p.participantCount ?? "",
     at: p.editedDateTime ?? "",
   }));
+}
+
+/** 검색 결과의 일정 한 건. 목록(§8.2)과 달리 `colaboSrno`가 없어서 나갈 링크가 없다. */
+export interface SearchEvent {
+  eventSrno: string;
+  eventName: string;
+  /** `YYYYMMDDHHmmss` */
+  start: string;
+  finish: string;
+  /** `"Y"`면 종일이라 시각을 안 그린다. */
+  allDayYn: string;
+  /** 달력 이름. 달력이 하나뿐인 사람은 자기 이름이 온다. */
+  calendarName: string;
+  eventColor: string;
+  calendarColor: string;
+}
+
+/**
+ * 일정 검색 (api-spec §9.4).
+ *
+ * **창이 필수다** — `startDateTime`·`endDateTime`이 없으면 거절한다. 어디까지 볼지는 부르는
+ * 쪽이 정한다 (`searchFlow`가 지난 석 달~앞으로 반년을 준다).
+ *
+ * 딥링크는 없다. 응답에 `colaboSrno`도 `colaboCommtSrno`도 없어서 글로 보낼 수도, 달력으로
+ * 보낼 수도 없다 — 팔레트가 이 갈래만 링크 없는 줄로 그리는 이유다.
+ *
+ * ponytail: 첫 페이지만 본다. 시각순으로 세워서 넘긴다 — 응답은 점수순이라 "그게 언제였지"를
+ * 눈으로 다시 정렬하게 된다.
+ */
+export async function searchEvents(
+  searchWord: string,
+  startDateTime: string,
+  endDateTime: string,
+  size: number,
+): Promise<SearchEvent[]> {
+  const query = new URLSearchParams({
+    searchWord,
+    startDateTime,
+    endDateTime,
+    pageSize: String(size),
+  });
+  const data = await get<{ events?: FlowSearchEvent[] }>(
+    `/user/search/events?${query}`,
+    "일정 검색",
+  );
+
+  return (data.events ?? [])
+    .map((e) => ({
+      eventSrno: e.eventSrno,
+      eventName: e.eventName?.trim() ?? "",
+      start: e.eventStartDateTime ?? "",
+      finish: e.eventFinishDateTime ?? "",
+      allDayYn: e.allDayYn ?? "N",
+      calendarName: e.customCalendarName?.trim() || (e.calendarName?.trim() ?? ""),
+      eventColor: e.eventColor ?? "",
+      calendarColor: e.calendarColor ?? "",
+    }))
+    .sort((a, b) => a.start.localeCompare(b.start));
 }
 
 /**

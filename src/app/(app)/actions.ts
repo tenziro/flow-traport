@@ -19,6 +19,7 @@
 import { revalidatePath } from "next/cache";
 import { DAY_MS, diffDays, kstYmd, parseFlowDeadline } from "@/lib/aggregate/date";
 import { getApiKey, getSession } from "@/lib/auth";
+import { loadMembers, pickMembers, type SearchMember } from "@/lib/flow/members";
 import type { WorklistTask } from "@/lib/flow/queries";
 import {
   createComment as createFlowComment,
@@ -39,6 +40,7 @@ import {
   mentionsMe,
   resolvePostId,
   searchEmployees,
+  searchEvents,
   searchPosts,
   searchProjects,
   setTaskEndDate,
@@ -51,6 +53,7 @@ import {
   type Participant,
   type PostFile,
   type PostLink,
+  type SearchEvent,
   type SearchPost,
   type SearchProject,
   type StaleTask,
@@ -596,38 +599,111 @@ export async function scanStaleTasks(
 export interface SearchResult extends ActionResult {
   projects?: SearchProject[];
   posts?: SearchPost[];
+  members?: SearchMember[];
+  events?: SearchEvent[];
+  /** 못 가져온 갈래 이름(`"일정 · 구성원"`). 결과가 있어도 화면이 이 줄을 따로 밝힌다. */
+  missing?: string;
+  /** flow가 준 `hasNext`. 업무·글 아래 `더 보기`가 나올지 정한다 (`searchMorePosts`). */
+  hasMorePosts?: boolean;
 }
 
 /** 검색어 길이 상한. flow가 100자까지 받는다 (api-spec §9.1). */
 const SEARCH_MAX = 100;
-/** 프로젝트 · 글 각각 몇 줄까지 볼지. 합쳐서 한 화면에 담기는 수다 (PRD §6.4). */
-const SEARCH_SIZE = { projects: 5, posts: 8 } as const;
+/** 갈래별로 몇 줄까지 볼지. 넷을 합쳐 한 화면에 담기는 수다 (PRD §6.4). */
+const SEARCH_SIZE = { projects: 4, posts: 6, members: 4, events: 4 } as const;
+/**
+ * `더 보기` 한 번에 받는 업무·글 수.
+ *
+ * 여섯 줄은 네 갈래를 한 화면에 담으려고 좁힌 수라, 정작 찾던 게 글일 때는 그 여섯이 다
+ * 스쳐 지나간 것일 수 있다. 서른이면 팔레트 안에서 스크롤로 훑을 만하고, 여기서도 못 찾으면
+ * 그건 검색어 문제다.
+ */
+const SEARCH_MORE = 30;
+/**
+ * 일정 검색 창. `/user/search/events`는 시작·끝이 **필수**라 여기서 정한다 (api-spec §9.4).
+ *
+ * 뒤로 석 달은 "지난 그 회의 언제였지", 앞으로 반년은 잡아 둔 일정이다. 더 넓히면 몇 해 전
+ * 반복 일정이 상위 네 줄을 채운다.
+ */
+const EVENT_WINDOW = { back: 90, ahead: 180 } as const;
 
 /**
- * 검색 팔레트 (PRD §6.4). 프로젝트와 글을 병렬로 찾는다.
+ * 검색 팔레트 (PRD §6.4). 프로젝트 · 글 · 구성원 · 일정을 한 번에 찾는다.
  *
  * 두 글자부터 받는다 — flow는 한 글자도 받지만 결과가 수천이라 고를 수가 없다.
  * 입력을 그대로 URL에 넣는 자리라 길이를 여기서 자른다.
  *
- * ponytail: 한쪽이 실패하면 둘 다 실패로 낸다. 같은 키로 같은 서버를 부르는 두 호출이라
- * 하나만 죽는 경우가 사실상 없고, 반쪽 결과를 전체인 척 보여 주는 게 더 위험하다.
+ * **구성원만 flow에 안 묻는다.** `/user/search/employees`의 `searchWord`는 공용 API 키로
+ * 남의 이름을 훑는 손잡이라 요청 값을 넘기지 않는다 (api-spec §9.3, PRD §8.1). 10분 캐시된
+ * 전사 명단에서 고른다 (`pickMembers`) — 그래서 REST는 실제로 세 번이다.
+ *
+ * 갈래마다 따로 실패한다. 둘일 때는 한쪽이 죽으면 둘 다 실패로 냈지만, 넷이 되면서 일정
+ * 하나 때문에 프로젝트 검색까지 날리는 게 더 나쁜 거래가 됐다 — 대신 못 가져온 갈래를
+ * `missing`에 적어 화면이 밝힌다.
  */
 export async function searchFlow(word: string): Promise<SearchResult> {
   const searchWord = word.trim().slice(0, SEARCH_MAX);
   if (searchWord.length < 2) return { ok: false, message: "두 글자 이상 적어주세요." };
 
+  const now = Date.now();
+  const [projects, page, members, events] = await Promise.all([
+    searchProjects(searchWord, SEARCH_SIZE.projects).catch(() => null),
+    searchPosts(searchWord, SEARCH_SIZE.posts).catch(() => null),
+    loadMembers(ROSTER_TTL)
+      .then((roster) => pickMembers(roster, searchWord, SEARCH_SIZE.members))
+      .catch(() => null),
+    searchEvents(
+      searchWord,
+      `${kstYmd(now - EVENT_WINDOW.back * DAY_MS)}000000`,
+      `${kstYmd(now + EVENT_WINDOW.ahead * DAY_MS)}235959`,
+      SEARCH_SIZE.events,
+    ).catch(() => null),
+  ]);
+
+  // `page`가 null이면 실패, `page.posts`가 빈 배열이면 성공했는데 0건이다 — 둘을 안 섞는다.
+  const posts = page?.posts ?? null;
+  const groups = [
+    ["프로젝트", projects],
+    ["업무 · 글", posts],
+    ["구성원", members],
+    ["일정", events],
+  ] as const;
+  const missing = groups.filter(([, rows]) => rows === null).map(([name]) => name);
+  const found = groups.reduce((n, [, rows]) => n + (rows?.length ?? 0), 0);
+
+  return {
+    ok: missing.length < groups.length,
+    // 결과가 있으면 화면이 목록만 그린다 — 이 문구는 빈 결과에서만 읽힌다.
+    message: found
+      ? ""
+      : missing.length
+        ? "지금은 못 찾았어요. 잠시 뒤에 다시 해 보세요."
+        : "다른 말로 찾아보세요.",
+    missing: missing.join(" · "),
+    hasMorePosts: page?.hasNext ?? false,
+    projects: projects ?? [],
+    posts: posts ?? [],
+    members: members ?? [],
+    events: events ?? [],
+  };
+}
+
+/**
+ * 업무·글만 더. 첫 검색의 여섯 줄이 상위 여섯이라 그 아래를 못 봤을 때 부른다.
+ *
+ * **다른 세 갈래는 안 건드린다.** 화면이 이미 들고 있는 결과에 이 갈래만 갈아 끼운다 —
+ * 넷을 다시 부르면 REST 세 번이 더 나가는데 늘어나는 정보는 글뿐이다.
+ *
+ * ponytail: 한 단계다. 서른에서 또 `더 보기`를 붙이면 다음은 백이고, 백 줄을 팔레트에서
+ * 스크롤할 사람은 없다 — 거기까지 갔으면 검색어가 틀린 것이다.
+ */
+export async function searchMorePosts(word: string): Promise<SearchResult> {
+  const searchWord = word.trim().slice(0, SEARCH_MAX);
+  if (searchWord.length < 2) return { ok: false, message: "두 글자 이상 적어주세요." };
+
   try {
-    const [projects, posts] = await Promise.all([
-      searchProjects(searchWord, SEARCH_SIZE.projects),
-      searchPosts(searchWord, SEARCH_SIZE.posts),
-    ]);
-    return {
-      ok: true,
-      // 결과가 있으면 화면이 목록만 그린다 — 이 문구는 빈 결과에서만 읽힌다.
-      message: projects.length + posts.length ? "" : "다른 말로 찾아보세요.",
-      projects,
-      posts,
-    };
+    const { posts } = await searchPosts(searchWord, SEARCH_MORE);
+    return { ok: true, message: "", posts };
   } catch (error) {
     return { ok: false, message: reasonOf(error) };
   }

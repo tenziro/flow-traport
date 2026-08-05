@@ -1042,6 +1042,16 @@ Query: `searchWord`(≤100), `divisionCode`, `cursor`, `pageSize`(1~100), `roomI
 Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSize`(1~200), `pagingReverse`(`Y`\|`N`, 기본 `N`)
 응답 `data`: `{ hasNext, lastCursor, events[] }` — `calendarName`, `customCalendarName`, `calendarRole`, `eventSrno`, `calendarSrno`, `eventName`, `eventStartDateTime`, `eventFinishDateTime`, `allDayYn`, `timezone`, `gmtTime`, `calendarColor`, `eventColor`, `publicYn`, `publicNameYn`, `privateYn`, `attendanceSrno`, `attendanceInfo`, `attendanceStatus`, `originSrno`
 
+> **나갈 링크를 만들 수 없다.** 목록(§8.2)과 달리 `colaboSrno`가 없다 — flow 일정 주소가
+> 요구하는 값이라 여기 결과만으로는 URL을 조립하지 못한다. 검색 팔레트의 일정 줄이 안 눌리는
+> 정보 줄인 이유다 (PRD §6.4).
+>
+> **기간이 필수다.** `startDateTime`·`endDateTime`이 없으면 부를 수 없다. 팔레트는 `YYYYMMDDHHmmss`로
+> **−90일 000000 ~ +180일 235959**를 넣는다.
+>
+> **달력 이름은 두 칸이다.** `customCalendarName`이 있으면 그쪽이 사람이 붙인 이름이고, 없으면
+> `calendarName`으로 떨어진다. 달력이 하나뿐인 사람은 자기 이름이 온다.
+
 ---
 
 ## 10. 문서 vs 실제 응답 차이 `(관측)`

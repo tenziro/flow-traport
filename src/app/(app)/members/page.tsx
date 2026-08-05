@@ -15,13 +15,23 @@ export const metadata = { title: "구성원 · flow Cockpit" };
  * 이미 세고 있어서, 같은 숫자를 여기서 또 그리면 어느 쪽이 맞는지 묻게 된다.
  *
  * 부서 탭은 서버에 다시 묻지 않는다. 전량이 이미 한 번의 호출로 손에 있고 13줄에 공유할
- * 상태도 없어서 `Tabs`가 칸만 바꿔 준다 — URL에 담지 않는 이유다.
+ * 상태도 없어서 `Tabs`가 칸만 바꿔 준다 — 탭을 오가는 것은 URL에 안 남긴다.
+ *
+ * 다만 **어느 탭으로 들어올지는 `?dept=`로 받는다**. 검색 팔레트가 사람 이름으로 찾은 뒤 그
+ * 사람이 있는 부서로 보내는 길이다 — 전체 13명 격자에 떨어뜨리면 방금 고른 사람을 다시
+ * 눈으로 찾아야 한다. `/risk`·`/team`과 같은 이름의 파라미터다.
  *
  * 조직도는 안 그린다. 부서 3개의 `upperDivisionCode`가 전부 빈 문자열이라 세울 계층이 없다
  * (실측). 부서는 목록을 나누는 소제목까지다.
  */
-export default async function MembersPage() {
-  const { divisions, total } = await loadMembers();
+export default async function MembersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ dept?: string }>;
+}) {
+  const [{ dept }, { divisions, total }] = await Promise.all([searchParams, loadMembers()]);
+  // 없는 부서명이 오면 `전체`다 — 맞는 탭이 없으면 `Tabs`가 아무 칸도 안 그린다.
+  const picked = divisions.some((d) => d.name === dept) ? dept : "all";
 
   return (
     <>
@@ -32,7 +42,9 @@ export default async function MembersPage() {
         </p>
       </header>
 
-      <Tabs defaultValue="all" variant="segment">
+      {/* `key`를 같이 바꾼다 — `defaultValue`는 처음 한 번만 읽혀서, 같은 화면에서 `?dept=`만
+          갈아 끼우면(검색으로 다른 부서 사람을 또 고르면) 탭이 안 움직인다 */}
+      <Tabs key={picked} defaultValue={picked} variant="segment">
         <TabsList aria-label="부서 보기" className="mb-8 flex-wrap bg-secondary">
           <TabsTrigger value="all" className="min-h-8">
             전체

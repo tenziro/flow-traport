@@ -65,8 +65,40 @@ type EmployeeRow = Pick<
   | "slogan"
 >;
 
-export async function loadMembers(): Promise<MembersData> {
-  return buildMembers((await searchEmployees()).employees);
+/** `ttl`은 검색 팔레트가 준다 — 글자마다 명단을 다시 받지 않으려고 캐시를 길게 잡는다. */
+export async function loadMembers(ttl?: number): Promise<MembersData> {
+  return buildMembers((await searchEmployees(undefined, ttl)).employees);
+}
+
+/** 검색 결과 한 줄. 부서가 소제목이 아니라 줄 안에 있어야 어느 팀 사람인지 바로 읽힌다. */
+export interface SearchMember extends Member {
+  division: string;
+}
+
+/**
+ * 명단에서 검색어에 걸리는 사람만 (PRD §6.4).
+ *
+ * **flow에 검색어를 넘기지 않는다.** `/user/search/employees`의 `searchWord`는 공용 API 키로
+ * 전 직원을 훑는 손잡이라 요청에서 받은 문자열을 흘리면 안 된다 (api-spec §9.3, PRD §8.1).
+ * 어차피 13명짜리 명단이 캐시로 손에 있으니 여기서 고른다 — 호출도 한 번 줄어든다.
+ *
+ * 이름·부서·직책만 본다. 이메일은 줄에 그리지만 검색 대상에서 뺐다 — 주소로 사람을 찾는 일이
+ * 없고, 넣으면 도메인 두 글자에 전원이 걸린다.
+ */
+export function pickMembers(data: MembersData, word: string, size: number): SearchMember[] {
+  const q = word.trim().toLowerCase();
+  const found: SearchMember[] = [];
+
+  for (const division of data.divisions) {
+    for (const member of division.members) {
+      if (found.length >= size) return found;
+      const hit = [member.name, member.title, division.name].some((v) =>
+        v.toLowerCase().includes(q),
+      );
+      if (hit) found.push({ ...member, division: division.name });
+    }
+  }
+  return found;
 }
 
 /** 세션에 없어서 flow에 한 번 더 물어야 하는 내 정보. 둘 다 없을 수 있다. */

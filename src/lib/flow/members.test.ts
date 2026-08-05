@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { buildMembers } from './members';
+import { buildMembers, pickMembers } from './members';
 
 /** 응답 한 칸. 시험에 안 쓰는 필드는 빈 문자열로 둔다. */
 const person = (
@@ -85,5 +85,31 @@ describe('구성원 줄 세우기', () => {
       photo: '',
       slogan: '업무시간 내에는 회사 연락처로',
     });
+  });
+});
+
+describe('pickMembers — 명단에서 검색어로 고르기', () => {
+  const roster = buildMembers([
+    person('한부장', '1', '플랫폼개발팀', '부장'),
+    person('두사원', '1', '플랫폼개발팀', '사원'),
+    person('세과장', '2', '기획운영팀', '과장'),
+  ]);
+
+  it('이름·직책·부서 중 하나라도 걸리면 나온다', () => {
+    assert.deepEqual(pickMembers(roster, '한', 10).map((m) => m.name), ['한부장']);
+    assert.deepEqual(pickMembers(roster, '과장', 10).map((m) => m.name), ['세과장']);
+    assert.deepEqual(pickMembers(roster, '플랫폼', 10).map((m) => m.name), ['한부장', '두사원']);
+  });
+
+  it('부서명을 줄에 실어 준다 — 소제목 없이도 어느 팀인지 읽힌다', () => {
+    assert.equal(pickMembers(roster, '세과장', 10)[0].division, '기획운영팀');
+  });
+
+  it('이메일로는 안 걸린다 — 도메인 두 글자에 전원이 걸린다', () => {
+    assert.deepEqual(pickMembers(roster, 'traport', 10), []);
+  });
+
+  it('size에서 끊는다', () => {
+    assert.equal(pickMembers(roster, '플랫폼', 1).length, 1);
   });
 });
