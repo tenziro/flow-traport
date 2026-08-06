@@ -163,7 +163,7 @@ function Posts({
       <p className="bg-secondary/40 px-3 py-1.5 text-xs font-medium text-muted-foreground">
         업무 아닌 글 {posts.length}개
       </p>
-      <ul className="max-h-52 overflow-y-auto px-3 py-2">
+      <ul className="max-h-52 overflow-y-auto overscroll-contain px-3 py-2">
         {posts.map((p) => (
           <li key={p.postId} className="py-0.5">
             <button
@@ -222,7 +222,7 @@ function Names({
         {title} {people.length}명
       </p>
       {/* 외부가 실측 최대 42명이다. 왼쪽 표가 12줄에서 스크롤하는 것과 같이 맞춘다 */}
-      <ul className="max-h-52 overflow-y-auto px-3 py-2">
+      <ul className="max-h-52 overflow-y-auto overscroll-contain px-3 py-2">
         {people.map((p) => (
           <li key={p.userId} className="flex items-center gap-2 py-0.5">
             {/* 사진이 없는 사람이 있다 (실측 13명 중 4명) — 그때는 이름 첫 글자 원판이다 */}

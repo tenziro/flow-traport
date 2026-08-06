@@ -30,7 +30,10 @@ export function DeptTabs({
       value={current}
       onValueChange={(dept) => router.push(`${base}?dept=${encodeURIComponent(dept)}`)}
       variant="segment"
-      className="mb-6"
+      /* 탭 아래 32px. 구성원 화면의 부서 탭이 이미 그 값이라(`members/page.tsx`) 여기만
+         24px이면 같은 자리의 간격이 화면마다 달라진다 — 탭에서 본문으로 넘어가는 폭은
+         제목에서 탭으로 붙는 24px보다 한 급 넓어야 두 관계가 구분된다 */
+      className="mb-8"
     >
       {/* 폰에서는 칩 줄 대신 고르개 한 줄이다. 둘 다 같은 `onValueChange`를 거쳐서
           어느 쪽으로 골라도 `?dept=`가 밀린다 */}

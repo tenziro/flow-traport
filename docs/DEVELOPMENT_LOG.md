@@ -44,7 +44,8 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
   단계가 그림으로 갈린다(↓ 낮음 · — 보통 · ↑ 높음 · 경보등 긴급). **선택된 값을 지우는 건
   안 된다** — flow에 되돌리는 쓰기가 없다.
 - **모달의 관계와 첨부** — 상위 업무는 본문 위 한 줄, 첨부는 본문 아래(이미지는 썸네일
-  격자, 나머지는 이름 + 크기), 하위 업무는 그 아래 목록이다. 전부 **본문과 같은 응답**에
+  격자, **동영상은 재생 아이콘 + `flow에서 재생`**, 나머지는 이름 + 크기), 하위 업무는 그
+  아래 목록이다. 전부 **본문과 같은 응답**에
   딸려 오던 값이라 호출이 안 늘어난다 (api-spec §6.3). 상위·하위 이름을 누르면 flow의 그
   글로 나간다 — 이 모달은 내가 담당인 업무만 열기 때문이다.
   하위 업무 목록 아래에는 **이름 한 칸으로 바로 쪼개는 입력**이 있다 — 하나도 없어도 칸은
@@ -128,6 +129,81 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
 ---
 
 ## 변경 이력
+
+### 2026-08-06 — 동영상 첨부를 알아본다 (v4.16.3)
+
+`개선` **첨부 목록에서 동영상 파일이 재생 아이콘으로 선다.** 클립(`IconAttach`) 대신
+필름 프레임 + 재생 삼각형(`IconVideo`)을 세우고, 그 줄에만 `flow에서 재생`을 붙였다 —
+재생 아이콘은 "여기서 재생된다"로 읽히기 때문에 어디서 열리는지 먼저 말해 준다.
+판별은 파일 이름의 확장자 하나로 한다(`VIDEO_EXT`). `ts`는 뺐다 — 이 팀 첨부에서
+MPEG 전송 스트림보다 TypeScript 파일일 확률이 훨씬 높다.
+
+> **이 화면 안에서 재생하려던 것을 접었다.** 이미지 뷰어와 같은 `<dialog>` 모달에
+> `<video>`를 넣는 안이었는데, flow 첨부의 바이트가 우리 앱에 오지 않는다. 실측 근거:
+>
+> | 확인한 것 | 결과 |
+> |---|---|
+> | `ATCH_URL`(`FLOW_DOWNLOAD_R001.act`) 맨몸 GET | 200 · `text/html` · **1091바이트 전부 빈 줄** |
+> | `x-flow-api-key` 헤더를 붙인 GET | 같음 (키는 `api.flow.team`용이라 `flow.team`에 무효) |
+> | `Range: bytes=0-1023` | 같음 · `accept-ranges` 없음 |
+> | 응답 쿠키 | `JSESSIONID; Path=/; HttpOnly` — **`SameSite` 속성 없음 = `Lax`** |
+> | `access-control-allow-origin` | **없음** |
+>
+> `SameSite=Lax`라 `<video src>` 같은 다른 출처 하위 리소스에는 세션 쿠키가 안 붙고,
+> CORS 헤더가 없어서 `fetch` → `createObjectURL`로 담는 길도 끊긴다. 서버 프록시도
+> 같은 빈 응답을 받는다. **쿠키가 붙는 건 최상위 이동뿐**이라, 지금 되는 유일한 길이
+> 새 창이다. 참고로 전사 첨부를 훑어(프로젝트 59 / 글 224) 나온 동영상은 `.wmv` 한
+> 건인데, 그건 위 문제가 풀려도 브라우저가 디코딩을 못 한다. `/user/drive/files/search`도
+> 우리 기관은 비어 있어(`{files:[], total:0}`) 대체 경로가 없다.
+>
+> flow가 첨부에 서명 URL이나 인증 없는 경로를 열어 주면 그때 이미지 뷰어와 같은 모양으로
+> 붙이면 된다. 그전에는 어떤 코드를 써도 빈 플레이어가 뜬다.
+
+관련 파일: `src/components/task-thread.tsx`, `src/components/icons.tsx`,
+`src/lib/changelog.ts`, `docs/DEVELOPMENT_LOG.md`, `docs/progress.md`, `package.json`
+
+### 2026-08-06 — 간격·위계·손가락 점검 (v4.16.2)
+
+`개선` **Vercel Web Interface Guidelines로 화면 전체를 훑었다.** 간격·타이포그래피·위계·
+인터페이스 네 갈래를 다 봤고, 이미 지켜지고 있던 것이 대부분이었다 — `text-wrap: balance`,
+`prefers-reduced-motion`, `tabular-nums`, `safe-area-inset`, `color-scheme`, 가상화된 표,
+`focus-visible` 링, `word-break: keep-all`은 손댈 데가 없다. 남은 여섯 자리만 고쳤다.
+
+`개선` **손가락으로 누를 때 300ms를 없앴다.** 어느 누를 거리에도 `touch-action`이 없어서
+브라우저가 매 탭마다 "이게 더블탭 확대인가"를 기다렸다 — 상태 알약·하단 탭처럼 연달아 누르는
+자리에서 눌렀는데 한 박자 늦게 반응하던 게 그 지연이다. `manipulation`으로 그 기다림만 걷고
+핀치 확대는 남긴다. 안드로이드 크롬이 씌우던 파란 탭 하이라이트도 같이 껐다 — 이 앱은 어느
+누를 거리에나 `hover`/`active` 색이 이미 있는데, 그 사각이 모서리 둥글기를 무시한 채 한 겹
+더 덮여서 알약이 사각으로 번쩍였다 (`globals.css`).
+
+> **모달을 끝까지 굴리면 뒤 화면이 밀렸다.** 겹쳐 뜨는 판의 스크롤 칸 열두 곳에
+> `overscroll-behavior: contain`이 없었다. 상세 모달·알림 목록·검색 팔레트·담당자 고르기·
+> 업데이트 로그·일정 서랍·메뉴 레일 — 목록 끝에 닿는 순간 스크롤이 아래 페이지로 넘어가서,
+> 모달을 닫으면 원래 있던 자리가 아니었다. `bottom-sheet.tsx`만 이미 갖고 있던 값이다.
+
+`개선` **카드 제목을 `h2`로 올렸다.** `CardTitle`이 `<div>`라 화면에서는 제목으로 읽히는데
+목차에는 안 잡혔다 — 읽어 주는 쪽에는 페이지 `h1` 하나 다음이 곧장 본문이어서 카드 여덟 개를
+제목으로 건너뛸 방법이 없었다. 쓰는 자리가 전부 `h1` 바로 아래 한 단이라 `h2`로 고정한다.
+
+`개선` **본문 바로가기를 넣었다.** 화면이 바뀔 때마다 레일 여섯 칸 + 헤더 다섯 칸을 지나야
+본문에 닿았다. 첫 탭에 내려오는 링크 하나로 줄인다 — `sr-only`가 아니라 눈에 보이는 알약이고,
+`<main>`에 `tabIndex={-1}`을 줘야 건너뛴 뒤 초점이 따라온다 (`app-shell.tsx`).
+
+`개선` **`transition-all`을 바꾸는 속성만 적는 목록으로 바꿨다** (`ui/button.tsx`·`ui/badge.tsx`).
+`all`은 폭·높이·여백까지 애니메이션 대상에 넣어서, 크기 변인이 바뀌거나 안쪽 글자가 길어질 때
+레이아웃이 매 프레임 다시 계산된다. 색·테두리·그림자·투명도·변형만 남긴다.
+
+`개선` **부서 탭 아래 간격을 32px로 맞췄다** (`dept-tabs.tsx`). 리스크·팀은 24px,
+구성원은 32px이라 같은 자리의 간격이 화면마다 달랐다. 탭에서 본문으로 넘어가는 폭은 제목에서
+탭으로 붙는 24px보다 한 급 넓어야 두 관계가 구분된다.
+
+관련 파일: `src/app/globals.css` · `src/components/app-shell.tsx` · `src/components/ui/card.tsx` ·
+`src/components/ui/button.tsx` · `src/components/ui/badge.tsx` · `src/components/dept-tabs.tsx` ·
+`src/components/motion/morphing-modal.tsx` · `src/components/motion/animated-sidebar.tsx` ·
+`src/components/task-detail-modal.tsx` · `src/components/use-task-modal.tsx` ·
+`src/components/mention-table.tsx` · `src/components/news-bell.tsx` ·
+`src/components/search-palette.tsx` · `src/components/worker-picker.tsx` ·
+`src/components/project-panel.tsx` · `src/components/site-footer.tsx`
 
 ### 2026-08-06 — 업무인지 아닌지를 글 자신에게 묻는다 (v4.16.1)
 

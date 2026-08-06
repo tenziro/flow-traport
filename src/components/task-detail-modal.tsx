@@ -99,7 +99,7 @@ export function TaskDetailModal({
           `bg-card`(라이트 #ffffff)로 패널 면(`bg-background` — #fafafa)보다 한 단 올린다.
           읽는 자리와 머리·바닥을 면으로 갈라서, 스크롤이 어디서 시작하고 끝나는지가
           선 하나에만 걸리지 않는다. 다크에서도 같은 방향이다 (#1c2537 vs #151c2c) */}
-      <div className="max-h-[min(60vh,calc(100dvh-16rem))] overflow-y-auto border-b border-border bg-card [&>*:last-child]:border-b-0">
+      <div className="max-h-[min(60vh,calc(100dvh-16rem))] overflow-y-auto overscroll-contain border-b border-border bg-card [&>*:last-child]:border-b-0">
         {/* 값 — 상태·등록일·마감일·우선순위·담당자 다섯 줄 */}
         {projectId ? (
           <div className="border-b border-border px-5 py-1">

@@ -119,7 +119,7 @@ export function WorkerPicker({
                 />
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 pb-1.5">
                 {loading ? (
                   /* 올 것은 이름 줄 묶음이다. 다섯 줄이면 제일 적은 프로젝트(실측 5명)만큼은
                      자리를 잡아서, 도착하는 순간 목록이 뛰지 않는다. 높이는 이름 + 부서
@@ -166,7 +166,7 @@ export function WorkerPicker({
                 </button>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3">
                 {chosen.length === 0 ? (
                   <p className="p-6 text-center text-xs text-muted-foreground">
                     왼쪽에서 담당자를 골라주세요

@@ -99,7 +99,7 @@ export function SiteFooter() {
           {/* 컴포넌트는 패널이 아니라 오버레이를 스크롤한다. 줄이 쌓이면 패널이 화면보다
               길어져 펼침 애니메이션이 무너지므로 안쪽에서 스크롤한다 — news-bell.tsx와
               같은 값이다. */}
-          <div className="max-h-[min(28rem,60vh)] overflow-y-auto p-3">
+          <div className="max-h-[min(28rem,60vh)] overflow-y-auto overscroll-contain p-3">
             {/* 아코디언 기본 글자는 제목·본문 다 15px이다. 업데이트 로그는 읽고 나가는
                 곳이라 이 앱의 본문 치수(제목 14px · 내용 13px)로 한 급씩 내린다 —
                 같은 모달 안 제목(`text-base`)과의 차이도 그만큼 벌어져 세 층이 갈린다 */}

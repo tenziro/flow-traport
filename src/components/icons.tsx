@@ -34,6 +34,8 @@ export {
   ArrowDownSquare as IconDownTask,
   /** 첨부 파일. */
   Paperclip as IconAttach,
+  /** 동영상 첨부. 클립 대신 세워 두면 목록에서 눈에 걸린다 (`FileRow`). */
+  VideoPlay as IconVideo,
   /** 시스템이 남긴 변경 기록. 댓글 목록에서 사람 말(말풍선)과 가른다. */
   History as IconHistory,
   InfoCircle as IconInfo,

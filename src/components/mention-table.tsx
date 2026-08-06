@@ -227,7 +227,7 @@ function MentionDetail({
           **여백은 이 칸이 아니라 덩어리마다 갖는다** (`TaskThread`와 같다). 여기에 `px-5`를
           두면 본문·댓글을 가르는 선이 양쪽에서 20px씩 물려서, 덩어리를 가르는 선이 아니라
           본문에 그은 밑줄로 읽힌다 */}
-      <div className="max-h-[min(60vh,calc(100dvh-16rem))] overflow-y-auto border-b border-border bg-card">
+      <div className="max-h-[min(60vh,calc(100dvh-16rem))] overflow-y-auto overscroll-contain border-b border-border bg-card">
         {/* 본문 — 부른 이유는 댓글에 있지만 무슨 일인지는 본문에 있다. 업무 글은 비어 있는
             경우가 흔해서 (api-spec §6.2) 없으면 덩어리째 뺀다. 모양은 업무 상세 모달과 같다
             (`TaskThread`) — 두 모달에서 같은 글을 읽는다 */}

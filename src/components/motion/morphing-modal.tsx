@@ -183,7 +183,7 @@ export function MorphingModal({
       />
 
       {/* 벤더 이탈 5 — 원본은 `items-center`만이라 긴 내용이 스크롤 범위 밖에 남는다 */}
-      <div className="pointer-events-none absolute inset-0 overflow-y-auto px-4">
+      <div className="pointer-events-none absolute inset-0 overflow-y-auto overscroll-contain px-4">
         <div className="flex min-h-full w-full flex-col items-center justify-center py-8">
           <AnimatePresence initial={false}>
             {open ? (

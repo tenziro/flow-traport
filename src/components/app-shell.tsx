@@ -130,6 +130,19 @@ export function AppShell({
     <SearchProvider>
       <SidebarProvider defaultOpen={sidebarOpen}>
         <div className="flex min-h-dvh">
+          {/*
+           * 본문 바로가기. 평소에는 화면 밖(`-top-full`)에 있다가 탭이 닿는 순간 내려온다.
+           * 레일 여섯 칸 + 헤더 다섯 칸을 지나야 본문에 닿던 것이 한 번으로 줄어든다 —
+           * 화면이 바뀔 때마다 그 열한 번을 다시 밟는 자리라 키보드로 쓰면 여기가 제일 길다.
+           * `sr-only`가 아니다: 눈에 보여야 어디로 가는지 알고 누른다.
+           */}
+          <a
+            href="#main"
+            className="fixed -top-full left-4 z-50 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg transition-[top] focus-visible:top-4"
+          >
+            본문으로 건너뛰기
+          </a>
+
           {/* 메뉴 (≥1024px). 알약은 `layoutId`로 항목 사이를 미끄러진다 — 상단 탭바의
               밑줄이 하던 일을 그대로 옮겨 왔다 */}
           <AnimatedSidebar
@@ -204,7 +217,13 @@ export function AppShell({
 
             {/* 넓은 화면에서 좌우·상하 40px. 헤더도 같은 `lg:px-10`이라 화면 이름과
                 본문 `h1`이 한 줄에 선다 */}
-            <main className="w-full flex-1 px-4 py-8 pb-20 sm:px-6 md:pb-8 lg:px-10 lg:py-10 lg:pb-10">
+            {/* `id`는 위 바로가기 링크의 목적지다. `tabIndex={-1}`이 없으면 건너뛰어도 초점이
+                따라오지 않아서, 그 다음 탭이 헤더로 되돌아간다 */}
+            <main
+              id="main"
+              tabIndex={-1}
+              className="w-full flex-1 scroll-mt-14 px-4 py-8 pb-20 outline-none sm:px-6 md:pb-8 lg:px-10 lg:py-10 lg:pb-10"
+            >
               {children}
             </main>
 
@@ -484,7 +503,7 @@ function Account({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-3">
           <ScheduleList events={events} today={today} />
         </div>
       </Drawer>

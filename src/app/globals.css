@@ -206,6 +206,21 @@
   button:not(:disabled), [role="button"]:not(:disabled) {
     cursor: pointer;
   }
+  /*
+   * 손가락으로 누를 때. 두 가지를 같이 끈다.
+   *
+   * `touch-action: manipulation`은 더블탭 확대를 포기하는 대신 **두 번째 탭을 기다리는
+   * 300ms**를 없앤다 — 상태 알약·하단 탭처럼 연달아 누르는 자리에서 눌렀는데 한 박자 늦게
+   * 반응하는 게 이 지연이다. 손가락 확대(핀치)는 그대로 남는다.
+   *
+   * 탭 하이라이트는 안드로이드 크롬이 누른 자리에 씌우는 반투명 파란 사각이다. 이 앱은
+   * 어느 누를 거리에나 `hover`/`active` 색이 이미 있어서, 그 사각이 모서리 둥글기를 무시한
+   * 채 한 겹 더 덮이면 알약이 사각으로 번쩍인다.
+   */
+  a, button, [role="button"], summary, label, input, select, textarea {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
   html {
     @apply font-sans;
     -webkit-text-size-adjust: 100%;

@@ -725,6 +725,15 @@ https://api.flow.team
 > - **`attachments[].ATCH_URL` 은 슬래시가 겹쳐 온다** — `https://flow.team//FLOW_DOWNLOAD_R001.act?RAND_KEY=…`.
 >   호스트 뒤를 하나로 줄여도 그대로 200이다(둘 다 확인). `EXTENSION` 은 8건 전부 빈 문자열이라
 >   확장자는 `FILE_NAME` 에서 본다.
+> - **일반 첨부의 `ATCH_URL` 은 우리 앱에 파일을 안 준다 `(실측 2026-08-06)`** — 맨몸·API 키
+>   헤더·`Range` 셋 다 `200 text/html` **1091바이트(전부 빈 줄)**다. `content-disposition` 도
+>   `accept-ranges` 도 없다. 세션 쿠키(`JSESSIONID`)를 요구하는데 그 쿠키에 `SameSite` 속성이
+>   없어(=`Lax`) **다른 출처의 하위 리소스 요청에는 안 붙는다** — `<video src>`·`<img src>` 로
+>   걸면 빈 응답을 받는다. `access-control-allow-origin` 도 없어서 `fetch` 로 받아 blob 으로
+>   담는 길도 막힌다. API 키는 `api.flow.team` 용이라 `flow.team` 다운로드 경로에 무효고, 서버
+>   프록시도 같은 빈 응답을 받는다. **쿠키가 붙는 건 최상위 이동뿐** — 그래서 첨부는 새 창
+>   링크로만 연다 (`FileRow`). `/user/drive/files/search` 도 우리 기관은 비어 있다
+>   (`{files:[], total:0}`).
 > - **이미지 두 URL 다 로그인 없이 열린다** (`THUM_IMG_PATH`·`ATCH_URL` 모두 200,
 >   `content-type: application/octet-stream`). 호스트가 `flow.team/flowImg/**` 라 `next.config.ts`
 >   허용 목록에 이미 있다 — 프로필 사진과 같은 자리다.

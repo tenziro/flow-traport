@@ -182,7 +182,7 @@ export function AnimatedSidebar({
       <motion.nav
         layoutRoot
         aria-label={ariaLabel}
-        className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-3 pb-4"
+        className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 pb-4"
       >
         {children}
       </motion.nav>

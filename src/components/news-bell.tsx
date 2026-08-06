@@ -228,7 +228,7 @@ export function NewsBell({ news }: { news: TaskNews[] | null }) {
         // 목록만 스크롤한다 — 탭과 전체 읽음은 위에 붙어 있어야 긴 목록에서도 손에 닿는다.
         // 이 상한이 시트의 키도 정한다: 시트는 내용 높이만큼만 서므로(`snapPoints=["auto"]`)
         // 목록이 여기서 멈추면 시트도 화면의 4분의 3쯤에서 멈춘다.
-        <ul className="max-h-[min(28rem,60vh)] overflow-y-auto p-2">
+        <ul className="max-h-[min(28rem,60vh)] overflow-y-auto overscroll-contain p-2">
           {shown.map((item) => {
             const body = (
               <>

@@ -279,7 +279,7 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
                 {result?.message ?? "두 글자 이상 적으면 찾아드려요"}
               </p>
             ) : (
-              <div ref={list} className="overflow-y-auto p-2">
+              <div ref={list} className="overflow-y-auto overscroll-contain p-2">
                 {shows("projects") && projects.length > 0 && (
                   <>
                     <Group>프로젝트</Group>

@@ -161,7 +161,7 @@ function PostDetail({
 
       {/* 높이 규칙은 업무 모달과 같다 (`TaskDetailModal` 주석) — 머리·바닥은 제자리고
           가운데만 스크롤한다 */}
-      <div className="max-h-[min(60vh,calc(100dvh-16rem))] overflow-y-auto border-b border-border bg-card [&>*:last-child]:border-b-0">
+      <div className="max-h-[min(60vh,calc(100dvh-16rem))] overflow-y-auto overscroll-contain border-b border-border bg-card [&>*:last-child]:border-b-0">
         <TaskThread
           projectId={input.projectId}
           postId={input.postId}

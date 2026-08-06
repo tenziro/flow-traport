@@ -44,9 +44,12 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
+// 원본(shadcn)은 `<div>`였다. 카드 제목은 화면에서 이미 제목으로 읽히는데 목차에는 안
+// 잡혀서, 읽어 주는 쪽에는 페이지 `h1` 하나 다음이 곧장 본문이었다 — 카드 여덟 개를 제목으로
+// 건너뛸 방법이 없었다. 쓰는 자리가 전부 `h1` 바로 아래 한 단이라 `h2`로 고정한다.
+function CardTitle({ className, ...props }: React.ComponentProps<"h2">) {
   return (
-    <div
+    <h2
       data-slot="card-title"
       className={cn(
         // 카드 제목은 bold(700)다. medium이던 때는 바로 아래 상태 필터·본문 줄과 굵기
