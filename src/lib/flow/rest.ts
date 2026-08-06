@@ -139,9 +139,11 @@ async function call<T>(
       ...(init?.body === undefined ? {} : { "content-type": "application/json" }),
     },
     body: init?.body === undefined ? undefined : JSON.stringify(init.body),
-    // 기본은 매번 새로 받는다. `revalidate`를 준 호출만 Next 데이터 캐시에 올린다 —
-    // URL에 조회 대상(`userId` 등)이 들어 있는 호출만 그렇게 한다. 안 그러면 캐시 한 칸을
-    // 여러 사람이 나눠 쓴다.
+    // 기본은 매번 새로 받는다. `revalidate`를 준 호출만 Next 데이터 캐시에 올린다.
+    // 캐시 키에는 **요청 헤더가 들어간다** (next/dist/server/lib/incremental-cache/index.js의
+    // `generateCacheKey` — 빼는 건 `traceparent`·`tracestate`뿐이다). `x-flow-api-key`가
+    // 다르면 칸도 다르니 남의 데이터를 나눠 쓸 일은 없고, `revalidate`는 "이 값이 몇 초쯤
+    // 묵어도 되나"로만 정한다.
     ...(init?.revalidate === undefined
       ? { cache: "no-store" as const }
       : { next: { revalidate: init.revalidate } }),
@@ -539,14 +541,21 @@ export function describeSystemComment(systemCode: string): string {
  * `apiKey`를 넘기면 그 키로 조회한다 — 키 등록 전 **유효성 검증**에 이 호출을 쓴다
  * (`app/login/actions.ts`). 응답이 오면 유효한 키다.
  *
+ * 5분 캐시를 건다. 화면 하나 여는 데 이 호출이 늘 앞에 붙는데(`collectTasks`) 프로젝트가
+ * 5분 안에 새로 생기는 일은 드물다. **`apiKey`를 준 호출은 안 건다** — 그건 키가 살아
+ * 있는지 물어보는 자리라(`app/login/actions.ts`) 캐시된 답이 오면 검증이 무의미해진다.
+ *
  * ponytail: 첫 페이지만 본다. 페이지 크기가 500 고정이라 실측 59개가 한 번에 다 온다.
  * 500개를 넘기면 `hasNext`가 켜지고, 그때 `lastCursor`로 이어 받으면 된다.
  */
+const PROJECT_LIST_TTL = 300;
+
 export async function listProjects(apiKey?: string): Promise<Map<string, string>> {
   const data = await get<{ projects?: { projectId: string; title: string }[] }>(
     "/user/projects",
     "프로젝트 목록 조회",
     apiKey,
+    apiKey ? undefined : PROJECT_LIST_TTL,
   );
   const map = new Map<string, string>();
   // 이름이 겹치면 먼저 나온 쪽이 이긴다 — 실측 59개에 중복이 없다.

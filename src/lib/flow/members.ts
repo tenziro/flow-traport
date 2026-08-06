@@ -121,10 +121,15 @@ export interface MyAccount {
  * 실패하면 둘 다 빈 문자열이다. 이 호출은 셸에서 일어나므로 던지면 모든 화면이 같이 넘어진다 —
  * 사진 한 장이 그럴 값은 아니다. 계정 블록은 비면 인사하는 손을 그대로 쓰고, 한마디 줄에는
  * 없다고 적어 둔다 (app-shell.tsx).
+ *
+ * 10분 캐시를 건다. 셸이라 **화면을 넘길 때마다** 도는 호출인데(실측 100ms) 내 사진과 한마디가
+ * 그 사이에 바뀌지는 않는다.
  */
+const ACCOUNT_TTL = 600;
+
 export async function loadMyAccount(fullname: string, email: string): Promise<MyAccount> {
   try {
-    const { employees } = await searchEmployees(fullname);
+    const { employees } = await searchEmployees(fullname, ACCOUNT_TTL);
     const me = employees.find((e) => e.email === email);
     return { photo: me?.profileImagePath ?? "", slogan: me?.slogan ?? "" };
   } catch {

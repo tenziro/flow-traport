@@ -148,34 +148,43 @@ const CONCURRENCY = 10;
  * 한 프로젝트가 막혀도(권한·429) 나머지는 그대로 보여 준다. 실패한 이름은 `failed`로 내고,
  * 페이지 상한(300건)에 걸린 이름은 `truncated`로 낸다 — 조용히 적게 보이는 게 제일 나쁘다.
  *
- * ponytail: 풀 대신 10개씩 잘라 돈다. 느린 프로젝트가 자기 묶음만 붙잡는데, 실측 2.1초라
- * 그 손해를 신경 쓸 이유가 없다.
+ * 10개씩 잘라 돌지 않고 **일꾼 10명이 줄에서 하나씩 집어 간다**. 잘라 돌면 묶음마다 제일 느린
+ * 프로젝트를 아홉이 기다리는데, 실측으로 그 대기가 컸다 — 프로젝트 63건에 대기 합계 30.9초,
+ * 묶음 방식 실제 11.8초, 일꾼 방식 하한 3.5초.
+ *
+ * 결과는 **프로젝트 순서 그대로** 담는다. 도착 순으로 밀어 넣으면 마감일이 같은 업무들의
+ * 순서가 매번 달라진다 (`classifyTasks`의 정렬이 안정 정렬이라 입력 순서가 그대로 보인다).
  */
 export async function collectTasks(
   userIds: readonly string[],
 ): Promise<{ rows: ProjectTasks[]; truncated: string[]; failed: string[] }> {
   const projects = [...(await listProjects())].map(([name, projectId]) => ({ name, projectId }));
 
-  const rows: ProjectTasks[] = [];
-  const truncated: string[] = [];
-  const failed: string[] = [];
+  const out: (ProjectTasks | null)[] = new Array(projects.length).fill(null);
+  const flag: ("truncated" | "failed" | null)[] = new Array(projects.length).fill(null);
 
-  for (let i = 0; i < projects.length; i += CONCURRENCY) {
-    const batch = await Promise.all(
-      projects.slice(i, i + CONCURRENCY).map(async (p) => {
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, projects.length) }, async () => {
+      // `next++`는 쪼개지지 않는다 — 읽고 더하는 사이에 `await`가 없다.
+      for (let i = next++; i < projects.length; i = next++) {
+        const p = projects[i];
         const got = await listWorkerTasks(p.projectId, userIds).catch(() => null);
         if (!got) {
-          failed.push(p.name);
-          return null;
+          flag[i] = "failed";
+          continue;
         }
-        if (got.hasMore) truncated.push(p.name);
-        return { ...p, tasks: got.tasks };
-      }),
-    );
-    for (const row of batch) if (row) rows.push(row);
-  }
+        if (got.hasMore) flag[i] = "truncated";
+        out[i] = { ...p, tasks: got.tasks };
+      }
+    }),
+  );
 
-  return { rows, truncated, failed };
+  return {
+    rows: out.filter((row): row is ProjectTasks => row !== null),
+    truncated: projects.filter((_, i) => flag[i] === "truncated").map((p) => p.name),
+    failed: projects.filter((_, i) => flag[i] === "failed").map((p) => p.name),
+  };
 }
 
 /** 업무 한 건 → 집계 레이어 입력. 날짜는 flow 원본 문자열 그대로 넘긴다 (`lib/aggregate/types`). */
@@ -261,9 +270,12 @@ export async function loadToday(): Promise<TodayData> {
 
   // 담당자 필터 값은 **여기서** 세션으로 채운다 (PRD §8.1).
   // 멘션은 곁가지라 실패해도 null로 흘린다 — 알림 하나 때문에 화면 전체를 날리지 않는다.
-  const [{ rows, truncated, failed }, alarms] = await Promise.all([
+  // 멘션 본문 조회까지 이 줄에 붙인다 — 알림만 있으면 되는 일이라 업무 조회를 기다릴 이유가 없다.
+  const [{ rows, truncated, failed }, mentions] = await Promise.all([
     collectTasks([session.userId]),
-    listMentionAlarms(MENTION_DAYS).catch(() => null),
+    listMentionAlarms(MENTION_DAYS)
+      .catch(() => null)
+      .then((alarms) => myMentions(alarms, session.userId)),
   ]);
 
   const projectIds = new Map(rows.map((row) => [row.name, row.projectId]));
@@ -271,7 +283,6 @@ export async function loadToday(): Promise<TodayData> {
   const tasks = rows.flatMap((row) => row.tasks.map((t) => toTask(t, row)));
 
   const classified = classifyTasks(tasks, now);
-  const mentions = await myMentions(alarms, session.userId);
 
   return {
     now,
@@ -582,7 +593,12 @@ export async function loadTeam(dept?: string): Promise<TeamData> {
     listEmployees(target),
   ]);
 
-  const { rows, truncated, failed } = await collectTasks(employees.map((e) => e.userId));
+  // 일정은 명단만 있으면 받을 수 있다 — 업무 조회(63회)를 기다릴 이유가 없어서 같이 띄운다.
+  const [{ rows, truncated, failed }, events] = await Promise.all([
+    collectTasks(employees.map((e) => e.userId)),
+    memberEvents(employees, now),
+  ]);
+
   const projectIds = new Map(rows.map((row) => [row.name, row.projectId]));
   const origin = new Map(rows.flatMap((row) => row.tasks.map((t) => [t.taskId, t] as const)));
 
@@ -618,7 +634,7 @@ export async function loadTeam(dept?: string): Promise<TeamData> {
       members,
     },
     projectIds,
-    events: await memberEvents(employees, now),
+    events,
     truncated,
     failed,
   };
