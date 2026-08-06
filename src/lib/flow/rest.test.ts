@@ -231,6 +231,45 @@ describe('게시글 상세에서 업무 상태 읽기', () => {
   });
 });
 
+describe('게시글 상세가 업무인지 아닌지를 가른다 (알림 → 상세 모달)', () => {
+  const stub = (data: unknown) => {
+    process.env.FLOW_API_KEY = 'test-key';
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({ response: { success: true, data } }),
+    })) as unknown as typeof fetch;
+  };
+
+  it('업무면 업무 번호와 고칠 값을 같이 준다 — 업무명으로 뒤질 일이 없다', async () => {
+    stub({
+      title: '업무 제목',
+      connectUrl: 'https://flow.team/l/Qm2hT',
+      registerName: '이종석',
+      registeredDateTime: '20260806141119',
+      editedDateTime: '20260806150000',
+      tasks: [{ ...STTS_TASK, TASK_SRNO: '45987597', END_DT: '20260813', PRIORITY: '2' }],
+    });
+    assert.deepEqual((await getPostBrief('82571885')).task, {
+      taskId: '45987597',
+      endDate: '20260813',
+      priority: 'high',
+      regDate: '20260806',
+      author: '이종석',
+      editDate: '20260806150000',
+    });
+  });
+
+  it('공지·회의록이면 null — 이게 업무가 아니라는 유일한 신호다', async () => {
+    stub({ title: '8월 정기 점검 안내', connectUrl: 'https://flow.team/l/Qm2hT', tasks: [] });
+    assert.equal((await getPostBrief('82013056')).task, null);
+  });
+
+  it('업무 번호가 비면 업무로 안 본다 — 번호 없이는 아무것도 못 고친다', async () => {
+    stub({ title: '업무 제목', tasks: [{ ...STTS_TASK, TASK_SRNO: '' }] });
+    assert.equal((await getPostBrief('1')).task, null);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // 내 업무 — 담당자 필터 조회 (PRD §6.5)
 // ---------------------------------------------------------------------------

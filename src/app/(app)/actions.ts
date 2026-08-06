@@ -26,7 +26,6 @@ import {
   createSubtask as createFlowSubtask,
   createTask as createFlowTask,
   describeSystemComment,
-  findTaskByPost,
   FlowRestError,
   getEvent,
   getPostBrief,
@@ -481,20 +480,23 @@ export interface NewsTaskResult extends ActionResult {
  * 알림 한 줄 → 상세 모달이 그릴 업무 (PRD §6.1.4). 헤더 알림을 누를 때 한 번 부른다.
  *
  * 알림은 `postId`만 준다. 상세 모달은 `taskSrno`를 요구해서(상태·마감일·우선순위 쓰기가 다
- * 그 값을 쓴다) 업무 목록을 거꾸로 뒤져 `postId`가 같은 줄을 고른다 (`findTaskByPost`).
+ * 그 값을 쓴다) 게시글 상세를 한 번 부른다 — 그 응답의 `tasks[0]`이 업무 번호와 함께
+ * **이 글이 업무인지 아닌지**를 같이 말해 준다 (`getPostBrief`).
  *
- * 업무명·프로젝트명·링크는 **알림 목록이 이미 들고 있는 값을 그대로 받는다** —
- * `loadNews`가 게시글 상세로 풀어 붙인 것이라, 여기서 다시 부르면 같은 왕복이 두 번이다.
- * 업무명은 검색어로만 쓰고 최종 판정은 `postId` 일치다.
+ * 예전에는 업무명으로 업무 목록을 뒤졌다(`findTaskByPost`). 제목이 안 걸리거나 100건 밖으로
+ * 밀린 업무가 **업무가 아닌 글**로 보였고, 그 조회가 한 번 실패하면 화면이 flow 링크로
+ * 내보냈다 — 멀쩡한 업무인데도. 판정 재료를 글 자신에게서 받으면 둘 다 안 생긴다.
  *
- * 업무가 아닌 글(공지·회의록·일정)은 업무 목록에 없다. 그때는 `notTask`로 돌려주고 부른 쪽이
- * **글 모달**을 연다 — 본문·첨부·댓글은 글 번호 하나로 다 읽어 온다 (`loadTaskPost`).
- * 고칠 값이 없을 뿐이지 읽을 것은 업무와 똑같이 있다.
+ * 프로젝트명은 알림 목록이 들고 있는 값을 그대로 받는다 — 게시글 상세에 없는 유일한 값이다.
+ *
+ * 업무가 아닌 글(공지·회의록·일정)은 `notTask`로 돌려주고 부른 쪽이 **글 모달**을 연다 —
+ * 본문·첨부·댓글은 글 번호 하나로 다 읽어 온다 (`loadTaskPost`). 고칠 값이 없을 뿐이지
+ * 읽을 것은 업무와 똑같이 있다.
  */
 export async function loadNewsTask(input: {
   projectId: string;
   postId: string;
-  /** 알림이 푼 업무명. 없으면(상세 조회 실패) 찾을 방법이 없다. */
+  /** 알림이 푼 업무명. 게시글 상세가 제목을 못 주면 이걸 쓴다. */
   title?: string;
   /** 알림이 푼 프로젝트명. 모달 머리에 그대로 쓴다. */
   project?: string;
@@ -502,28 +504,26 @@ export async function loadNewsTask(input: {
   url?: string;
 }): Promise<NewsTaskResult> {
   try {
-    const found = input.title
-      ? await findTaskByPost(input.projectId, input.title, input.postId)
-      : null;
-    if (!found) return { ok: false, notTask: true, message: "업무가 아닌 글이에요." };
+    const brief = await getPostBrief(input.postId);
+    if (!brief.task) return { ok: false, notTask: true, message: "업무가 아닌 글이에요." };
 
-    const deadline = parseFlowDeadline(found.endDate);
+    const deadline = parseFlowDeadline(brief.task.endDate);
     return {
       ok: true,
       message: "",
       task: {
-        taskSrno: Number(found.taskId),
-        title: found.title,
-        status: found.status,
+        taskSrno: Number(brief.task.taskId),
+        title: brief.title ?? input.title ?? "제목 없는 업무",
+        status: brief.status ?? "",
         project: input.project ?? "",
-        endDate: found.endDate,
-        regDate: found.regDate,
-        author: found.author,
-        editDate: found.editDate || undefined,
-        priority: found.priority || undefined,
-        postId: found.postId,
+        endDate: brief.task.endDate,
+        regDate: brief.task.regDate,
+        author: brief.task.author,
+        editDate: brief.task.editDate || undefined,
+        priority: brief.task.priority || undefined,
+        postId: input.postId,
         daysLeft: deadline === null ? 0 : diffDays(Date.now(), deadline),
-        link: input.url || flowPostUrl(input.projectId, found.postId),
+        link: input.url || brief.url || flowPostUrl(input.projectId, input.postId),
       },
     };
   } catch (error) {

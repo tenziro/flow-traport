@@ -721,6 +721,11 @@ const STTS_LABEL: Record<string, string> = {
 
 /** api-spec §6.3 `tasks[]`. 게시글 상세는 필터 API와 달리 UPPER_SNAKE로 온다. */
 interface PostTask {
+  /** raw `TASK_SRNO`. **이 칸이 이 글을 업무로 만든다** — 상태·마감일 쓰기가 이 값을 쓴다. */
+  TASK_SRNO?: string;
+  END_DT?: string;
+  /** 숫자 코드(`2`). `toPriority`가 라벨 키로 바꾼다. */
+  PRIORITY?: string;
   TASK_COLUMN_REC?: {
     DEFAULT_COLUMN_TYPE?: string;
     COLUMN_DATA_REC?: { CUSTOM_COLUMN_DATA?: string; OPTION_NAME?: string }[];
@@ -793,6 +798,9 @@ export async function getPostBrief(postId: string, ttl?: number) {
     title?: string;
     connectUrl?: string;
     outContent?: string;
+    registerName?: string;
+    registeredDateTime?: string;
+    editedDateTime?: string;
     tasks?: PostTask[];
     upLinkTasks?: RawUpLink[];
     subTasks?: RawSubTask[];
@@ -800,9 +808,32 @@ export async function getPostBrief(postId: string, ttl?: number) {
     imageAttachments?: RawAttachment[];
   }>(`/user/posts/${postId}`, "게시글 조회", undefined, ttl);
   const up = d.upLinkTasks?.[0];
+  const task = d.tasks?.[0];
   return {
     title: d.title?.trim() || null,
     url: d.connectUrl?.trim() || null,
+    /**
+     * 이 글이 **업무면** 그 업무, 아니면 `null`. 공지·회의록·일정은 `tasks[]`가 비어 있다 —
+     * 업무인지 아닌지를 가르는 값이 여기 있고, 이게 유일하게 확실한 신호다.
+     *
+     * 예전에는 업무명으로 업무 목록을 뒤져 같은 `postId`를 골랐다(`findTaskByPost`). 그 길은
+     * 제목이 안 걸리거나 100건 밖으로 밀리면 업무를 **업무가 아닌 글로** 보고, 조회가 한 번
+     * 실패하면 flow 링크로 내보냈다. 이 응답은 알림 줄이 제목을 얻느라 이미 부르는 것이라
+     * 호출도 안 는다.
+     *
+     * 등록자·등록일·수정일은 글의 것이다 — 업무 목록의 `RGSR_ID`·`RGSN_DTTM` 칸과 같은 값이고,
+     * 그쪽은 실측에서 `null`로 비어 오는 자리가 있었다.
+     */
+    task: task?.TASK_SRNO?.trim()
+      ? {
+          taskId: task.TASK_SRNO.trim(),
+          endDate: task.END_DT?.trim() ?? "",
+          priority: toPriority(task.PRIORITY?.trim() ?? ""),
+          regDate: (d.registeredDateTime ?? "").slice(0, 8),
+          author: d.registerName?.trim() ?? "",
+          editDate: d.editedDateTime?.trim() ?? "",
+        }
+      : null,
     /**
      * 본문 평문(`outContent`). HTML 쪽(`content`)은 안 쓴다 — 그릴 때 태그를 다시 지워야 한다.
      * 본문에도 사람을 부를 수 있어서 댓글과 같이 id를 뗀다 (`maskMentions`).
@@ -1282,32 +1313,6 @@ function toFlowTask(task: FilterTask): FlowTask {
     done: cell?.optionCategory === "2",
     upTaskId: task.upTaskId || "-1",
   };
-}
-
-/**
- * `postId` → 업무 한 건. `getTaskFields`의 반대 방향이다.
- *
- * 알림은 `postId`만 준다. 상세 모달은 `taskSrno`를 요구해서(상태·마감일 쓰기가 그 값을
- * 쓴다) 같은 필터 조회를 돌려 세운다 — 업무명으로 좁히고 `postId` 일치로 고른다.
- *
- * 업무가 아닌 글(공지·회의록)은 이 목록에 없다. 그때는 `null`이고, 화면이 flow 링크로 안내한다.
- *
- * ponytail: 첫 페이지(100건)만 본다 — `getTaskFields`와 같은 상한이다.
- */
-export async function findTaskByPost(
-  projectId: string,
-  title: string,
-  postId: string,
-): Promise<FlowTask | null> {
-  const query = `pageSize=100&searchWord=${encodeURIComponent(title)}`;
-  const data = await get<{ tasks?: FilterTask[] }>(
-    `/user/posts/projects/${projectId}/tasks/filter?${query}`,
-    "업무 조회",
-    undefined,
-    TASK_TTL,
-  );
-  const task = data.tasks?.find((t) => t.postId === postId);
-  return task ? toFlowTask(task) : null;
 }
 
 /** 담당자 필터가 걸리는 컬럼 번호. `WORKER_ID`가 기본 1번이다 (api-spec §6.1). */
