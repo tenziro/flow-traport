@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  describeSystemComment,
   getEvent,
   getPostBrief,
   getProjectBrief,
@@ -324,6 +325,21 @@ describe('내 업무 조회', () => {
     assert.equal(tasks[0].priority, 'urgent');
   });
 
+  // flow는 읽을 때 `0`~`3` 숫자 코드를 준다 — 그대로 두면 화면에 "2"가 뜬다 (실측 92건).
+  it('숫자로 오는 우선순위를 키로 바꾼다', async () => {
+    stub([
+      page([
+        filterTask([
+          NAME_COL,
+          { defaultColumnType: 'PRIORITY', columnData: [{ customColumnData: '2' }] },
+        ]),
+      ]),
+    ]);
+
+    const { tasks } = await listWorkerTasks('2916576', ['me']);
+    assert.equal(tasks[0].priority, 'high');
+  });
+
   it('base 상태는 코드표로 라벨을 만든다 — optionName이 빈 문자열로 온다', async () => {
     stub([
       page([
@@ -518,6 +534,26 @@ describe('업무 줄에 붙는 마지막 댓글', () => {
     assert.equal(isChangeLog(''), false);
     assert.equal(isChangeLog(null), false);
     assert.equal(isChangeLog(undefined), false);
+  });
+});
+
+describe('변경 로그를 사람 말로', () => {
+  // 우선순위만 값이 숫자다 — 라벨로 안 바꾸면 "우선순위를 2로 바꿨어요"가 나간다.
+  it('우선순위 숫자 코드를 라벨로 읽는다', () => {
+    assert.equal(describeSystemComment('S49^^0@$%'), '우선순위를 낮음으로 바꿨어요');
+    assert.equal(describeSystemComment('S49^^2@$%'), '우선순위를 높음으로 바꿨어요');
+    assert.equal(describeSystemComment('S49^^3@$%'), '우선순위를 긴급으로 바꿨어요');
+  });
+
+  it('나머지 필드는 값을 그대로 읽는다', () => {
+    assert.equal(
+      describeSystemComment("S41^^'서동조','김승호'@$%S48^^2026-07-16@$%"),
+      '담당자를 서동조, 김승호로 바꿨어요 · 마감일을 2026-07-16으로 바꿨어요',
+    );
+  });
+
+  it('모르는 코드만 오면 뭉뚱그린다', () => {
+    assert.equal(describeSystemComment('S99^^무엇@$%'), '업무 내용을 바꿨어요');
   });
 });
 

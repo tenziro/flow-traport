@@ -60,7 +60,10 @@ export interface WorklistTask {
    * 방치 표가 "왜 방치인지"를 말하려면 이 값이 필요하다. 없으면 undefined다.
    */
   editDate?: string;
-  /** `low`\|`normal`\|`high`\|`urgent`. 미설정이면 undefined — 표는 높음·긴급만 그린다. */
+  /**
+   * `low`\|`normal`\|`high`\|`urgent`. 미설정이면 undefined — 표는 높음·긴급만 그린다.
+   * flow가 주는 숫자 코드는 `toPriority`가 이미 바꿔 놓았다 (`toFlowTask`).
+   */
   priority?: string;
   /** 음수면 지남 */
   daysLeft: number;

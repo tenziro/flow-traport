@@ -28,7 +28,7 @@ import { DAY_MS, kstYmd } from "@/lib/aggregate/date";
 import { ALLOWED_DOMAIN, getApiKey, type FlowProfile } from "@/lib/auth";
 import type { FlowSearchEmployeesData, FlowSearchEvent } from "@/lib/flow/types";
 import { flowPostUrl } from "@/lib/flow/urls";
-import type { TaskPriority } from "@/lib/task-priority";
+import { TASK_PRIORITY, toPriority, type TaskPriority } from "@/lib/task-priority";
 import type { TaskStatus } from "@/lib/task-status";
 import { fmtDate } from "@/lib/utils";
 
@@ -532,7 +532,10 @@ export function describeSystemComment(systemCode: string): string {
     .flatMap((item) => {
       const [code, raw = ""] = item.split("^^");
       const field = SYSTEM_FIELD[code];
-      const value = raw.replace(/'/g, "").replace(/,/g, ", ").trim();
+      // 우선순위만 숫자 코드로 온다 (`S49^^2`) — 그대로 내면 "우선순위를 2로 바꿨어요"다.
+      const said =
+        code === "S49" ? (TASK_PRIORITY[toPriority(raw) as TaskPriority] ?? raw) : raw;
+      const value = said.replace(/'/g, "").replace(/,/g, ", ").trim();
       return field && value ? [`${field} ${value}${ro(value)} 바꿨어요`] : [];
     });
   return lines.length ? lines.join(" · ") : "업무 내용을 바꿨어요";
@@ -635,7 +638,11 @@ export interface TaskFields {
   endDate: string;
   /** 등록일 `YYYYMMDD`. 워크리스트·포커스는 이 값을 안 줘서 여기서만 온다. */
   regDate: string;
-  /** `low`\|`normal`\|`high`\|`urgent`. 미설정이면 빈 문자열이다. */
+  /**
+   * `low`\|`normal`\|`high`\|`urgent`. 미설정이면 빈 문자열이다.
+   *
+   * flow가 주는 건 숫자 코드(`2`)라 `toPriority`가 여기서 우리 키로 바꾼다.
+   */
   priority: string;
   /** 담당자 실명. 없으면 빈 배열이다. */
   workers: string[];
@@ -671,7 +678,7 @@ export async function getTaskFields(
     postId: task.postId,
     endDate: columnData(task, "END_DT")[0]?.customColumnData ?? "",
     regDate: regDateOf(task),
-    priority: columnData(task, "PRIORITY")[0]?.customColumnData ?? "",
+    priority: toPriority(columnData(task, "PRIORITY")[0]?.customColumnData ?? ""),
     workers: columnData(task, "WORKER_ID")
       .map((d) => d.userName || d.customColumnData || "")
       .filter(Boolean),
@@ -1002,11 +1009,18 @@ export interface Participant {
   outside?: boolean;
   /**
    * 얼굴 사진. **우리 기관 사람만** 채운다 — 참여자 API에는 없는 값이라 전사 명단(§9.3)에서
-   * 이메일로 맞춰 붙인다 (`loadProjectPanel`). 타사 사용자는 그 명단에 없다.
+   * 이메일로 맞춰 붙인다 (`participantsOf`). 타사 사용자는 그 명단에 없다.
    *
    * 없는 사람이 있다 (13명 중 4명). 비면 화면이 이름 첫 글자 원판을 그린다.
    */
   photo?: string;
+  /**
+   * 직책 (`과장`). 사진과 같은 자리에서 붙는다 — 명단 응답의 `responsibility`다
+   * (`responsibilityName`은 전원 빈 문자열이다, `members.ts`).
+   */
+  title?: string;
+  /** 부서 (`BZP R&D실`). 동명이인이 있을 때 누구를 부르는지 이걸로 가른다. */
+  division?: string;
 }
 
 /**
@@ -1113,7 +1127,8 @@ export interface FlowTask {
   /** 상태 라벨. 못 풀면 빈 문자열이다. */
   status: string;
   /**
-   * `low`\|`normal`\|`high`\|`urgent`. 미설정이면 빈 문자열이다.
+   * `low`\|`normal`\|`high`\|`urgent`. 미설정이면 빈 문자열이다 — flow가 주는 건 숫자
+   * 코드(`2`)고 `toPriority`가 여기서 바꾼다.
    *
    * **같은 응답에 이미 들어 있다** — 예전에는 모달이 열릴 때 `getTaskFields`로 따로 받았는데
    * (업무 한 건에 REST 1회), 목록이 주는 걸 안 읽고 있었다. 여기서 꺼내면 표가 공짜로 쓴다.
@@ -1150,7 +1165,7 @@ function toFlowTask(task: FilterTask): FlowTask {
       .map((d) => ({ userId: d.customColumnData ?? "", name: d.userName ?? "" }))
       .filter((w) => w.userId),
     status: cell?.optionName?.trim() || STTS_LABEL[cell?.customColumnData ?? ""] || "",
-    priority: columnData(task, "PRIORITY")[0]?.customColumnData ?? "",
+    priority: toPriority(columnData(task, "PRIORITY")[0]?.customColumnData ?? ""),
     done: cell?.optionCategory === "2",
     upTaskId: task.upTaskId || "-1",
   };

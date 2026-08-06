@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   useActionState,
   useEffect,
@@ -835,6 +836,21 @@ export function CommentForm({
     });
   }
 
+  /**
+   * 글 한 토막을 그리는 층에 그린다. 부른 이름은 댓글 목록과 같은 모양이다 (`LinkedText`) —
+   * 쓸 때와 읽을 때가 같아야 무엇이 멘션으로 나가는지 보낸 뒤에 알지 않는다.
+   */
+  const draw = (part: string) =>
+    splitPicked(part, called).map((piece, i) =>
+      piece.person ? (
+        <strong key={i} className="font-semibold text-primary">
+          {piece.text}
+        </strong>
+      ) : (
+        <span key={i}>{piece.text}</span>
+      ),
+    );
+
   function onKey(event: KeyboardEvent<HTMLTextAreaElement>) {
     /**
      * **한글을 조합하는 중에는 아무것도 안 한다.** `이종`처럼 아직 안 끝난 글자가 있으면
@@ -933,61 +949,95 @@ export function CommentForm({
           aria-activedescendant={found.length > 0 ? `${listId}-${hi}` : undefined}
           className="col-start-1 row-start-1 resize-none overflow-hidden bg-transparent px-3 py-1.5 text-sm leading-5 wrap-anywhere whitespace-pre-wrap text-transparent caret-foreground outline-none"
         />
-        {/* 글씨를 그리는 층. 만질 수 없다 — 누르는 것도 고르는 것도 아래 `textarea`가 받는다 */}
-        <p
-          aria-hidden
-          className="pointer-events-none col-start-1 row-start-1 px-3 py-1.5 text-sm leading-5 wrap-anywhere whitespace-pre-wrap"
-        >
+        {/*
+          글씨를 그리는 층. 만질 수 없다 — 누르는 것도 고르는 것도 아래 `textarea`가 받는다.
+
+          자동완성 목록이 **이 안에** 있다. `@`를 친 자리에서 펴야 하는데, 그 자리의 x좌표를
+          아는 건 같은 글을 같은 규칙으로 그리고 있는 이 층뿐이다. 글을 `@` 앞뒤로 갈라 그
+          사이에 빈 `<span class="relative">`를 세우면 목록이 거기 붙는다 — 캐럿 좌표를 재는
+          코드도, 잴 때마다 다시 그리는 이펙트도 필요 없다. `<p>`가 아니라 `<div>`인 이유가
+          이것이다(`<p>` 안에는 `<ul>`을 못 넣는다).
+
+          글자만 `aria-hidden`이다. 값은 아래 `textarea`가 이미 읽어 주고, 목록은 읽혀야 한다.
+        */}
+        <div className="pointer-events-none col-start-1 row-start-1 px-3 py-1.5 text-sm leading-5 wrap-anywhere whitespace-pre-wrap">
           {text ? (
-            splitPicked(text, called).map((part, i) =>
-              part.person ? (
-                // 댓글 목록의 부른 사람과 같은 모양이다 (`LinkedText`) — 쓸 때와 읽을 때가
-                // 같아야 무엇이 멘션으로 나가는지 보낸 뒤에 알지 않는다
-                <strong key={i} className="font-semibold text-primary">
-                  {part.text}
-                </strong>
-              ) : (
-                <span key={i}>{part.text}</span>
-              ),
-            )
+            <>
+              <span aria-hidden>{draw(at ? text.slice(0, at.from) : text)}</span>
+              {/* 입력칸 **위**로 편다. 이 폼은 모달 아래쪽이라 밑으로 펴면 목록이 화면 밖이다 */}
+              {found.length > 0 && (
+                <span className="relative">
+                  <ul
+                    id={listId}
+                    role="listbox"
+                    className="pointer-events-auto absolute bottom-full left-0 z-20 mb-1 max-w-64 min-w-max overflow-hidden rounded-md border border-border bg-popover shadow-md"
+                  >
+                    {found.map((person, i) => (
+                      <li key={person.userId}>
+                        <button
+                          type="button"
+                          id={`${listId}-${i}`}
+                          role="option"
+                          aria-selected={i === hi}
+                          // 눌림이 blur보다 먼저 와야 목록이 사라지기 전에 골라진다
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => pick(person)}
+                          onMouseEnter={() => setHi(i)}
+                          className={cn(
+                            "flex w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left",
+                            i === hi ? "bg-accent text-accent-foreground" : "text-foreground",
+                          )}
+                        >
+                          {/* 사진이 없는 사람이 있다 (실측 13명 중 4명) — 그때는 이름 첫 글자
+                              원판이다. 참여자 칸과 같은 표현이다 (`ProjectPanel`) */}
+                          {person.photo ? (
+                            <Image
+                              src={person.photo}
+                              alt=""
+                              width={28}
+                              height={28}
+                              className="size-7 shrink-0 rounded-full object-cover"
+                            />
+                          ) : (
+                            <span
+                              aria-hidden
+                              className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-xs"
+                            >
+                              {person.name.slice(0, 1)}
+                            </span>
+                          )}
+                          <span className="min-w-0 leading-tight">
+                            <span className="block truncate text-xs">
+                              <strong className="font-semibold">{person.name}</strong>
+                              {/* 직책·부서는 동명이인을 가르는 값이다. 없는 사람도 있어서
+                                  있을 때만 붙인다 (외부 참여자는 명단에 아예 없다) */}
+                              {person.title && (
+                                <span className="ml-1 font-normal opacity-70">{person.title}</span>
+                              )}
+                            </span>
+                            {person.division && (
+                              <span className="mt-0.5 block truncate text-[11px] opacity-60">
+                                {person.division}
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </span>
+              )}
+              <span aria-hidden>{at ? draw(text.slice(at.from)) : null}</span>
+            </>
           ) : (
-            <span className="text-muted-foreground/60">
+            <span aria-hidden className="text-muted-foreground/60">
               {replyTo ? "답글 남기기" : "댓글 남기기"} · @로 사람을 부르고, Shift+Enter로 줄을
               바꿔요
             </span>
           )}
           {/* 마지막 줄이 빈 줄이어도 칸이 안 줄게 붙잡는다 */}
-          {"​"}
-        </p>
-        {/* 입력칸 **위**로 편다. 이 폼은 모달 아래쪽이라 밑으로 펴면 목록이 화면 밖이다 */}
-        {found.length > 0 && (
-          <ul
-            id={listId}
-            role="listbox"
-            className="absolute bottom-full left-0 z-20 mb-1 w-full min-w-40 overflow-hidden rounded-md border border-border bg-popover py-1 shadow-md"
-          >
-            {found.map((person, i) => (
-              <li key={person.userId}>
-                <button
-                  type="button"
-                  id={`${listId}-${i}`}
-                  role="option"
-                  aria-selected={i === hi}
-                  // 눌림이 blur보다 먼저 와야 목록이 사라지기 전에 골라진다
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => pick(person)}
-                  onMouseEnter={() => setHi(i)}
-                  className={cn(
-                    "block w-full cursor-pointer truncate px-2.5 py-1.5 text-left text-xs",
-                    i === hi ? "bg-accent text-accent-foreground" : "text-foreground",
-                  )}
-                >
-                  {person.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+          <span aria-hidden>{"​"}</span>
+        </div>
       </div>
       <Button type="submit" size="sm" variant="secondary" disabled={pending}>
         <IconComment size={13} />

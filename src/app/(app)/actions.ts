@@ -471,8 +471,40 @@ export interface ParticipantResult extends ActionResult {
   participants?: Participant[];
 }
 
+/** 전사 명단 캐시(초). 얼굴이 바뀌는 일이 드물어서 길게 잡는다 — 카드를 여러 장 열어도 1회다. */
+const ROSTER_TTL = 600;
+
 /**
- * 담당자 후보. 프로젝트마다 한 번, 누를 때만 부른다.
+ * 프로젝트 참여자 + 얼굴·직책·부서.
+ *
+ * 참여자 API(§5.4)는 이름과 id뿐이라 전사 명단(§9.3)에서 이메일로 맞춰 붙인다 — **우리 기관
+ * 사람만** 그 명단에 있다. 명단은 10분 캐시라 화면에서 여러 번 불러도 실제 호출은 한 번이고,
+ * 실패해도 이름만으로 목록이 선다 (곁가지다).
+ */
+async function participantsOf(projectId: string): Promise<Participant[]> {
+  const [participants, roster] = await Promise.all([
+    listParticipants(projectId),
+    searchEmployees(undefined, ROSTER_TTL)
+      .then((d) => d.employees)
+      .catch(() => []),
+  ]);
+
+  const by = new Map(roster.map((e) => [e.email.toLowerCase(), e]));
+  return participants.map((p) => {
+    const found = p.outside ? undefined : by.get(p.userId.toLowerCase());
+    return found
+      ? {
+          ...p,
+          photo: found.profileImagePath,
+          title: found.responsibility,
+          division: found.divisionName,
+        }
+      : p;
+  });
+}
+
+/**
+ * 담당자 후보이자 댓글에서 부를 사람. 프로젝트마다 한 번, 누를 때만 부른다.
  *
  * 참여자 API가 우리 기관 사람만 줘서 그 프로젝트 업무에 이름이 있는 사람을 더한다
  * (`listParticipants`) — 그래서 REST 두 번이다. 누를 때만 부르는 이유가 여기 있다.
@@ -485,7 +517,7 @@ export async function loadParticipants(
   if (!projectId) return { ok: false, message: "프로젝트를 찾지 못했어요." };
 
   try {
-    const participants = await listParticipants(projectId);
+    const participants = await participantsOf(projectId);
     if (!participants.length) return { ok: false, message: "참여자를 찾지 못했어요." };
     return { ok: true, message: `참여자 ${participants.length}명이에요.`, participants };
   } catch (error) {
@@ -497,9 +529,6 @@ export interface ProjectPanelResult extends ActionResult {
   participants?: Participant[];
 }
 
-/** 전사 명단 캐시(초). 얼굴이 바뀌는 일이 드물어서 길게 잡는다 — 카드를 여러 장 열어도 1회다. */
-const ROSTER_TTL = 600;
-
 /**
  * 내 업무 카드를 펼쳤을 때 오른쪽에 붙는 참여자 목록 (PRD §6.5).
  *
@@ -510,27 +539,11 @@ const ROSTER_TTL = 600;
 export async function loadProjectPanel(projectId: string): Promise<ProjectPanelResult> {
   if (!projectId) return { ok: false, message: "프로젝트를 찾지 못했어요." };
 
-  const [participants, roster] = await Promise.all([
-    listParticipants(projectId).catch(() => null),
-    // 얼굴은 곁가지다 — 없으면 화면이 이름 첫 글자 원판을 그린다.
-    searchEmployees(undefined, ROSTER_TTL)
-      .then((d) => d.employees)
-      .catch(() => []),
-  ]);
-
-  if (!participants) return { ok: false, message: "참여자를 못 가져왔어요." };
-
-  // 참여자 API에 사진이 없다. 우리 기관 사람만 명단에서 이메일로 맞춰 붙인다 — 타사
-  // 사용자는 그 명단에 아예 없다 (api-spec §5.4).
-  const photos = new Map(roster.map((e) => [e.email.toLowerCase(), e.profileImagePath]));
-  return {
-    ok: true,
-    message: "",
-    participants: participants.map((p) => {
-      const photo = p.outside ? "" : photos.get(p.userId.toLowerCase());
-      return photo ? { ...p, photo } : p;
-    }),
-  };
+  try {
+    return { ok: true, message: "", participants: await participantsOf(projectId) };
+  } catch {
+    return { ok: false, message: "참여자를 못 가져왔어요." };
+  }
 }
 
 export interface TaskFieldsResult extends ActionResult {
