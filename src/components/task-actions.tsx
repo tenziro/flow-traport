@@ -1,6 +1,14 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import {
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import {
   createComment,
   loadParticipants,
@@ -29,11 +37,11 @@ import {
   IconSiren,
 } from "@/components/icons";
 import { Button } from "@/components/motion/button/base";
-import { Input } from "@/components/motion/input";
 import { type ReplyTarget } from "@/components/thread-view";
 import { StatusPill } from "@/components/status-pill";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { WorkerPicker } from "@/components/worker-picker";
+import { splitPicked, toMentions } from "@/lib/thread";
 import { cn, fmtDate, fmtDateTime } from "@/lib/utils";
 
 /**
@@ -709,11 +717,19 @@ function WorkerField({
   );
 }
 
+/** 자동완성 목록에 한 번에 세우는 사람 수. 입력칸 위에 뜨는 층이라 모달을 덮으면 안 된다. */
+const MENTION_SHOWN = 6;
+
 /**
  * 댓글·답글 한 줄 남기기. 상세 모달의 댓글 칸이 이걸 쓴다.
  *
- * `replyTo`가 있으면 답글이다. 다만 REST에 답글이 없어서 **`@이름`을 앞에 붙인 최상위
+ * `replyTo`가 있으면 답글이다. 다만 REST에 답글이 없어서 **상대를 앞에서 부른 최상위
  * 댓글**로 나간다 (`createComment` 주석) — 스레드로 묶이지는 않지만 위 목록에 바로 보인다.
+ *
+ * **`@`를 치면 그 프로젝트 참여자가 뜬다** (`loadParticipants` — 담당자 고르기와 같은 목록이다).
+ * 고르면 화면에는 `@이름`만 남고, 보낼 때 `toMentions`가 마크업으로 바꾼다 — 한 줄짜리
+ * 입력칸에 `@[이종석](jongseok.lee@traport.com)`이 그대로 있으면 이름 하나가 칸을 다 먹는다.
+ * 손으로 친 `@아무개`는 안 건드린다 (고른 사람만 바꾼다).
  */
 export function CommentForm({
   projectId,
@@ -737,7 +753,7 @@ export function CommentForm({
    */
   onSaved?: () => void;
 }) {
-  const input = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
   /**
    * 쓴 글을 우리가 든다. 폼 액션이 끝나면 React가 폼을 되감아 주지만(`requestFormReset`)
    * 그건 DOM 값을 지우는 것이고, beUI `Input`은 제 값을 state로 들고 그리는 컴포넌트라
@@ -745,12 +761,25 @@ export function CommentForm({
    * 남아 있던 이유다. 우리가 들면 성공한 자리에서 비울 수 있다.
    */
   const [text, setText] = useState("");
+  /** 자동완성으로 고른 사람들. 보낼 때 이 목록만 마크업으로 바뀐다 (`toMentions`). */
+  const [called, setCalled] = useState<Participant[]>([]);
+  /** 지금 `@` 뒤에 치는 중인 자리. `null`이면 목록이 닫힌 것이다. */
+  const [at, setAt] = useState<{ from: number; word: string } | null>(null);
+  /** 프로젝트 참여자. `@`를 처음 칠 때 한 번만 부른다 — 안 부르면 0회다. */
+  const [people, setPeople] = useState<Participant[] | null>(null);
+  /** 목록에서 지금 걸려 있는 줄. 화살표로 옮기고 Enter로 고른다. */
+  const [hi, setHi] = useState(0);
+  const [asking, startAsk] = useTransition();
+
   /** 비우기와 다시 부르기 둘 다 **성공한 자리**에서 한다 — 다섯 줄의 즉시 저장과 같다 (`useField`). */
   const [result, action, pending] = useActionState<ActionResult | null, FormData>(
     async (prev, form) => {
+      // 화면의 `@이름`을 여기서 마크업으로 바꾼다 — 서버는 `contents`를 그대로 flow에 넘긴다.
+      form.set("content", toMentions(String(form.get("content") ?? ""), called));
       const next = await createComment(prev, form);
       if (next.ok) {
         setText("");
+        setCalled([]);
         onSaved?.();
       }
       return next;
@@ -763,13 +792,99 @@ export function CommentForm({
     if (replyTo) input.current?.focus();
   }, [replyTo]);
 
+  const found =
+    at && people
+      ? people
+          .filter((p) => p.name.toLowerCase().includes(at.word.toLowerCase()))
+          .slice(0, MENTION_SHOWN)
+      : [];
+  const listId = `mention-${taskId}`;
+
+  function onText(next: string) {
+    setText(next);
+    // 캐럿 **바로 앞**의 `@말`만 본다. 공백·괄호가 끼면 부르는 중이 아니고, 이미 고른
+    // `@[이름](id)`은 `[`가 막는다.
+    const caret = input.current?.selectionStart ?? next.length;
+    const typing = /@([^\s@[\]()]*)$/.exec(next.slice(0, caret));
+    setAt(typing ? { from: caret - typing[0].length, word: typing[1] } : null);
+    setHi(0);
+    if (!typing || people || asking) return;
+
+    const form = new FormData();
+    form.set("projectId", projectId);
+    startAsk(async () => {
+      const next = await loadParticipants(null, form);
+      // 못 불러와도 빈 배열로 닫는다 — 댓글은 자동완성 없이도 남길 수 있다.
+      setPeople(next.participants ?? []);
+    });
+  }
+
+  function pick(person: Participant) {
+    if (!at) return;
+    const caret = input.current?.selectionStart ?? text.length;
+    // `@`는 지운다. 부르는 표시는 굵기와 색이 하고(`splitPicked`), `@`는 댓글 목록에서도
+    // 안 낸다 (`LinkedText`) — 여럿을 부르면 줄머리가 `@`로 차 있었다.
+    const head = `${text.slice(0, at.from)}${person.name} `;
+    setText(`${head}${text.slice(caret)}`);
+    setCalled((prev) => (prev.some((p) => p.userId === person.userId) ? prev : [...prev, person]));
+    setAt(null);
+    // 캐럿을 이름 뒤로 옮긴다 — 안 옮기면 이어 치는 글자가 이름 앞에 붙는다.
+    requestAnimationFrame(() => {
+      input.current?.focus();
+      input.current?.setSelectionRange(head.length, head.length);
+    });
+  }
+
+  function onKey(event: KeyboardEvent<HTMLTextAreaElement>) {
+    /**
+     * **한글을 조합하는 중에는 아무것도 안 한다.** `이종`처럼 아직 안 끝난 글자가 있으면
+     * 브라우저가 keydown을 `key: "Process"` · `keyCode: 229`로 준다 (Chrome 실측) — 그
+     * 자리에서 `Enter`로 읽고 폼을 보내면 사람을 고르려던 손이 댓글을 남긴다. 조합이 끝난
+     * 다음 눌린 키만 본다.
+     */
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+
+    if (found.length) {
+      const move = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+      if (move) {
+        event.preventDefault();
+        setHi((i) => (i + move + found.length) % found.length);
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        pick(found[hi]);
+        return;
+      }
+      if (event.key === "Escape") {
+        // 상세 모달도 Escape를 듣는다 — 목록만 닫고 여기서 멈춘다.
+        event.preventDefault();
+        event.stopPropagation();
+        setAt(null);
+        return;
+      }
+    }
+
+    // `textarea`는 Enter로 폼을 보내지 않는다 — 줄바꿈은 `Shift+Enter`에 두고 보내기를 우리가 부른다.
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  }
+
   return (
     <form action={action} className="flex flex-wrap items-center gap-2">
       <TaskRef projectId={projectId} taskId={taskId} path={path} />
       {/* 업무명은 `postId`를 찾는 검색어다 — 서버가 이걸로 프로젝트 업무를 줄인다 (rest.ts) */}
       <input type="hidden" name="title" value={title} />
-      {/* REST에 답글이 없어서 이름만 넘긴다 — 서버가 `@이름`을 앞에 붙인 댓글로 보낸다 */}
-      {replyTo && <input type="hidden" name="replyToName" value={replyTo.from} />}
+      {/* REST에 답글이 없어서 상대를 앞에서 부른 최상위 댓글로 보낸다. 이름만 넘기면 글자로만
+          `@이종석`이라 상대에게 알림이 안 간다 — `fromId`까지 줘야 서버가 마크업을 만든다 */}
+      {replyTo && (
+        <>
+          <input type="hidden" name="replyToName" value={replyTo.from} />
+          <input type="hidden" name="replyToId" value={replyTo.fromId} />
+        </>
+      )}
 
       {/* 누구에게 답하는지 한 줄로 세운다 — 입력칸 하나로 댓글과 답글을 다 받으니
           이 줄이 없으면 지금 어느 쪽인지 알 수 없다. `w-full`로 제 줄을 차지한다 */}
@@ -792,19 +907,88 @@ export function CommentForm({
       <label className="sr-only" htmlFor={`comment-${taskId}`}>
         {replyTo ? "답글" : "댓글"}
       </label>
-      {/* beUI Input 기본 치수(h-11 text-base)를 촘촘한 행에 맞춘다. 모서리는 기본값
-          그대로다 — 바로 옆 `남기기` 버튼과 같은 계열이라 둘이 한 벌로 붙는다. */}
-      <Input
-        ref={input}
-        id={`comment-${taskId}`}
-        name="content"
-        value={text}
-        onChange={setText}
-        placeholder={replyTo ? "답글 남기기" : "댓글 남기기"}
-        maxLength={2000}
-        className="min-w-0 flex-1"
-        classNames={{ field: "h-8 bg-background", input: "text-sm" }}
-      />
+      {/*
+        입력칸이 두 층이다. **아래가 진짜 `textarea`, 위가 글씨를 그리는 층**이다 —
+        `<input>`이나 맨 `textarea`로는 글자 일부만 굵게·색을 줄 수 없는데, 부른 이름은
+        댓글 목록에서 그렇게 나온다 (`LinkedText`). 두 층이 어긋나면 커서가 글자를 벗어나니
+        여백·글자 크기·줄 높이·줄바꿈 규칙을 똑같이 준다.
+
+        테두리와 바탕은 감싸는 쪽이 든다. 높이는 위층이 정하고 `textarea`가 늘어난다 —
+        `Shift+Enter`로 줄을 늘리면 칸도 같이 자란다 (`grid` 한 칸에 둘을 겹쳤다).
+      */}
+      <div className="relative grid min-w-0 flex-1 rounded-md border border-border bg-background transition-colors focus-within:border-foreground/40 focus-within:ring-2 focus-within:ring-ring/40">
+        <textarea
+          ref={input}
+          id={`comment-${taskId}`}
+          name="content"
+          rows={1}
+          value={text}
+          onChange={(event) => onText(event.target.value)}
+          onKeyDown={onKey}
+          maxLength={2000}
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={found.length > 0}
+          aria-controls={found.length > 0 ? listId : undefined}
+          aria-activedescendant={found.length > 0 ? `${listId}-${hi}` : undefined}
+          className="col-start-1 row-start-1 resize-none overflow-hidden bg-transparent px-3 py-1.5 text-sm leading-5 wrap-anywhere whitespace-pre-wrap text-transparent caret-foreground outline-none"
+        />
+        {/* 글씨를 그리는 층. 만질 수 없다 — 누르는 것도 고르는 것도 아래 `textarea`가 받는다 */}
+        <p
+          aria-hidden
+          className="pointer-events-none col-start-1 row-start-1 px-3 py-1.5 text-sm leading-5 wrap-anywhere whitespace-pre-wrap"
+        >
+          {text ? (
+            splitPicked(text, called).map((part, i) =>
+              part.person ? (
+                // 댓글 목록의 부른 사람과 같은 모양이다 (`LinkedText`) — 쓸 때와 읽을 때가
+                // 같아야 무엇이 멘션으로 나가는지 보낸 뒤에 알지 않는다
+                <strong key={i} className="font-semibold text-primary">
+                  {part.text}
+                </strong>
+              ) : (
+                <span key={i}>{part.text}</span>
+              ),
+            )
+          ) : (
+            <span className="text-muted-foreground/60">
+              {replyTo ? "답글 남기기" : "댓글 남기기"} · @로 사람을 부르고, Shift+Enter로 줄을
+              바꿔요
+            </span>
+          )}
+          {/* 마지막 줄이 빈 줄이어도 칸이 안 줄게 붙잡는다 */}
+          {"​"}
+        </p>
+        {/* 입력칸 **위**로 편다. 이 폼은 모달 아래쪽이라 밑으로 펴면 목록이 화면 밖이다 */}
+        {found.length > 0 && (
+          <ul
+            id={listId}
+            role="listbox"
+            className="absolute bottom-full left-0 z-20 mb-1 w-full min-w-40 overflow-hidden rounded-md border border-border bg-popover py-1 shadow-md"
+          >
+            {found.map((person, i) => (
+              <li key={person.userId}>
+                <button
+                  type="button"
+                  id={`${listId}-${i}`}
+                  role="option"
+                  aria-selected={i === hi}
+                  // 눌림이 blur보다 먼저 와야 목록이 사라지기 전에 골라진다
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => pick(person)}
+                  onMouseEnter={() => setHi(i)}
+                  className={cn(
+                    "block w-full cursor-pointer truncate px-2.5 py-1.5 text-left text-xs",
+                    i === hi ? "bg-accent text-accent-foreground" : "text-foreground",
+                  )}
+                >
+                  {person.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       <Button type="submit" size="sm" variant="secondary" disabled={pending}>
         <IconComment size={13} />
         {pending ? "보내는 중…" : "남기기"}

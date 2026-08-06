@@ -1201,7 +1201,7 @@ Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSi
 > `S83`(`S83^^이성우` — 상단고정) — **뜻 미확정**이라 표시에 쓰지 않는다. 구분자는 필드 `^^` ·
 > 항목 `@$%`. 전체 코드표는 미확인이고, `registeredDateTime` 만 봐도 "최근 활동 시각"으로는 충분하다.
 
-### 13.2 `POST /user/comments/{postId}` — 게시글 댓글 작성 `(실측 2026-08-04)`
+### 13.2 `POST /user/comments/{postId}` — 게시글 댓글 작성 `(실측 2026-08-04 · 멘션 2026-08-06)`
 
 **Body는 `contents` 하나가 전부다.**
 
@@ -1213,20 +1213,43 @@ Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSi
 |---|---|---|
 | `contents` | ✅ | 본문. `content`가 아니다 — 오타를 내면 빈 댓글이 달린다 |
 
+**응답 `data`**: `{ projectId, postId, commentId }` — 방금 단 댓글의 번호다. 앱은 이걸 버리고
+목록을 통째로 다시 부른다 (`listComments`는 TTL 없이 `no-store`라 항상 새 것이 온다).
+
 경로에 `postId` 하나뿐이라 `projectId`는 필요 없다. 다만 우리 화면이 들고 있는 건 `taskSrno`라
 그걸 `postId`로 바꿔서 넘긴다 ([BUG-005](bug-report.md#bug-005) — §6.1 응답의 `postId`를 쓰거나
 `resolvePostId`로 푼다).
 
+> **멘션 마크업이 통한다** `(실측 2026-08-06 · 게시글 82343667)`. `contents`에
+> `@[이종석](jongseok.lee@traport.com) 본문` 을 그대로 넣어 POST 하면
+> (`{"commentId":"194266930"}` 응답) 서버가 이걸 **flow 화면의 멘션과 같은 프로필 앵커로
+> 파싱해서 저장한다** — §8.2 `remarks[].CNTN`을 다시 읽으니
+> `<a … onClick="fn_profile('jongseok.lee@traport.com');" profile-data='…'>이종석</a> 본문` 이었다.
+> flow UI가 직접 단 멘션과 구분되지 않는다.
+>
+> 괄호 안 id는 **사내 이메일**(`jongseok.lee@traport.com`) 또는 **짧은 flow id**(`ymh0510`)
+> 둘 다 받는다 — 같은 게시글에 두 꼴이 섞여 있었다. 앱은 §6.1 참여자 목록의 `userId`를
+> 그대로 쓴다 (`mentionMarkup` · `toMentions`, `src/lib/thread.ts`).
+>
+> **알림 발송은 직접 못 봤다.** 알림 조회(§7.1)의 `receiverId`가 API 키 주인으로 고정이고
+> flow는 자기 자신 멘션에 알림을 안 만든다 — 남의 알림함은 관측할 수 없다. 저장 형태가
+> flow UI 멘션과 같으니 알림도 같이 갈 것으로 본다 `(추정)`.
+
 > **답글은 못 쓴다** `(v4.0.0 · 재확인 2026-08-04)`. 부모 댓글을 가리키는 필드가 Body에 아예
 > 없고, 답글 전용 `POST /user/comments/{postId}/replies/{commentId}` 도 `404 NOT_FOUND_ERROR` 다
-> (읽기는 같은 경로로 `200` — §13.3). 그래서 답하기는 **`@이름 본문` 꼴의 최상위 댓글**로
-> 나간다 (`createComment`).
+> (읽기는 같은 경로로 `200` — §13.3). 그래서 답하기는 **`@[이름](id) 본문` 꼴의 최상위 댓글**로
+> 나간다 (`createComment`) — 위 실측 덕에 v4.14.0부터 글자가 아니라 진짜 멘션이다.
 >
 > 읽기가 열린 v4.2.0부터는 **남긴 답이 목록에 한 층 위로 뜬다** — 남이 flow에서 단 답글은
 > 부모 아래 들여쓰여 오는데, 앱이 올린 것은 최상위 댓글이라 맨 아래 붙는다. 대화 자체는
 > 안 사라지므로 그대로 둔다.
 >
-> 댓글 **수정·삭제**는 REST에 없다. flow 화면에서 한다.
+> 댓글 **수정·삭제**는 REST에 없다. `DELETE /user/comments/{postId}/{commentId}` ·
+> `DELETE /user/comments/{commentId}` 둘 다 `404 NOT_FOUND_ERROR` (실측 2026-08-06).
+> flow 화면에서 한다.
+>
+> **`editedDateTime`은 안 고친 댓글에도 온다** — `registeredDateTime`과 **같은 값**이다
+> (실측 2026-08-06). "수정됨" 표시는 둘이 다를 때만 낸다 (`toThread`).
 
 ### 13.3 `GET /user/comments/{postId}/replies/{commentId}` — 답글 조회 `(실측 2026-08-04)` ⭐
 

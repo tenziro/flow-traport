@@ -358,6 +358,8 @@ export interface FlowReply {
   registerName: string;
   /** `YYYYMMDDHHmmss` */
   registeredDateTime: string;
+  /** 안 고친 댓글은 `registeredDateTime`과 **같은 값**이 온다 (실측 2026-08-06). */
+  editedDateTime?: string;
 }
 
 /** api-spec §13.1 `Comment`. 화면에 쓰는 것만 적었다. */
@@ -374,6 +376,8 @@ export interface FlowComment {
   registerName: string;
   /** `YYYYMMDDHHmmss` */
   registeredDateTime: string;
+  /** 안 고친 댓글은 `registeredDateTime`과 **같은 값**이 온다 (실측 2026-08-06). */
+  editedDateTime?: string;
   /** `replyYn=Y`로 부르면 댓글마다 **최대 10건**이 붙어 온다. `replyId` 오름차순이다. */
   replies?: FlowReply[];
   /** 답글이 10건을 넘으면 참. 나머지는 `listReplies`로 받는다. */
@@ -425,8 +429,15 @@ export async function listReplies(postId: string, commentId: string): Promise<Fl
  *
  * 본문 한 줄만 받는다 — 스키마가 엄격해서 `contents` 말고는 아무것도 안 들어간다
  * `(실측 2026-08-04)`. `replyToRemarkId`·`files`·`imageFiles`를 얹으면 전부 거절이고,
- * 답글 전용 하위 경로도 없다. **REST로는 답글을 못 단다** — 답글 UI는 상대 이름을 앞에
- * 붙인 최상위 댓글로 보낸다 (`createComment` 호출부).
+ * 답글 전용 하위 경로도 없다. **REST로는 답글을 못 단다** — 답글 UI는 상대를 앞에서 부른
+ * 최상위 댓글로 보낸다 (`createComment` 호출부).
+ *
+ * **`contents`의 멘션 마크업은 서버가 푼다** — `@[이름](userId)`를 그대로 올리면 flow가
+ * 프로필 앵커로 바꿔 저장한다 (`mentionMarkup` — 실측 2026-08-06). 그래서 답글과 자동완성이
+ * 진짜 멘션으로 나간다.
+ *
+ * 응답은 `{ projectId, postId, commentId }`인데 쓰는 데가 없어 버린다 — 남긴 뒤에는 목록을
+ * 통째로 다시 받는다 (`TaskThread`).
  */
 export async function createComment(postId: string, contents: string): Promise<void> {
   await call(`/user/comments/${postId}`, "댓글 작성", { method: "POST", body: { contents } });

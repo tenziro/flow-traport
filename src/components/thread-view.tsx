@@ -8,8 +8,13 @@ import { Button } from "@/components/motion/button/base";
 import { tail } from "@/lib/thread";
 import { cn, fmtDateTime } from "@/lib/utils";
 
-/** 답글을 달 대상. `id`는 flow의 댓글 번호(`colabo_remark_srno`)다. */
-export type ReplyTarget = { id: string; from: string };
+/**
+ * 답글을 달 대상. `id`는 flow의 댓글 번호(`colabo_remark_srno`)다.
+ *
+ * `fromId`(작성자 flow user_id)까지 드는 건 **답글을 진짜 멘션으로 보내려고**다 —
+ * 이름만으로는 마크업을 못 만든다 (`mentionMarkup`).
+ */
+export type ReplyTarget = { id: string; from: string; fromId: string };
 
 /**
  * 갯수 줄 + `댓글 다 보기` + 댓글 목록. 업무 상세 모달과 멘션 상세 모달이 같이 쓴다.
@@ -39,12 +44,20 @@ export function CommentList({
   const [all, setAll] = useState(false);
   const shown = all ? comments : tail(comments);
   const hidden = comments.length - shown.length;
+  /**
+   * 세는 건 **사람이 남긴 말**만이다. 전에는 목록 줄 수를 그대로 냈는데, 실측 14건 중 10건이
+   * 담당자·마감일 변경 기록이라 "댓글 14개"를 보고 열면 사람 말은 4개였다. 기록도 업무 이력이라
+   * 버리지 않고 옆에 따로 센다 — 둘을 한 숫자로 합치는 것이 문제였지 기록이 문제가 아니었다.
+   */
+  const said = comments.filter((c) => !c.system).length;
+  const logs = comments.length - said;
 
   return (
     <>
       <div className="flex items-center justify-between gap-2">
-        <p className="tabular text-xs font-semibold text-muted-foreground">
-          댓글{comments.length > 0 && ` ${comments.length}개`}
+        <p className="tabular flex min-w-0 items-baseline gap-1.5 text-xs font-semibold text-muted-foreground">
+          <span>댓글{said > 0 && ` ${said}개`}</span>
+          {logs > 0 && <span className="font-normal text-muted-foreground/70">기록 {logs}건</span>}
         </p>
         {hidden > 0 && (
           // `-my-1` — 버튼(h-7)이 줄 높이를 밀어 본문 간격이 어긋나는 걸 막는다
@@ -148,12 +161,16 @@ export function CommentRows({
               {called && <span className="font-medium text-primary">나를 부름</span>}
               {comment.system && <span className="text-muted-foreground/70">기록</span>}
               <span className="text-muted-foreground">{fmtDateTime(comment.at)}</span>
+              {/* 고친 댓글. 앞에서 읽은 말과 지금 글이 다를 수 있다는 표시라 시각 바로 뒤다 */}
+              {comment.edited && <span className="text-muted-foreground/70">수정됨</span>}
               {/* 이름·시각과 같은 줄이다. 줄을 하나 더 쓰면 댓글 스무 개에 빈 줄이 스무 개고,
                   hover에 숨기면 만질 수 있는지를 만져 봐야 안다 */}
               {onReply && !comment.system && (
                 <button
                   type="button"
-                  onClick={() => onReply({ id: comment.id, from: comment.from })}
+                  onClick={() =>
+                    onReply({ id: comment.id, from: comment.from, fromId: comment.fromId })
+                  }
                   className={cn(
                     "cursor-pointer font-medium transition-colors hover:text-primary",
                     replyingTo === comment.id ? "text-primary" : "text-muted-foreground/70",

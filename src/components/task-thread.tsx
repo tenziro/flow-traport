@@ -131,9 +131,8 @@ function TaskRow({ link, children }: { link: PostLink; children: ReactNode }) {
             {got.files?.map((f) => (
               <FileRow key={f.url} file={f} />
             ))}
-            <p className="tabular text-xs text-muted-foreground">
-              {got.comments?.length ? `댓글 ${got.comments.length}개예요.` : "아직 댓글이 없어요."}
-            </p>
+            {/* 서버가 이미 세어 놨다 — 여기서 다시 세면 변경 기록까지 댓글로 잡힌다 */}
+            <p className="tabular text-xs text-muted-foreground">{got.message}</p>
           </>
         )}
         {link.url && (

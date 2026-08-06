@@ -62,6 +62,7 @@ import {
 import { flowPostUrl } from "@/lib/flow/urls";
 import { TASK_PRIORITY, type TaskPriority } from "@/lib/task-priority";
 import { TASK_STATUS, type TaskStatus } from "@/lib/task-status";
+import { mentionMarkup } from "@/lib/thread";
 
 export interface ActionResult {
   ok: boolean;
@@ -93,9 +94,13 @@ export async function updateTaskStatus(
  *
  * **REST에는 답글이 없다.** `POST /user/comments/{postId}`는 `contents` 하나만 받고
  * `replyToRemarkId`를 얹으면 거절한다 (`createComment` — 2026-08-04 실측). 그래서 답글은
- * 상대 이름을 앞에 붙인 **최상위 댓글**로 보낸다 — 스레드로 묶이지는 않지만 누구에게 하는
+ * 상대를 앞에서 부른 **최상위 댓글**로 보낸다 — 스레드로 묶이지는 않지만 누구에게 하는
  * 말인지는 남고, 무엇보다 목록에 보인다. 예전 답글은 남겨도 읽는 경로가 없어서 화면에서
  * 사라졌다 (`listComments` 주석).
+ *
+ * **부를 때는 멘션 마크업을 쓴다** (`mentionMarkup` — 실측 2026-08-06). 예전에는 `@이름`
+ * 평문이었는데 flow가 그걸 멘션으로 안 읽어서 **상대에게 알림이 가지 않았다** — 답을 남겨도
+ * 상대는 답이 온 걸 몰랐다. `replyToId`가 없으면(옛 화면) 평문으로 떨어진다.
  */
 export async function createComment(
   _prev: ActionResult | null,
@@ -106,6 +111,7 @@ export async function createComment(
   const title = String(form.get("title") ?? "");
   const content = String(form.get("content") ?? "").trim();
   const replyTo = String(form.get("replyToName") ?? "").trim();
+  const replyToId = String(form.get("replyToId") ?? "").trim();
 
   if (!projectId || !taskId) return { ok: false, message: "업무를 찾지 못했어요." };
   if (!content) return { ok: false, message: "댓글 내용을 적어주세요." };
@@ -116,8 +122,10 @@ export async function createComment(
   const postId = await resolvePostId(projectId, taskId, title).catch(() => null);
   if (!postId) return { ok: false, message: "이 업무는 flow에서 댓글을 남겨주세요." };
 
+  const called = replyToId ? `${mentionMarkup(replyTo, replyToId)} ` : replyTo ? `@${replyTo} ` : "";
+
   return restRun(async () => {
-    await createFlowComment(postId, replyTo ? `@${replyTo} ${content}` : content);
+    await createFlowComment(postId, `${called}${content}`);
     return replyTo ? `${replyTo}님에게 답했어요.` : "댓글을 남겼어요.";
   }, form.get("path"));
 }
@@ -240,9 +248,16 @@ export async function updateTaskWorker(
 export interface ThreadComment {
   id: string;
   from: string;
+  /**
+   * 작성자 flow user_id. **답글이 진짜 멘션으로 나가는 근거다** — 이름만으로는 마크업을
+   * 못 만든다 (`mentionMarkup`). 시스템 기록에도 값은 있지만 쓰는 데가 없다.
+   */
+  fromId: string;
   /** `YYYYMMDDHHmmss` */
   at: string;
   body: string;
+  /** flow에서 고친 댓글. 시각 옆에 `수정됨`을 붙인다. */
+  edited?: boolean;
   /** flow가 남긴 업무 변경 기록이면 true. 화면에서 흐리게 낸다 (PRD §13 B4). */
   system: boolean;
   /** 답글이면 true. 바로 위 댓글에 달린 말이라 화면에서 한 칸 들여쓴다. */
@@ -287,7 +302,14 @@ async function fillReplies(postId: string, comments: FlowComment[]): Promise<Flo
  */
 function toThread(comments: FlowComment[], me?: string): ThreadComment[] {
   const line = (
-    c: { contents: string; systemCode?: string | null; registerName: string; registerId: string; registeredDateTime: string },
+    c: {
+      contents: string;
+      systemCode?: string | null;
+      registerName: string;
+      registerId: string;
+      registeredDateTime: string;
+      editedDateTime?: string;
+    },
     id: string,
     reply?: boolean,
   ): ThreadComment => {
@@ -297,9 +319,12 @@ function toThread(comments: FlowComment[], me?: string): ThreadComment[] {
     return {
       id,
       from: c.registerName || c.registerId,
+      fromId: c.registerId,
       at: c.registeredDateTime,
       body: log ? describeSystemComment(c.systemCode ?? "") : maskMentions(c.contents),
       system: log,
+      // 안 고친 댓글은 두 값이 같다 — 다를 때만 붙인다 (실측 2026-08-06).
+      ...(!log && c.editedDateTime && c.editedDateTime !== c.registeredDateTime && { edited: true }),
       ...(reply && { reply: true }),
       // 변경 로그는 제외한다 — 담당자로 내 이름이 박힌 기록까지 "나를 부름"이 된다.
       ...(!log && !!me && mentionsMe(c.contents, me) && { called: true }),
@@ -367,10 +392,13 @@ export async function loadTaskPost(input: {
     ]);
 
     const rows = toThread(comments, session?.userId);
+    // 세는 건 **사람이 남긴 말**만이다. 실측 14건 중 10건이 변경 로그라, 전부 세면 "댓글
+    // 14개"를 보고 열었는데 사람 말은 4개인 화면이 된다.
+    const said = rows.filter((r) => !r.system).length;
     return {
       ok: true,
       body: post?.body ?? "",
-      message: rows.length ? `댓글 ${rows.length}개예요.` : "아직 댓글이 없어요.",
+      message: said ? `댓글 ${said}개예요.` : "아직 댓글이 없어요.",
       comments: rows.length ? rows : undefined,
       // 셋 다 같은 왕복에 딸려 온 값이다 — 본문 하나 때문에 이미 받던 응답에 들어 있었다.
       parent: post?.parent ?? undefined,
