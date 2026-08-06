@@ -17,8 +17,39 @@ const ITEMS: BouncyAccordionItem[] = CHANGELOG.map((release) => ({
       <span className="text-muted-foreground">v{release.version}</span> {release.title}
     </>
   ),
-  description: release.body,
+  description: <Body body={release.body} />,
 }));
+
+/**
+ * 한 배포의 본문. **문장마다 한 줄**로 세운다 (`ul > li`).
+ *
+ * 본문은 한 배포에 든 변화 두셋을 이어 붙인 글이라 통짜 문단으로 내면 어디서 다음 이야기가
+ * 시작하는지가 안 보였다. 문장이 곧 항목이라 마침표에서 끊는다 — `4.16.0`처럼 점 뒤에 공백이
+ * 없는 자리는 안 끊긴다.
+ *
+ * `**굵게**`는 여기서 푼다. 원문(`changelog.ts`)이 마크다운으로 적혀 있는데 그대로 내보내면
+ * 별표가 글자로 보인다.
+ */
+function Body({ body }: { body: string }) {
+  return (
+    <ul className="list-disc space-y-1.5 pl-4 marker:text-muted-foreground/50">
+      {body.split(/(?<=\.)\s+/).map((line) => (
+        <li key={line}>
+          {/* 홀수 칸이 `**` 안쪽이다 — 캡처 그룹이 있는 `split`은 구분자도 같이 준다 */}
+          {line.split(/\*\*(.+?)\*\*/).map((part, i) =>
+            i % 2 ? (
+              <strong key={i} className="font-semibold text-foreground">
+                {part}
+              </strong>
+            ) : (
+              part
+            ),
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /**
  * 페이지 바닥 (≥768px). 왼쪽은 이게 뭔지, 오른쪽은 무엇이 바뀌었는지.

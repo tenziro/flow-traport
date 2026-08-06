@@ -634,6 +634,16 @@ https://api.flow.team
 
 > **`taskStatus` 는 문서 예시(`REQUEST`)를 믿으면 안 된다.** 업무 2.0 프로젝트에서는 `optionSrno` 숫자 문자열이 온다. 5.6으로 해석해야 한다.
 
+> **`readYn` 은 읽어만 진다 — 되돌리는 쓰기가 없다** `(실측 2026-08-06)`. 알림에는 읽음 처리가
+> 있지만(§7.2 `PATCH /user/alarms/read`) 게시글에는 그에 해당하는 길이 없다. 상세 조회로도 안
+> 바뀐다 — 안 읽은 글 하나를 `GET /user/posts/{postId}` 로 부른 뒤 목록을 다시 받아도 `readYn`
+> 이 `"N"` 그대로였다. 짐작할 만한 경로 12개(`PATCH /user/posts/read`, `.../{postId}/read`,
+> `POST .../{postId}/view`, `PATCH .../{postId}` 등)를 찔러 전부 `NOT_FOUND_ERROR` 를 받았다.
+> **대조군이 신호를 보증한다**: 길이 있고 대상이 없으면 500(`GET /user/posts/1`), 길이 없으면
+> 404(`GET /user/nonsense-xyz`)다 — 위 12개는 전부 후자였다.
+> 그래서 우리 화면(내 업무의 `업무 아닌 글`)은 **점을 지우지 않는다.** 화면에서만 끄면 flow에는
+> 안 읽음으로 남아서, 캐시가 풀리거나 다시 들어오면 점이 되살아난다 — 처리된 척이 제일 나쁘다.
+
 ### 6.3 `GET /user/posts/{postId}` — 게시글 상세
 
 **Path**: `postId` (string, 필수, 숫자, 1~15자). `projectId` 는 넘기지 않는다 (서버가 조회).
@@ -1235,14 +1245,19 @@ Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSi
 > flow는 자기 자신 멘션에 알림을 안 만든다 — 남의 알림함은 관측할 수 없다. 저장 형태가
 > flow UI 멘션과 같으니 알림도 같이 갈 것으로 본다 `(추정)`.
 
-> **답글은 못 쓴다** `(v4.0.0 · 재확인 2026-08-04)`. 부모 댓글을 가리키는 필드가 Body에 아예
+> **답글은 못 쓴다** `(v4.0.0 · 재확인 2026-08-06)`. 부모 댓글을 가리키는 필드가 Body에 아예
 > 없고, 답글 전용 `POST /user/comments/{postId}/replies/{commentId}` 도 `404 NOT_FOUND_ERROR` 다
 > (읽기는 같은 경로로 `200` — §13.3). 그래서 답하기는 **`@[이름](id) 본문` 꼴의 최상위 댓글**로
 > 나간다 (`createComment`) — 위 실측 덕에 v4.14.0부터 글자가 아니라 진짜 멘션이다.
 >
+> 2026-08-06 재확인에서 문 세 개를 다시 밀어 봤다: `POST …/replies/{commentId}` `404` ·
+> `POST …/reply/{commentId}` `404` · `POST /user/comments/{postId}` Body에 `replyToRemarkId`를
+> 실으면 `400 VALIDATION_ERROR` `unrecognized_keys`. Body가 받는 건 `contents` 하나뿐이다.
+>
 > 읽기가 열린 v4.2.0부터는 **남긴 답이 목록에 한 층 위로 뜬다** — 남이 flow에서 단 답글은
 > 부모 아래 들여쓰여 오는데, 앱이 올린 것은 최상위 댓글이라 맨 아래 붙는다. 대화 자체는
-> 안 사라지므로 그대로 둔다.
+> 안 사라지므로 그대로 둔다. v4.15.1부터는 **답글 쓰는 칸 위에 그 사실을 적는다** — 스레드로
+> 붙는다는 기대를 안 만드는 게 사용자가 아는 유일한 방법이다.
 >
 > 댓글 **수정·삭제**는 REST에 없다. `DELETE /user/comments/{postId}/{commentId}` ·
 > `DELETE /user/comments/{commentId}` 둘 다 `404 NOT_FOUND_ERROR` (실측 2026-08-06).

@@ -45,6 +45,19 @@ export function tail<T extends Foldable>(comments: T[]): T[] {
  */
 export const mentionMarkup = (name: string, userId: string) => `@[${name}](${userId})`;
 
+/**
+ * 답글로 보낼 한 줄. 상대를 앞에서 부르고 쓴 글을 잇는다 (`createComment`).
+ *
+ * **이미 부른 글이면 안 붙인다.** 자동완성으로 답할 상대를 직접 골라 쓰면 본문에 한 번,
+ * 앞에 한 번 — 같은 멘션이 두 번 나갔다. `userId`가 없으면 부를 방법이 `@이름` 평문뿐이라
+ * 알림은 안 가지만 누구에게 한 말인지는 남는다.
+ */
+export function withCall(content: string, name: string, userId: string) {
+  if (!name) return content;
+  const call = userId ? mentionMarkup(name, userId) : `@${name}`;
+  return content.includes(call) ? content : `${call} ${content}`;
+}
+
 /** `splitPicked`의 한 조각. `person`이 있으면 고른 사람 이름이다. */
 export type Picked = { name: string; userId: string };
 

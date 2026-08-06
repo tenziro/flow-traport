@@ -634,6 +634,14 @@ const authorOf = (task: FilterTask) => columnData(task, "RGSR_ID")[0]?.userName 
 export interface TaskFields {
   /** `colabo_commt_srno` — 댓글 도구가 요구하는 ID다 (BUG-005). */
   postId: string;
+  /**
+   * 시작일 `YYYYMMDD`. 미설정이면 빈 문자열이다.
+   *
+   * 마감일보다 덜 채운다 — 실측 50건 중 12건이다(마감일은 14건). 그래도 읽는 이유는
+   * 시작일이 빠져 있으면 flow가 마감일 수정을 거절하는 일이 없어서, 두 날짜가 같은
+   * 자리에 서 있어야 "언제부터 언제까지"가 한눈에 읽히기 때문이다.
+   */
+  startDate: string;
   /** `YYYYMMDD`. 미설정이면 빈 문자열이다 (`null`이 아니다 — api-spec §2.2). */
   endDate: string;
   /** 등록일 `YYYYMMDD`. 워크리스트·포커스는 이 값을 안 줘서 여기서만 온다. */
@@ -676,6 +684,7 @@ export async function getTaskFields(
 
   return {
     postId: task.postId,
+    startDate: columnData(task, "START_DT")[0]?.customColumnData ?? "",
     endDate: columnData(task, "END_DT")[0]?.customColumnData ?? "",
     regDate: regDateOf(task),
     priority: toPriority(columnData(task, "PRIORITY")[0]?.customColumnData ?? ""),
@@ -895,6 +904,14 @@ export async function setTaskStatus(projectId: string, taskId: string, status: T
   });
 }
 
+/** 시작일. `YYYYMMDD`. 마감일보다 늦으면 flow가 거절하고, 그 사유가 그대로 올라온다. */
+export async function setTaskStartDate(projectId: string, taskId: string, startDate: string) {
+  await call(taskField(projectId, taskId, "start-date"), "시작일 수정", {
+    method: "PATCH",
+    body: { startDate },
+  });
+}
+
 /** 마감일. `YYYYMMDD`. 시작일보다 빠르면 flow가 거절하고, 그 사유가 그대로 올라온다. */
 export async function setTaskEndDate(projectId: string, taskId: string, endDate: string) {
   await call(taskField(projectId, taskId, "end-date"), "마감일 수정", {
@@ -934,11 +951,42 @@ export async function setTaskWorkers(projectId: string, taskId: string, workerId
  */
 export async function createTask(
   projectId: string,
-  task: { title: string; contents: string; status: TaskStatus; endDate?: string },
+  task: {
+    title: string;
+    contents: string;
+    status: TaskStatus;
+    startDate?: string;
+    endDate?: string;
+    priority?: TaskPriority;
+    /** 담당자 로그인 ID. 프로젝트 참여자가 아니면 flow가 통째로 거절한다. */
+    workerIds?: string[];
+  },
 ): Promise<void> {
+  const { workerIds, ...rest } = task;
   await call(`/user/posts/projects/${projectId}/tasks`, "업무 등록", {
     method: "POST",
-    body: { ...task, contents: task.contents || task.title },
+    body: {
+      ...rest,
+      contents: task.contents || task.title,
+      // 빈 배열을 보내면 `workers`에 최소 1건을 요구하는 프로젝트에서 거절당한다 — 아예 뺀다.
+      ...(workerIds?.length ? { workers: workerIds.map((workerId) => ({ workerId })) } : {}),
+    },
+  });
+}
+
+/**
+ * 하위 업무 생성 (api-spec §6.4).
+ *
+ * 부모의 `taskId`를 경로에 넣는다 — 부모 글 번호(`postId`)가 아니다. `contents`는 선택이지만
+ * 업무 등록과 같은 이유로 제목을 넣는다: 본문이 빈 하위 업무는 상세를 열어도 읽을 게 없다.
+ *
+ * ponytail: 제목만 받는다. 상태·우선순위·진행률도 받는 API지만, 쪼개는 자리에서 그것까지
+ * 정하지 않는다 — 만든 뒤 그 업무를 열어 고치면 된다.
+ */
+export async function createSubtask(projectId: string, taskId: string, title: string) {
+  await call(`/user/posts/projects/${projectId}/tasks/${taskId}/subtasks`, "하위 업무 등록", {
+    method: "POST",
+    body: { title, contents: title, status: "request" },
   });
 }
 
@@ -1076,6 +1124,71 @@ export async function listParticipants(projectId: string): Promise<Participant[]
     ...listed,
     ...[...extra.values()].sort((a, b) => a.name.localeCompare(b.name, "ko")),
   ].map(mark);
+}
+
+/** 업무가 아닌 글 한 줄 (api-spec §6.2). */
+export interface ProjectPost {
+  postId: string;
+  title: string;
+  /** 일정이면 `일정`, 아니면 `글`. 목록에서 이 둘만 온다. */
+  kind: "글" | "일정";
+  author: string;
+  /** 작성일 `YYYYMMDD`. 일정이면 시작 시각의 날짜다. */
+  date: string;
+  /** 최상위 댓글 수. 답글은 안 세는 값이라 우리 화면의 댓글 수와 다르다 (§13.1). */
+  comments: number;
+  /** 아직 안 읽은 글. flow가 읽음 표시를 주는 몇 안 되는 자리다. */
+  unread: boolean;
+  url: string;
+}
+
+/** 게시글 목록 상한. 업무를 걸러 내고 남는 게 실측 25개 프로젝트에서 프로젝트당 평균 13건이다. */
+const POST_PAGE = 100;
+
+/** 목록 캐시(초). 공지·회의록은 업무보다 훨씬 덜 바뀐다. */
+const POST_TTL = 300;
+
+/**
+ * 프로젝트의 **업무가 아닌 글** (api-spec §6.2).
+ *
+ * 이 화면은 업무만 보여 줘서 공지·회의록·일정이 통째로 안 보였다 — 실측 25개 프로젝트에
+ * 일반글 237건, 일정 100건이 있었다. 업무는 1,504건이고 그건 이미 표에 있다.
+ *
+ * **업무 판정은 `taskStatus`가 채워졌는가로 한다.** `templateType`도 갈리기는 한다
+ * (`92` 업무 2.0 · `4` 옛 업무 · `91` 일반글 · `93` 일정) 하지만 문서가 이 값을 `"1"`이라고
+ * 적어 두고 실제로는 넷이 오는 필드라 (§6.2) 새 타입이 하나 더 생기면 그대로 새어 나온다.
+ * `taskStatus`는 업무 넷 다 채워 오고 나머지 둘은 빈 문자열이다 `(실측 2026-08-06, 1,841건)`.
+ *
+ * **이 목록은 최상위 글만 준다.** 하위 업무는 안 온다 — 프로젝트 2916576은 업무가 600건
+ * 넘는데 여기서는 14건이 왔다. 우리는 업무를 버리므로 상관없다.
+ */
+export async function listProjectPosts(projectId: string): Promise<ProjectPost[]> {
+  const data = await get<{
+    posts?: {
+      postId?: string;
+      title?: string;
+      taskStatus?: string;
+      registerName?: string;
+      registeredDateTime?: string;
+      scheduleStartDateTime?: string;
+      remarkCount?: string;
+      readYn?: string;
+    }[];
+  }>(`/user/posts/projects/${projectId}?pageSize=${POST_PAGE}`, "게시글 조회", undefined, POST_TTL);
+
+  return (data.posts ?? [])
+    .filter((p) => p.postId && !p.taskStatus?.trim())
+    .map((p) => ({
+      postId: p.postId!,
+      title: p.title?.trim() || "제목 없는 글",
+      kind: p.scheduleStartDateTime ? ("일정" as const) : ("글" as const),
+      author: p.registerName ?? "",
+      date: (p.scheduleStartDateTime || p.registeredDateTime || "").slice(0, 8),
+      comments: Number(p.remarkCount ?? "0") || 0,
+      unread: p.readYn === "N",
+      url: flowPostUrl(projectId, p.postId!),
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date));
 }
 
 /* ── 방치된 업무 (api-spec §5.6·§6.1, PRD §13 B5) ─────────────────────── */

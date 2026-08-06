@@ -12,10 +12,12 @@ import {
 } from "react";
 import {
   createComment,
+  createSubtask,
   loadParticipants,
   loadTaskFields,
   updateTaskEndDate,
   updateTaskPriority,
+  updateTaskStartDate,
   updateTaskStatus,
   updateTaskWorker,
   type ActionResult,
@@ -26,6 +28,7 @@ import { TASK_STATUS } from "@/lib/task-status";
 import { TASK_PRIORITY, type TaskPriority } from "@/lib/task-priority";
 import { DateMenu } from "@/components/date-field";
 import {
+  IconAdd,
   IconArrowDown,
   IconArrowUp,
   IconCheck,
@@ -93,7 +96,7 @@ const PICK =
   "-mx-1.5 flex h-8 max-w-full min-w-0 cursor-pointer items-center gap-1 rounded-md px-1.5 text-left transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-60";
 
 /**
- * 상태·등록일·마감일·우선순위·담당자 다섯 줄 (PRD §6.1.4).
+ * 상태·우선순위·등록일·시작일·마감일·담당자 줄 (PRD §6.1.4).
  *
  * 담당자는 워크리스트에 없다. **이 덩어리가 붙을 때 한 번만** 부른다 — 업무 한 줄에
  * REST 한 번이라, 표의 모든 행이 미리 부르면 열 줄에 열 번이다. 상세 모달이 열릴 때만
@@ -180,6 +183,16 @@ export function TaskEditFields({
         path={path}
         onSaved={(shown) => onSaved?.({ status: shown })}
       />
+      {/* 우선순위는 상태 바로 아래다 — 둘 다 "지금 이 업무를 어떻게 다룰까"고,
+          날짜 세 줄은 그 뒤로 묶인다. 고르기 줄끼리·날짜 줄끼리 붙어 있는 편이
+          훑기도 쉽다 */}
+      <PriorityField
+        projectId={projectId}
+        taskId={taskId}
+        now={level ? (TASK_PRIORITY[level as TaskPriority] ?? level) : restNow("")}
+        loading={loading}
+        path={path}
+      />
       {/* 등록일만 읽기다 — flow에 바꾸는 경로가 없다 (위 주석).
           마감일 위에 둔다 — 업무가 언제 시작해서 언제까지인지가 시간 순서로 읽힌다 */}
       <div className={ROW}>
@@ -190,21 +203,28 @@ export function TaskEditFields({
           </span>
         </div>
       </div>
-      {/* 마감일은 목록이 이미 알아서 REST를 안 기다린다 — 여기만 `loading`을 안 넘긴다 */}
-      <EndDateField
+      {/* 시작일은 목록이 안 줘서 REST 응답을 기다린다 — 그동안은 빈 값이 아니라 그 사정을 적는다 */}
+      <TaskDateField
+        label="시작일"
+        field="startDate"
+        action={updateTaskStartDate}
+        projectId={projectId}
+        taskId={taskId}
+        now={fields?.startDate ?? ""}
+        loading={loading}
+        path={path}
+      />
+      {/* 마감일은 목록이 이미 알아서 REST를 안 기다린다 */}
+      <TaskDateField
+        label="마감일"
+        field="endDate"
+        action={updateTaskEndDate}
         projectId={projectId}
         taskId={taskId}
         now={dueDate}
         path={path}
         /* 고른 값은 `YYYY-MM-DD`고 표는 flow 형식(`YYYYMMDD`)을 쓴다 */
         onSaved={(shown) => onSaved?.({ endDate: shown.replaceAll("-", "") })}
-      />
-      <PriorityField
-        projectId={projectId}
-        taskId={taskId}
-        now={level ? (TASK_PRIORITY[level as TaskPriority] ?? level) : restNow("")}
-        loading={loading}
-        path={path}
       />
       {/* 마지막 수정도 읽기다 — 등록일과 같이 flow에 바꾸는 경로가 없다. 방치 판정이
           이 값 하나로 갈리는데(30일 넘게 안 바뀜) 어디에도 안 보여서, 표에서 "왜 여기
@@ -228,17 +248,6 @@ export function TaskEditFields({
         path={path}
       />
     </div>
-  );
-}
-
-/** 댓글 폼의 숨은 필드. 다섯 줄은 폼이 아니라 손으로 FormData를 만든다 (`useField`). */
-function TaskRef({ projectId, taskId, path }: { projectId: string; taskId: number; path: string }) {
-  return (
-    <>
-      <input type="hidden" name="projectId" value={projectId} />
-      <input type="hidden" name="taskId" value={taskId} />
-      <input type="hidden" name="path" value={path} />
-    </>
   );
 }
 
@@ -348,20 +357,54 @@ function PickMark({ pending }: { pending: boolean }) {
  * 말한다 — 아래·수평·위·경보. 아는 라벨이 아니면(`불러오는 중…`·`아직 없어요`·
  * `지금 값을 못 가져왔어요`) 글자만 낸다. 없는 값에 그림을 붙이면 값이 있는 것처럼 읽힌다.
  */
-export const PRIORITY_MARK: Record<string, { Icon: typeof IconArrowDown; tone: string }> = {
-  낮음: { Icon: IconArrowDown, tone: "text-muted-foreground" },
-  보통: { Icon: IconMinus, tone: "text-success-foreground" },
-  높음: { Icon: IconArrowUp, tone: "text-warning-foreground" },
-  긴급: { Icon: IconSiren, tone: "text-danger-foreground" },
+export const PRIORITY_MARK: Record<
+  string,
+  { Icon: typeof IconArrowDown; tone: string; chip: string }
+> = {
+  낮음: {
+    Icon: IconArrowDown,
+    tone: "text-muted-foreground",
+    chip: "bg-neutral-bg text-neutral-foreground",
+  },
+  보통: {
+    Icon: IconMinus,
+    tone: "text-success-foreground",
+    chip: "bg-success-bg text-success-foreground",
+  },
+  높음: {
+    Icon: IconArrowUp,
+    tone: "text-warning-foreground",
+    chip: "bg-warning-bg text-warning-foreground",
+  },
+  긴급: {
+    Icon: IconSiren,
+    tone: "text-danger-foreground",
+    chip: "bg-danger-bg text-danger-foreground",
+  },
 };
 
-function PriorityMark({ label }: { label: string }) {
+/**
+ * 값 하나를 그리는 법. **상태 배지와 같은 모양이다** (`StatusPill` — 같은 높이·모서리·여백에
+ * 면 색이 깔린다). 두 줄이 나란히 서는 자리라, 한쪽만 글자면 우선순위가 상태보다 덜한 값처럼
+ * 읽혔다. 점 대신 단계 그림이 들어가는 것만 다르다 — 그 그림이 표의 표식과 같은 것이다.
+ *
+ * 아는 라벨이 아니면(`불러오는 중…`·`아직 없어요`·`지금 값을 못 가져왔어요`) 면 없이 글자만
+ * 낸다. 없는 값에 배지를 씌우면 값이 있는 것처럼 읽힌다.
+ */
+export function PriorityMark({ label }: { label: string }) {
   const mark = PRIORITY_MARK[label];
+  if (!mark)
+    return <span className="min-w-0 truncate text-xs">{label}</span>;
 
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      {mark && <mark.Icon size={13} aria-hidden className={cn("shrink-0", mark.tone)} />}
-      <span className="min-w-0 truncate text-xs">{label}</span>
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-0.5 text-xs",
+        mark.chip,
+      )}
+    >
+      <mark.Icon size={13} aria-hidden className="shrink-0" />
+      {label}
     </span>
   );
 }
@@ -381,7 +424,7 @@ function PriorityMark({ label }: { label: string }) {
  * 그래서 `role="menu"`도 안 붙인다. 메뉴라고 알리면 화살표로 움직일 수 있다는 뜻이 되고,
  * 그걸 믿은 사람은 목록 안에서 아무 데도 못 간다.
  */
-function PickMenu({
+export function PickMenu({
   label,
   options,
   now,
@@ -389,6 +432,8 @@ function PickMenu({
   pending,
   onPick,
   render,
+  className,
+  aria,
 }: {
   label: string;
   /** `[코드, 화면에 낼 라벨]`. 상태·우선순위 표를 그대로 받는다. */
@@ -399,14 +444,18 @@ function PickMenu({
   pending: boolean;
   onPick: (value: string, label: string) => void;
   /**
-   * 라벨 하나를 그리는 법. 상태는 배지(`StatusPill`), 우선순위는 아이콘+글자다
-   * (`PriorityMark`).
+   * 라벨 하나를 그리는 법. 상태는 배지(`StatusPill`), 우선순위는 같은 모양에 단계 그림이
+   * 든 배지다 (`PriorityMark`).
    *
    * 트리거와 목록이 **같은 함수**를 쓴다 — 고른 값은 목록에서 본 그 모양으로 자리에 남는다.
    * 트리거만 따로 그리던 때는 목록이 글자뿐이고 트리거만 배지라, 고르고 나면 방금 누른 것과
    * 다른 것이 켜진 것처럼 보였다.
    */
   render: (label: string) => ReactNode;
+  /** 트리거 모양. 기본은 테두리 없는 모달 줄이고, 폼 안에서는 옆 입력칸과 같은 네모를 준다. */
+  className?: string;
+  /** 읽어 줄 이름. 기본은 "바꾸기"라 아직 없는 값을 정하는 자리에서는 갈아 끼운다. */
+  aria?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -416,8 +465,8 @@ function PickMenu({
         type="button"
         disabled={disabled || pending}
         /* 값이 트리거라 그냥 두면 이름이 값뿐이다 — 무슨 값인지, 눌러서 뭐가 되는지 같이 읽힌다 */
-        aria-label={`${label} 바꾸기, 지금 ${now}`}
-        className={PICK}
+        aria-label={aria ?? `${label} 바꾸기, 지금 ${now}`}
+        className={className ?? PICK}
       >
         {render(now)}
         <PickMark pending={pending} />
@@ -429,7 +478,9 @@ function PickMenu({
       <PopoverContent
         align="start"
         aria-label={label}
-        className="z-[110] w-36 gap-0 p-1"
+        /* 폭은 내용이 정한다 — 고정 `w-36`은 `대기`·`보통` 같은 두 글자 줄 오른쪽에 빈 판을
+           남겼다. 가장 긴 줄(`피드백` + 체크)에 맞춰 줄어든다 */
+        className="z-[110] w-max gap-0 p-1"
         onEscapeKeyDown={(event) => event.stopPropagation()}
       >
         {options.map(([value, text]) => (
@@ -483,9 +534,9 @@ function StatusField({
           now={current}
           pending={pending}
           onPick={(value, label) => save({ status: value, shown: label })}
-          /* 상태는 글자가 아니라 배지다 — 값 자체가 색을 갖는 유일한 줄이고(요청·진행·
-             피드백·완료·보류), 머리에 있는 배지와 같은 모양이라 이 줄이 그 값을 가리킨다는
-             걸 따로 읽지 않아도 된다. 색만으로 말하지 않는다 — 라벨 글자가 같이 나간다.
+          /* 상태는 글자가 아니라 배지다 — 값 자체가 색을 갖고(대기·진행·피드백·완료·보류),
+             머리에 있는 배지와 같은 모양이라 이 줄이 그 값을 가리킨다는 걸 따로 읽지 않아도
+             된다. 바로 아래 우선순위 줄도 같은 모양이다. 색만으로 말하지 않는다 — 라벨 글자가 같이 나간다.
              고르기 목록도 같은 배지다: 목록에서 색을 보고 고른 사람은 그 색이 자리에 남을
              거라고 읽는다 */
           render={(label) => <StatusPill status={label} />}
@@ -498,48 +549,65 @@ function StatusField({
 }
 
 /**
- * 마감일 (PRD §13 A4).
+ * 시작일·마감일 한 줄 (PRD §13 A4). 두 줄이 필드 이름과 액션만 다르다.
  *
  * 후보가 365개라 목록이 아니라 달력이다 — shadcn `Calendar` + `Popover` (`date-field.tsx`).
  * 값은 `YYYY-MM-DD` 문자열이고 서버가 하이픈만 떼서 flow의 `YYYYMMDD`로 만든다.
  *
  * 이미 골라 둔 날짜를 다시 누르면 저장하지 않고 접기만 한다 — 달력은 같은 날을 다시 누르면
- * 고른 것을 지워서 빈 값을 주는데, 마감일을 지우는 경로는 flow에 없다.
+ * 고른 것을 지워서 빈 값을 주는데, 날짜를 지우는 경로는 flow에 없다.
+ *
+ * **두 날짜는 서로를 막는다.** 시작일이 마감일보다 늦으면(그 반대도) flow가 거절하는데,
+ * 여기서 미리 막지 않는다 — 사유를 flow가 우리보다 정확하게 적어 주고, 그 문구가 이 줄에
+ * 그대로 올라온다.
  */
-function EndDateField({
+function TaskDateField({
+  label,
+  field,
+  action,
   projectId,
   taskId,
   now,
+  loading,
   path,
   onSaved,
 }: {
+  label: string;
+  /** 서버 액션이 읽는 FormData 이름 (`startDate`·`endDate`). */
+  field: string;
+  action: (prev: ActionResult | null, form: FormData) => Promise<ActionResult>;
   projectId: string;
   taskId: number;
-  /** 지금 마감일 `YYYYMMDD`. 빈 문자열이면 아직 없다. */
+  /** 지금 날짜 `YYYYMMDD`. 빈 문자열이면 아직 없다. */
   now: string;
+  /** 지금 값이 아직 안 왔으면 못 누른다 — 없는 줄 알고 고르면 남의 날짜를 덮는다. */
+  loading?: boolean;
   path: string;
-  onSaved: (shown: string) => void;
+  /** 표에도 보이는 값일 때만 넘긴다 — 시작일은 표에 없다 (BUG-037). */
+  onSaved?: (shown: string) => void;
 }) {
   const { saved, result, pending, save } = useField(
-    updateTaskEndDate,
+    action,
     { projectId, taskId, path },
     onSaved,
   );
   /** 달력이 쓰는 `YYYY-MM-DD`. 그대로 화면에 낼 글자이기도 하다. */
   const value = saved || (now ? fmtDate(now) : "");
+  /** 못 가져온 것과 값이 빈 것은 다른 말이다 (`restNow`와 같은 이유). */
+  const shown = value || (loading ? "불러오는 중…" : "아직 없어요");
 
   return (
     <div className={ROW}>
-      <span className={LABEL}>마감일</span>
+      <span className={LABEL}>{label}</span>
       <div className={FIELD}>
         <DateMenu
           value={value}
-          disabled={pending}
-          aria-label={`마감일 바꾸기, 지금 ${value || "없어요"}`}
+          disabled={pending || loading}
+          aria-label={`${label} 바꾸기, 지금 ${value || "없어요"}`}
           className={PICK}
-          onPick={(picked) => picked && save({ endDate: picked, shown: picked })}
+          onPick={(picked) => picked && save({ [field]: picked, shown: picked })}
         >
-          <span className="min-w-0 truncate text-xs">{value || "아직 없어요"}</span>
+          <span className="min-w-0 truncate text-xs">{shown}</span>
           <PickMark pending={pending} />
         </DateMenu>
 
@@ -735,6 +803,7 @@ const MENTION_SHOWN = 6;
 export function CommentForm({
   projectId,
   taskId,
+  postId,
   title,
   path,
   replyTo,
@@ -742,7 +811,10 @@ export function CommentForm({
   onSaved,
 }: {
   projectId: string;
-  taskId: number;
+  /** 업무일 때만 있다. 업무가 아닌 글(공지·회의록)은 이 번호 자체가 없다. */
+  taskId?: number;
+  /** 아는 경우. 있으면 서버가 업무를 뒤지지 않고 이 글에 바로 남긴다 (`createComment`). */
+  postId?: string;
   title: string;
   path: string;
   /** 답글을 달 댓글. 없으면 일반 댓글이다. */
@@ -799,7 +871,9 @@ export function CommentForm({
           .filter((p) => p.name.toLowerCase().includes(at.word.toLowerCase()))
           .slice(0, MENTION_SHOWN)
       : [];
-  const listId = `mention-${taskId}`;
+  /** 한 화면에 이 폼이 둘 이상 설 수 있어서 id에 대상을 섞는다. 업무면 업무 번호, 글이면 글 번호다. */
+  const key = taskId ?? postId;
+  const listId = `mention-${key}`;
 
   function onText(next: string) {
     setText(next);
@@ -890,8 +964,15 @@ export function CommentForm({
 
   return (
     <form action={action} className="flex flex-wrap items-center gap-2">
-      <TaskRef projectId={projectId} taskId={taskId} path={path} />
-      {/* 업무명은 `postId`를 찾는 검색어다 — 서버가 이걸로 프로젝트 업무를 줄인다 (rest.ts) */}
+      <input type="hidden" name="projectId" value={projectId} />
+      <input type="hidden" name="path" value={path} />
+      {/* 업무 번호와 업무명은 서버가 `postId`를 찾는 데 쓴다 (rest.ts). 글 번호를 이미 알면
+          찾을 것이 없어서 그것만 보낸다 — 업무가 아닌 글에는 업무 번호가 아예 없다 */}
+      {postId ? (
+        <input type="hidden" name="postId" value={postId} />
+      ) : (
+        <input type="hidden" name="taskId" value={taskId} />
+      )}
       <input type="hidden" name="title" value={title} />
       {/* REST에 답글이 없어서 상대를 앞에서 부른 최상위 댓글로 보낸다. 이름만 넘기면 글자로만
           `@이종석`이라 상대에게 알림이 안 간다 — `fromId`까지 줘야 서버가 마크업을 만든다 */}
@@ -903,9 +984,14 @@ export function CommentForm({
       )}
 
       {/* 누구에게 답하는지 한 줄로 세운다 — 입력칸 하나로 댓글과 답글을 다 받으니
-          이 줄이 없으면 지금 어느 쪽인지 알 수 없다. `w-full`로 제 줄을 차지한다 */}
+          이 줄이 없으면 지금 어느 쪽인지 알 수 없다. `w-full`로 제 줄을 차지한다.
+
+          **어디에 달리는지도 같이 적는다.** flow REST에 답글 쓰기가 없어서(실측 재확인
+          2026-08-06 — 전용 경로는 404, 본문에 부모 필드를 넣으면 `unrecognized_keys`)
+          이 글은 그 댓글 아래가 아니라 목록 맨 아래에 최상위로 붙는다. 안 적으면 답이
+          엉뚱한 데 달린 것처럼 보인다 */}
       {replyTo && (
-        <p className="flex w-full min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <p className="flex w-full min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
           <IconLastComment size={12} className="shrink-0 text-primary" />
           <span className="min-w-0 truncate">
             <span className="font-medium text-foreground">{replyTo.from}</span>님에게 답글
@@ -917,10 +1003,14 @@ export function CommentForm({
           >
             그만두기
           </button>
+          <span className="w-full text-muted-foreground/70">
+            flow가 답글 쓰기를 안 열어 둬서, 이 글은 {replyTo.from}님을 부른 새 댓글로 맨 아래에
+            붙어요.
+          </span>
         </p>
       )}
 
-      <label className="sr-only" htmlFor={`comment-${taskId}`}>
+      <label className="sr-only" htmlFor={`comment-${key}`}>
         {replyTo ? "답글" : "댓글"}
       </label>
       {/*
@@ -935,7 +1025,7 @@ export function CommentForm({
       <div className="relative grid min-w-0 flex-1 rounded-md border border-border bg-background transition-colors focus-within:border-foreground/40 focus-within:ring-2 focus-within:ring-ring/40">
         <textarea
           ref={input}
-          id={`comment-${taskId}`}
+          id={`comment-${key}`}
           name="content"
           rows={1}
           value={text}
@@ -1042,6 +1132,73 @@ export function CommentForm({
       <Button type="submit" size="sm" variant="secondary" disabled={pending}>
         <IconComment size={13} />
         {pending ? "보내는 중…" : "남기기"}
+      </Button>
+
+      <Result result={result} />
+    </form>
+  );
+}
+
+/**
+ * 하위 업무 한 줄 만들기 (api-spec §6.4). 상세 모달의 하위 업무 칸이 이걸 쓴다.
+ *
+ * **이름만 받는다.** 상태·우선순위·담당자도 받는 API지만, 일을 쪼개는 자리에서 그것까지
+ * 정하지 않는다 — 쪼갠 다음 그 업무를 열어서 고치면 되고, 여기서 다 물으면 쪼개는 게
+ * 업무 하나 새로 만드는 것만큼 무거워진다.
+ *
+ * 확인 단계를 두지 않는다. 이름을 직접 타이핑하는 것 자체가 확인이고, 만들기는 파괴적이지
+ * 않다 (§8.1의 "확인 또는 실행 취소" 중 확인 — 댓글과 같다).
+ */
+export function SubtaskForm({
+  projectId,
+  taskId,
+  path,
+  onSaved,
+}: {
+  projectId: string;
+  /** 부모 업무 번호. flow가 경로에서 이걸로 부모를 잡는다 — 글 번호가 아니다. */
+  taskId: number;
+  path: string;
+  /** 만든 뒤. 바로 위 목록을 다시 부르는 데 쓴다 (`CommentForm`과 같은 이유). */
+  onSaved?: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [result, action, pending] = useActionState<ActionResult | null, FormData>(
+    async (prev, form) => {
+      const next = await createSubtask(prev, form);
+      if (next.ok) {
+        setTitle("");
+        onSaved?.();
+      }
+      return next;
+    },
+    null,
+  );
+
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="projectId" value={projectId} />
+      <input type="hidden" name="taskId" value={taskId} />
+      <input type="hidden" name="path" value={path} />
+
+      <label className="sr-only" htmlFor={`subtask-${taskId}`}>
+        하위 업무 이름
+      </label>
+      {/* 댓글 칸과 같은 테두리·같은 높이다 — 같은 모달 안에서 무엇을 적는 자리인지가
+          모양이 아니라 자리로 갈린다 */}
+      <input
+        id={`subtask-${taskId}`}
+        name="title"
+        value={title}
+        onChange={(event) => setTitle(event.target.value)}
+        maxLength={200}
+        autoComplete="off"
+        placeholder="쪼갤 일을 적어요"
+        className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-sm leading-5 transition-colors outline-none placeholder:text-muted-foreground/60 focus:border-foreground/40 focus:ring-2 focus:ring-ring/40"
+      />
+      <Button type="submit" size="sm" variant="secondary" disabled={pending || !title.trim()}>
+        <IconAdd size={13} />
+        {pending ? "만드는 중…" : "추가"}
       </Button>
 
       <Result result={result} />

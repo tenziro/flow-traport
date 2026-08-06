@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { splitPicked, tail, toMentions } from './thread';
+import { splitPicked, tail, toMentions, withCall } from './thread';
 
 /** `id`로 어느 줄이 남았는지 본다. `r` = 답글, `c` = 나를 부른 줄. */
 const rows = (spec: string[]) =>
@@ -97,5 +97,28 @@ describe('입력칸의 강조 조각 (splitPicked)', () => {
 
   it('빈 글은 조각이 없다', () => {
     assert.deepEqual(splitPicked('', [종석]), []);
+  });
+});
+
+describe('답글은 상대를 앞에서 부른다 (withCall)', () => {
+  const 명호 = ['여명호', 'ymh0510'] as const;
+
+  it('안 부른 글이면 앞에 붙인다', () => {
+    assert.equal(withCall('배포 부탁드려요', ...명호), '@[여명호](ymh0510) 배포 부탁드려요');
+  });
+
+  /** 자동완성으로 답할 상대를 직접 고르면 본문에 이미 있다 — 또 붙이면 두 번 불린다. */
+  it('이미 부른 글이면 안 붙인다', () => {
+    const 이미 = '@[여명호](ymh0510) 배포 부탁드려요';
+    assert.equal(withCall(이미, ...명호), 이미);
+  });
+
+  it('답글이 아니면 그대로 둔다', () => {
+    assert.equal(withCall('그냥 댓글', '', ''), '그냥 댓글');
+  });
+
+  /** 타사 계정처럼 id를 모르면 평문이다 — 알림은 안 가도 누구에게 한 말인지는 남는다. */
+  it('id가 없으면 `@이름` 평문으로 부른다', () => {
+    assert.equal(withCall('확인 부탁', '여명호', ''), '@여명호 확인 부탁');
   });
 });

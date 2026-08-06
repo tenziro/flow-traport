@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
  */
 
 /** 바꾸기 모달의 고르기 칸과 같은 모양·같은 높이 (`task-actions.tsx` `Chip`). */
-const TRIGGER =
+export const TRIGGER =
   "flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-left text-sm transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50";
 
 /** `YYYY-MM-DD` → 로컬 자정 `Date`. 형식이 어긋나면 undefined. */

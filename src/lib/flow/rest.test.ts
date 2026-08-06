@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  createTask,
   describeSystemComment,
   getEvent,
   getPostBrief,
   getProjectBrief,
   isChangeLog,
   lastHumanComment,
+  listProjectPosts,
   listWorkerTasks,
   listParticipants,
   mergeMentionComments,
@@ -973,5 +975,95 @@ describe('게시글 상세에서 관계·첨부 읽기', () => {
     assert.equal(brief.parent, null);
     assert.deepEqual(brief.subTasks, []);
     assert.deepEqual(brief.files, []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 업무가 아닌 글 · 업무 만들기 (api-spec §6.2·§6.4)
+// ---------------------------------------------------------------------------
+
+describe('프로젝트의 업무 아닌 글', () => {
+  const stub = (posts: unknown[]) => {
+    process.env.FLOW_API_KEY = 'test-key';
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({ response: { success: true, data: { posts } } }),
+    })) as unknown as typeof fetch;
+  };
+
+  /**
+   * **업무 판정은 `taskStatus`가 채워졌는가로 한다.** `templateType`으로 가르면 새 타입이
+   * 새어 나온다 — 실측(2026-08-06, 1,841건)에 넷이 있었다: `92`(업무 2.0)·`4`(옛 업무)·
+   * `91`(일반글)·`93`(일정). 업무 두 종류만 `taskStatus`를 채운다.
+   */
+  it('업무는 뺀다 — 왼쪽 표가 이미 세우는 줄이다', async () => {
+    stub([
+      { postId: '1', title: '업무 2.0', templateType: '92', taskStatus: '1' },
+      { postId: '2', title: '옛 업무', templateType: '4', taskStatus: '0' },
+      { postId: '3', title: '공지', templateType: '91', taskStatus: '' },
+    ]);
+    const posts = await listProjectPosts('2916576');
+    assert.deepEqual(posts.map((p) => p.title), ['공지']);
+  });
+
+  it('시작 시각이 있으면 일정이다', async () => {
+    stub([
+      { postId: '1', title: '주간 회의', scheduleStartDateTime: '20260810090000' },
+      { postId: '2', title: '회의록', registeredDateTime: '20260805150000' },
+    ]);
+    const posts = await listProjectPosts('2916576');
+    assert.deepEqual(posts.map((p) => [p.kind, p.date]), [
+      ['일정', '20260810'],
+      ['글', '20260805'],
+    ]);
+  });
+
+  it('최신이 위다 — 프로젝트를 열면 방금 올라온 것부터 본다', async () => {
+    stub([
+      { postId: '1', title: '지난주', registeredDateTime: '20260730120000' },
+      { postId: '2', title: '어제', registeredDateTime: '20260805120000', readYn: 'N' },
+    ]);
+    const posts = await listProjectPosts('2916576');
+    assert.deepEqual(posts.map((p) => p.title), ['어제', '지난주']);
+    assert.equal(posts[0].unread, true);
+    assert.equal(posts[1].unread, false);
+  });
+});
+
+describe('업무 만들기', () => {
+  /** 보낸 본문을 잡는다 — 담당자를 실제로 실었는지는 여기서만 보인다. */
+  const stub = () => {
+    process.env.FLOW_API_KEY = 'test-key';
+    const sent: Record<string, unknown>[] = [];
+    globalThis.fetch = (async (_url: string, init: { body?: string }) => {
+      sent.push(JSON.parse(init.body ?? '{}'));
+      return { ok: true, json: async () => ({ response: { success: true, data: {} } }) };
+    }) as unknown as typeof fetch;
+    return sent;
+  };
+
+  it('담당자를 `workers`로 싣는다 — 없으면 아무의 워크리스트에도 안 뜬다', async () => {
+    const sent = stub();
+    await createTask('2916576', {
+      title: '테스트',
+      contents: '',
+      status: 'request',
+      priority: 'high',
+      workerIds: ['a@traport.com', 'b@traport.com'],
+    });
+    assert.deepEqual(sent[0].workers, [
+      { workerId: 'a@traport.com' },
+      { workerId: 'b@traport.com' },
+    ]);
+    assert.equal(sent[0].priority, 'high');
+    // 본문이 비면 제목을 넣는다 — flow가 빈 본문을 거절한다
+    assert.equal(sent[0].contents, '테스트');
+  });
+
+  it('담당자가 없으면 `workers` 자체를 안 보낸다 — 빈 배열은 거절당한다', async () => {
+    const sent = stub();
+    await createTask('2916576', { title: '테스트', contents: '내용', status: 'request' });
+    assert.equal('workers' in sent[0], false);
+    assert.equal('priority' in sent[0], false);
   });
 });

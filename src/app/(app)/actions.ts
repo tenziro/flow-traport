@@ -23,6 +23,7 @@ import { loadMembers, pickMembers, type SearchMember } from "@/lib/flow/members"
 import type { WorklistTask } from "@/lib/flow/queries";
 import {
   createComment as createFlowComment,
+  createSubtask as createFlowSubtask,
   createTask as createFlowTask,
   describeSystemComment,
   findTaskByPost,
@@ -33,6 +34,7 @@ import {
   isChangeLog,
   listComments,
   listParticipants,
+  listProjectPosts,
   listReplies,
   listStaleTasks,
   markAlarmRead,
@@ -46,6 +48,7 @@ import {
   searchProjects,
   setTaskEndDate,
   setTaskPriority,
+  setTaskStartDate,
   setTaskStatus,
   setTaskWorkers,
   type EventDetail,
@@ -53,6 +56,7 @@ import {
   type Participant,
   type PostFile,
   type PostLink,
+  type ProjectPost,
   type SearchEvent,
   type SearchPost,
   type SearchProject,
@@ -62,7 +66,7 @@ import {
 import { flowPostUrl } from "@/lib/flow/urls";
 import { TASK_PRIORITY, type TaskPriority } from "@/lib/task-priority";
 import { TASK_STATUS, type TaskStatus } from "@/lib/task-status";
-import { mentionMarkup } from "@/lib/thread";
+import { withCall } from "@/lib/thread";
 
 export interface ActionResult {
   ok: boolean;
@@ -112,20 +116,22 @@ export async function createComment(
   const content = String(form.get("content") ?? "").trim();
   const replyTo = String(form.get("replyToName") ?? "").trim();
   const replyToId = String(form.get("replyToId") ?? "").trim();
+  /** 이미 아는 글 번호. 업무가 아닌 글(공지·회의록)에는 `taskId`가 아예 없다. */
+  const known = String(form.get("postId") ?? "").trim();
 
-  if (!projectId || !taskId) return { ok: false, message: "업무를 찾지 못했어요." };
+  if (!known && (!projectId || !taskId)) return { ok: false, message: "업무를 찾지 못했어요." };
   if (!content) return { ok: false, message: "댓글 내용을 적어주세요." };
 
   // 댓글은 `postId`를 받는다. 워크리스트가 주는 `taskSrno`를 그대로 넘기면 404다 (rest.ts).
   // ponytail: 조회가 실패한 사유는 삼킨다 — 사용자가 할 수 있는 일은 flow에서 남기는 것뿐이고,
   // flow 링크가 이 폼 바로 위에 있다.
-  const postId = await resolvePostId(projectId, taskId, title).catch(() => null);
+  const postId = known || (await resolvePostId(projectId, taskId, title).catch(() => null));
   if (!postId) return { ok: false, message: "이 업무는 flow에서 댓글을 남겨주세요." };
 
-  const called = replyToId ? `${mentionMarkup(replyTo, replyToId)} ` : replyTo ? `@${replyTo} ` : "";
-
   return restRun(async () => {
-    await createFlowComment(postId, `${called}${content}`);
+    // 답글은 상대를 앞에서 부른 최상위 댓글로 나간다 — REST에 답글 쓰기가 없다
+    // (`createFlowComment` 주석). 이미 부른 글이면 또 안 붙인다 (`withCall`).
+    await createFlowComment(postId, withCall(content, replyTo, replyToId));
     return replyTo ? `${replyTo}님에게 답했어요.` : "댓글을 남겼어요.";
   }, form.get("path"));
 }
@@ -138,10 +144,16 @@ export async function createTask(
   const title = String(form.get("title") ?? "").trim();
   const contents = String(form.get("contents") ?? "").trim() || title;
   const endDate = String(form.get("endDate") ?? "").replaceAll("-", "");
+  const priority = String(form.get("priority") ?? "");
+  /** 담당자는 여러 명이다 — 폼이 같은 이름으로 여러 번 싣는다 (`setTaskWorkers`와 같은 모양). */
+  const workerIds = form.getAll("workerId").map(String).filter(Boolean);
 
   if (!projectId) return { ok: false, message: "프로젝트를 찾지 못했어요." };
   if (!title) return { ok: false, message: "업무명을 적어주세요." };
   if (endDate && !/^\d{8}$/.test(endDate)) return { ok: false, message: "마감일을 다시 골라주세요." };
+  if (priority && !(priority in TASK_PRIORITY)) {
+    return { ok: false, message: "우선순위를 다시 골라주세요." };
+  }
 
   return restRun(async () => {
     // 새 업무는 항상 "요청"으로 넣는다. 시작도 안 한 일을 진행으로 넣으면
@@ -151,8 +163,36 @@ export async function createTask(
       contents,
       status: "request",
       ...(endDate ? { endDate } : {}),
+      ...(priority ? { priority: priority as TaskPriority } : {}),
+      ...(workerIds.length ? { workerIds } : {}),
     });
-    return "업무를 만들었어요.";
+    // 담당자를 몇 명 얹었는지 적는다 — 안 넣으면 아무의 워크리스트에도 안 뜨는 업무가 된다.
+    return workerIds.length
+      ? `업무를 만들고 담당자 ${workerIds.length}명을 넣었어요.`
+      : "업무를 만들었어요. 담당자는 아직 없어요.";
+  }, form.get("path"));
+}
+
+/**
+ * 하위 업무 하나 만들기 (api-spec §6.4).
+ *
+ * 상세 모달이 하위 업무를 보여 주기만 하던 자리에 붙는다. 제목만 받는다 — 만든 뒤 그 업무를
+ * 열어 상태·마감일·담당자를 고치면 되고, 쪼개는 순간에 그것까지 정하는 사람은 없다.
+ */
+export async function createSubtask(
+  _prev: ActionResult | null,
+  form: FormData,
+): Promise<ActionResult> {
+  const projectId = String(form.get("projectId") ?? "");
+  const taskId = String(form.get("taskId") ?? "");
+  const title = String(form.get("title") ?? "").trim();
+
+  if (!projectId || !taskId) return { ok: false, message: "업무를 찾지 못했어요." };
+  if (!title) return { ok: false, message: "하위 업무 이름을 적어주세요." };
+
+  return restRun(async () => {
+    await createFlowSubtask(projectId, taskId, title);
+    return "하위 업무를 만들었어요.";
   }, form.get("path"));
 }
 
@@ -173,6 +213,23 @@ export async function markMentionsRead(
     if (ids.length) await Promise.all(ids.map(markAlarmRead));
     else await markAllAlarmsRead(projectId);
     return ids.length ? `${ids.length}건을 읽음으로 만들었어요.` : "이 프로젝트 알림을 다 읽음으로 만들었어요.";
+  }, form.get("path"));
+}
+
+export async function updateTaskStartDate(
+  _prev: ActionResult | null,
+  form: FormData,
+): Promise<ActionResult> {
+  const projectId = String(form.get("projectId") ?? "");
+  const taskId = String(form.get("taskId") ?? "");
+  const startDate = String(form.get("startDate") ?? "").replaceAll("-", "");
+
+  if (!projectId || !taskId) return { ok: false, message: "업무를 찾지 못했어요." };
+  if (!/^\d{8}$/.test(startDate)) return { ok: false, message: "시작일을 골라주세요." };
+
+  return restRun(async () => {
+    await setTaskStartDate(projectId, taskId, startDate);
+    return `시작일을 ${startDate.slice(0, 4)}-${startDate.slice(4, 6)}-${startDate.slice(6)}로 바꿨어요.`;
   }, form.get("path"));
 }
 
@@ -412,6 +469,12 @@ export async function loadTaskPost(input: {
 
 export interface NewsTaskResult extends ActionResult {
   task?: WorklistTask;
+  /**
+   * 업무가 아니어서 못 찾았다 — 공지·회의록·일정이다. 부른 쪽은 이때 **글 모달**을 연다
+   * (`useTaskModal`). REST 오류로 실패한 것과 갈라야 한다: 그쪽은 다시 눌러 볼 일이고,
+   * 이쪽은 다시 눌러도 영영 업무가 아니다.
+   */
+  notTask?: boolean;
 }
 
 /**
@@ -424,8 +487,9 @@ export interface NewsTaskResult extends ActionResult {
  * `loadNews`가 게시글 상세로 풀어 붙인 것이라, 여기서 다시 부르면 같은 왕복이 두 번이다.
  * 업무명은 검색어로만 쓰고 최종 판정은 `postId` 일치다.
  *
- * 업무가 아닌 글(공지·회의록)은 업무 목록에 없다. 그때는 실패로 돌려주고 화면이 flow 링크로
- * 안내한다 — 값도 쓰기도 없는 빈 모달을 여는 것보다 낫다.
+ * 업무가 아닌 글(공지·회의록·일정)은 업무 목록에 없다. 그때는 `notTask`로 돌려주고 부른 쪽이
+ * **글 모달**을 연다 — 본문·첨부·댓글은 글 번호 하나로 다 읽어 온다 (`loadTaskPost`).
+ * 고칠 값이 없을 뿐이지 읽을 것은 업무와 똑같이 있다.
  */
 export async function loadNewsTask(input: {
   projectId: string;
@@ -441,7 +505,7 @@ export async function loadNewsTask(input: {
     const found = input.title
       ? await findTaskByPost(input.projectId, input.title, input.postId)
       : null;
-    if (!found) return { ok: false, message: "이 소식은 flow에서 볼 수 있어요." };
+    if (!found) return { ok: false, notTask: true, message: "업무가 아닌 글이에요." };
 
     const deadline = parseFlowDeadline(found.endDate);
     return {
@@ -527,20 +591,29 @@ export async function loadParticipants(
 
 export interface ProjectPanelResult extends ActionResult {
   participants?: Participant[];
+  /** 업무가 아닌 글(공지·회의록·일정). 없으면 화면이 그 칸을 안 그린다. */
+  posts?: ProjectPost[];
 }
 
 /**
- * 내 업무 카드를 펼쳤을 때 오른쪽에 붙는 참여자 목록 (PRD §6.5).
+ * 내 업무 카드를 펼쳤을 때 오른쪽에 붙는 참여자 목록과 업무 아닌 글 (PRD §6.5).
  *
- * **펼칠 때만 부른다.** 카드 하나에 REST 두 번이고(참여자 목록 + 업무에서 긁기) 화면에 카드가
- * 실측 38개다 — 미리 부르면 76번이라 분당 120번 한도를 화면 하나가 다 먹는다. 겉면(§5.3)은
- * 접힌 카드도 쓰므로 여기가 아니라 `loadMyTasks`가 미리 받아 둔다. 전사 명단은 10분 캐시다.
+ * **펼칠 때만 부른다.** 카드 하나에 REST 세 번이고(참여자 목록 + 업무에서 긁기 + 게시글) 화면에
+ * 카드가 실측 38개다 — 미리 부르면 114번이라 분당 120번 한도를 화면 하나가 다 먹는다.
+ * 겉면(§5.3)은 접힌 카드도 쓰므로 여기가 아니라 `loadMyTasks`가 미리 받아 둔다.
+ * 전사 명단은 10분, 게시글은 5분 캐시다.
+ *
+ * 게시글은 곁가지다 — 그쪽이 죽어도 참여자는 그대로 나온다.
  */
 export async function loadProjectPanel(projectId: string): Promise<ProjectPanelResult> {
   if (!projectId) return { ok: false, message: "프로젝트를 찾지 못했어요." };
 
   try {
-    return { ok: true, message: "", participants: await participantsOf(projectId) };
+    const [participants, posts] = await Promise.all([
+      participantsOf(projectId),
+      listProjectPosts(projectId).catch(() => []),
+    ]);
+    return { ok: true, message: "", participants, posts };
   } catch {
     return { ok: false, message: "참여자를 못 가져왔어요." };
   }

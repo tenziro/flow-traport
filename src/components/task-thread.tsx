@@ -13,7 +13,7 @@ import {
 import { ImageViewer } from "@/components/image-viewer";
 import { LinkedText } from "@/components/linked-text";
 import { CommentRowsSkeleton } from "@/components/skeletons";
-import { CommentForm } from "@/components/task-actions";
+import { CommentForm, SubtaskForm } from "@/components/task-actions";
 import { CommentList, type ReplyTarget } from "@/components/thread-view";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { PostFile, PostLink } from "@/lib/flow/rest";
@@ -173,7 +173,11 @@ export function TaskThread({
   path,
 }: {
   projectId: string;
-  taskId: number;
+  /**
+   * 업무일 때만 있다. **업무가 아닌 글(공지·회의록·일정)에는 이 번호가 없다** — 그때는
+   * `postId`만으로 돌고, 쪼갤 대상이 아니라서 하위 업무 칸도 안 선다.
+   */
+  taskId?: number;
   title: string;
   /** 아는 경우 (내 업무 화면). 없으면 서버가 업무 ID·업무명으로 해소한다. */
   postId?: string;
@@ -189,7 +193,7 @@ export function TaskThread({
 
   useEffect(() => {
     let live = true;
-    loadTaskPost({ projectId, taskId: String(taskId), title, postId }).then((result) => {
+    loadTaskPost({ projectId, taskId: taskId ? String(taskId) : undefined, title, postId }).then((result) => {
       if (live) setGot(result);
     });
     // 모달을 닫는 동안 응답이 오면 사라진 컴포넌트에 값을 넣는다 — 그래서 살아 있는지 본다.
@@ -229,6 +233,7 @@ export function TaskThread({
     <CommentForm
       projectId={projectId}
       taskId={taskId}
+      postId={postId}
       title={title}
       path={path}
       replyTo={replyTo}
@@ -309,21 +314,29 @@ export function TaskThread({
         </div>
       )}
 
-      {/* 하위 업무는 본문·첨부 뒤다 — 이 업무를 읽고 나서 "그 밑에 뭐가 있나"를 본다 */}
-      {got.subTasks && (
+      {/* 하위 업무는 본문·첨부 뒤다 — 이 업무를 읽고 나서 "그 밑에 뭐가 있나"를 본다.
+          하나도 없어도 칸은 남긴다 — 쪼갤 자리는 쪼갤 게 없어 보이는 업무에서 더 필요하다.
+          글을 못 읽어 온 경우에만 통째로 뺀다 (그때는 이 업무가 맞는지도 확실하지 않다) */}
+      {/* 업무가 아닌 글에는 이 칸을 안 낸다 — 공지를 쪼갤 일은 없고, 쪼갤 대상이 될 업무
+          번호도 없다 */}
+      {got.ok && taskId !== undefined && (
         <div className="space-y-2 border-b border-border px-5 py-4">
           <p className="tabular text-xs font-semibold text-muted-foreground">
-            하위 업무 {got.subTasks.length}개
+            하위 업무 {got.subTasks?.length ?? 0}개
           </p>
-          <ul className="space-y-0.5">
-            {got.subTasks.map((t) => (
-              <li key={t.postId || t.name}>
-                <TaskRow link={t}>
-                  <IconDownTask size={13} aria-hidden className="shrink-0 text-muted-foreground" />
-                </TaskRow>
-              </li>
-            ))}
-          </ul>
+          {got.subTasks && (
+            <ul className="space-y-0.5">
+              {got.subTasks.map((t) => (
+                <li key={t.postId || t.name}>
+                  <TaskRow link={t}>
+                    <IconDownTask size={13} aria-hidden className="shrink-0 text-muted-foreground" />
+                  </TaskRow>
+                </li>
+              ))}
+            </ul>
+          )}
+          {/* 만든 뒤 목록을 다시 부른다 — 방금 쪼갠 게 위에 안 보이면 됐는지 알 수 없다 */}
+          <SubtaskForm projectId={projectId} taskId={taskId} path={path} onSaved={onSaved} />
         </div>
       )}
 

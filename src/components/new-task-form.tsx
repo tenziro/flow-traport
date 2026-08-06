@@ -1,12 +1,20 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { createTask, type ActionResult } from "@/app/(app)/actions";
-import { DateField } from "@/components/date-field";
-import { IconAdd, IconNormal } from "@/components/icons";
+import { useActionState, useState, useTransition } from "react";
+import {
+  createTask,
+  loadParticipants,
+  type ActionResult,
+  type ParticipantResult,
+} from "@/app/(app)/actions";
+import { DateField, TRIGGER } from "@/components/date-field";
+import { IconAdd, IconNormal, IconWorker } from "@/components/icons";
 import { BouncyAccordion } from "@/components/motion/bouncy-accordion";
 import { Button } from "@/components/motion/button/base";
 import { Input } from "@/components/motion/input";
+import { PickMenu, PriorityMark } from "@/components/task-actions";
+import { WorkerPicker } from "@/components/worker-picker";
+import { TASK_PRIORITY } from "@/lib/task-priority";
 import { cn } from "@/lib/utils";
 
 /**
@@ -36,6 +44,26 @@ export function NewTaskForm({ projectId, project, path }: {
   const [title, setTitle] = useState("");
   const [endDate, setEndDate] = useState("");
   const [confirming, setConfirming] = useState(false);
+  /** 우선순위 코드(`high`…). 빈 문자열이면 안 싣는다 — flow가 제 기본값을 준다. */
+  const [priority, setPriority] = useState("");
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [people, setPeople] = useState<ParticipantResult | null>(null);
+  const [asking, startAsk] = useTransition();
+  const candidates = people?.participants ?? [];
+  const pickedNames = candidates
+    .filter((p) => picked.includes(p.userId))
+    .map((p) => p.name)
+    .join(", ");
+
+  /** 후보는 `담당자`를 누를 때만 부른다 — 업무를 안 만들고 접는 사람이 그 값을 치를 이유가 없다. */
+  function pickWorkers() {
+    setPicking(true);
+    if (people || asking) return;
+    const form = new FormData();
+    form.set("projectId", projectId);
+    startAsk(async () => setPeople(await loadParticipants(null, form)));
+  }
 
   return (
     <BouncyAccordion
@@ -95,6 +123,35 @@ export function NewTaskForm({ projectId, project, path }: {
                 />
               </div>
 
+              {/* 우선순위·담당자. 만들 때 안 정하면 **아무의 워크리스트에도 안 뜨는** 업무가
+                  된다 — 나중에 상세에서 담당자를 붙이려면 그 업무를 먼저 찾아야 하는데,
+                  담당이 없는 업무는 바로 그 목록에 없다 */}
+              <div className="flex flex-wrap items-center gap-2">
+                <PickMenu
+                  label="우선순위"
+                  /* 안 고르고 넘어가는 게 기본이다 — 네 값 중 하나를 미리 켜 두면 우리가 정한
+                     값이 사용자가 정한 값처럼 남는다 */
+                  options={[["", "안 정함"], ...Object.entries(TASK_PRIORITY)]}
+                  now={priority ? TASK_PRIORITY[priority as keyof typeof TASK_PRIORITY] : "우선순위"}
+                  aria={`우선순위 고르기, 지금 ${priority ? TASK_PRIORITY[priority as keyof typeof TASK_PRIORITY] : "안 정함"}`}
+                  pending={false}
+                  onPick={(value) => {
+                    setPriority(value);
+                    setConfirming(false);
+                  }}
+                  render={(label) => <PriorityMark label={label} />}
+                  className={cn(TRIGGER, !priority && "text-muted-foreground", "gap-1")}
+                />
+                <button type="button" onClick={pickWorkers} className={cn(TRIGGER, !picked.length && "text-muted-foreground")}>
+                  <IconWorker size={13} className="shrink-0" />
+                  <span className="min-w-0 max-w-40 truncate">{pickedNames || "담당자"}</span>
+                </button>
+                {picked.map((userId) => (
+                  <input key={userId} type="hidden" name="workerId" value={userId} />
+                ))}
+                {priority && <input type="hidden" name="priority" value={priority} />}
+              </div>
+
               <label className="sr-only" htmlFor={`new-body-${projectId}`}>
                 업무 내용
               </label>
@@ -112,7 +169,7 @@ export function NewTaskForm({ projectId, project, path }: {
               {confirming ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs text-warning-foreground">
-                    {project}에 &lsquo;요청&rsquo; 상태로 만들까요?
+                    {project}에 &lsquo;대기&rsquo; 상태로 만들까요?
                   </span>
                   <Button type="submit" size="sm" disabled={pending}>
                     {pending ? "만드는 중…" : "네, 만들게요"}
@@ -146,6 +203,29 @@ export function NewTaskForm({ projectId, project, path }: {
                   <span className="min-w-0 flex-1 break-words">{result.message}</span>
                 </p>
               )}
+
+              {/* 상세 모달의 담당자 고르기와 같은 모달이다. 거기와 달리 저장은 안 한다 —
+                  `확인`은 폼에 실을 목록을 정하는 것으로 끝나고, 실제 쓰기는 업무를 만들 때 같이 나간다 */}
+              <WorkerPicker
+                open={picking}
+                onOpenChange={setPicking}
+                loading={asking}
+                candidates={candidates}
+                picked={picked}
+                pending={false}
+                title="담당자 고르기"
+                note="켠 사람들이 담당자가 돼요."
+                onToggle={(userId) =>
+                  setPicked((prev) =>
+                    prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId],
+                  )
+                }
+                onClear={() => setPicked([])}
+                onConfirm={() => {
+                  setPicking(false);
+                  setConfirming(false);
+                }}
+              />
             </form>
           ),
         },

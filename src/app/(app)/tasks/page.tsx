@@ -350,7 +350,11 @@ function ProjectCard({ project, i }: { project: MyTasksProject; i: number }) {
                 <Rows tasks={project.done} projectId={project.projectId} />
               )}
             </div>
-            <ProjectPanel projectId={project.projectId} brief={project.brief} />
+            <ProjectPanel
+              projectId={project.projectId}
+              project={project.name}
+              brief={project.brief}
+            />
           </div>
 
           {/* 안 끝난 게 있을 때만 접는다. 818건이 완료라 기본 시야에서 빼되, 펼치면
