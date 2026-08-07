@@ -29,7 +29,7 @@
 // 의존성에 없다 (icons.tsx 주석). 높이 모프·블러 교차·스프링은 원본 그대로다.
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { type ReactNode, useEffect, useRef, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { IconClose } from "@/components/icons";
 import { EASE_OUT, SPRING_PANEL } from "@/lib/ease";
@@ -157,7 +157,22 @@ export function MorphingModal({
     };
   }, [open]);
 
-  if (!mounted) return null;
+  /**
+   * 닫혀 있으면 **포털을 아예 안 낸다** (BUG-050).
+   *
+   * 예전에는 `viewId`가 `null`이어도 `fixed inset-0`짜리 겹이 `document.body`에 남았다.
+   * 안 보이고(투명) 안 눌리지만(`pointer-events-none`) **`backdrop-filter`는 그대로**라,
+   * 크로미움은 겹마다 배경을 되읽는 렌더 서피스를 만든다. 내 업무 화면은 카드 38장이
+   * 저마다 이 껍데기를 들어서 실측 42겹이었고, 그 화면에서 페인트가 통째로 빠졌다.
+   *
+   * 닫는 연출은 살린다 — `open`이 빠져도 나가는 애니메이션이 끝날 때까지(`onExitComplete`)
+   * 살려 두고 그다음에 접는다. 그래서 `open`이 아니라 `live`가 이 포털의 생사다.
+   */
+  const [live, setLive] = useState(false);
+  // 렌더 중 조정이다. 이펙트로 미루면 열리는 그 프레임에 포털이 없어서 한 박자 늦게 뜬다.
+  if (open && !live) setLive(true);
+
+  if (!mounted || !live) return null;
 
   return createPortal(
     <div
@@ -171,7 +186,8 @@ export function MorphingModal({
         aria-label="닫기"
         tabIndex={-1}
         disabled={!dismissible}
-        initial={false}
+        // 포털이 열릴 때 같이 붙으므로 `initial={false}`면 배경이 페이드 없이 튄다 (BUG-050)
+        initial={{ opacity: 0 }}
         animate={{ opacity: open ? 1 : 0 }}
         transition={{ duration: reduce ? 0.1 : 0.2, ease: EASE_OUT }}
         onClick={onClose}
@@ -185,7 +201,10 @@ export function MorphingModal({
       {/* 벤더 이탈 5 — 원본은 `items-center`만이라 긴 내용이 스크롤 범위 밖에 남는다 */}
       <div className="pointer-events-none absolute inset-0 overflow-y-auto overscroll-contain px-4">
         <div className="flex min-h-full w-full flex-col items-center justify-center py-8">
-          <AnimatePresence initial={false}>
+          {/* `initial={false}`를 걷었다 — 이제 이 `AnimatePresence`가 패널과 **같이**
+              붙어서, 껐다 켜면 첫 렌더에 자식이 이미 있다. 끄면 들어오는 연출이 안 돈다.
+              `onExitComplete`가 나가는 연출이 끝난 뒤 포털을 접는다 (BUG-050) */}
+          <AnimatePresence onExitComplete={() => setLive(false)}>
             {open ? (
               <motion.div
                 key="panel"
