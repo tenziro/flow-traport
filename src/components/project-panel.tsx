@@ -99,9 +99,15 @@ export function ProjectPanel({
       <aside
         ref={ref}
         aria-label="참여자"
-        // 넓은 화면에서는 왼쪽 열 높이만큼 늘어난다 (flex 기본 `stretch`). 바닥값 256px은
-        // 업무가 두어 건뿐인 프로젝트에서 이 칸이 이름 한 줄만 남는 걸 막는다
-        className="relative shrink-0 overflow-hidden rounded-lg border border-border text-sm lg:min-h-64 lg:w-64"
+        /*
+         * 넓은 화면에서는 왼쪽 열 높이만큼 늘어난다 (flex 기본 `stretch`).
+         *
+         * 바닥값 480px은 **실측에서 나온 수**다. 머리 칸이 99px, 무리 머리가 28px, 이름 한 줄이
+         * 28px이라 두 무리에 다섯 줄씩 보이려면 `99 + 2 × (28 + 16 + 5 × 28) = 467`이다.
+         * 256px이었을 때는 무리마다 50px, 곧 한 줄 반이라 이름이 가운데서 잘렸다 — 업무가 한두
+         * 건인 프로젝트에서 왼쪽 열이 그만큼 짧다.
+         */
+        className="relative shrink-0 overflow-hidden rounded-lg border border-border text-sm lg:min-h-120 lg:w-64"
       >
         {/* 넓은 화면에서 **칸에서 떼어 낸다**(`absolute`). 안 떼면 이름이 많은 프로젝트에서
             참여자 목록이 카드 높이를 밀어 올린다 — 실측으로 왼쪽 열 900px에 목록이 972px을
