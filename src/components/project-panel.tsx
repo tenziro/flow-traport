@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { loadProjectPanel, type ProjectPanelResult } from "@/app/(app)/actions";
+import { IconLastComment } from "@/components/icons";
 import { Meter } from "@/components/meter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTaskModal } from "@/components/use-task-modal";
@@ -98,58 +99,66 @@ export function ProjectPanel({
       <aside
         ref={ref}
         aria-label="참여자"
-        className="shrink-0 overflow-hidden rounded-lg border border-border text-sm lg:w-64"
+        // 넓은 화면에서는 왼쪽 열 높이만큼 늘어난다 (flex 기본 `stretch`). 바닥값 256px은
+        // 업무가 두어 건뿐인 프로젝트에서 이 칸이 이름 한 줄만 남는 걸 막는다
+        className="relative shrink-0 overflow-hidden rounded-lg border border-border text-sm lg:min-h-64 lg:w-64"
       >
-        {!got ? (
-          <div className="space-y-2 p-3">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-2/3" />
-          </div>
-        ) : !got.ok ? (
-          <p className="p-3 text-muted-foreground">{got.message}</p>
-        ) : (
-          <>
-            <div className="border-b border-border px-3 py-2.5">
-              <p className="font-medium">참여자 {count}명</p>
-              {/* 두 무리의 비율. 우리 팀만 색을 주고 나머지는 회색이다 — 이 화면에서 궁금한
-                  건 "이 판에 우리가 몇 명인가"다. 색만으로 가르지 않고 아래에 수치를 적는다 */}
-              <Meter
-                className="mt-2"
-                segments={[
-                  {
-                    value: inCount,
-                    label: `임직원 ${inCount}명`,
-                    className: "bg-primary",
-                  },
-                  {
-                    value: outCount,
-                    label: `외부 ${outCount}명`,
-                    className: "bg-muted-foreground/40",
-                  },
-                ]}
-              />
-              <p className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-                <span>임직원 {inCount}명</span>
-                <span>외부 {outCount}명</span>
-              </p>
-              {/* 수와 목록이 어긋나는 게 정상이라 그 사실을 적는다 — 실측 90명 중 36명 */}
-              {known > 0 && known < count && (
-                <p className="mt-1.5 text-xs text-muted-foreground">
-                  이름을 아는 사람은 {known}명이에요.
-                </p>
-              )}
+        {/* 넓은 화면에서 **칸에서 떼어 낸다**(`absolute`). 안 떼면 이름이 많은 프로젝트에서
+            참여자 목록이 카드 높이를 밀어 올린다 — 실측으로 왼쪽 열 900px에 목록이 972px을
+            요구했다. 높이를 정하는 건 업무 표 쪽이고 이 칸은 받은 높이를 채우기만 한다.
+            좁은 화면에서는 흐름 그대로다 — 표 아래에 서니 나눠 가질 높이가 없다 */}
+        <div className="flex flex-col lg:absolute lg:inset-0">
+          {!got ? (
+            <div className="space-y-2 p-3">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
             </div>
+          ) : !got.ok ? (
+            <p className="p-3 text-muted-foreground">{got.message}</p>
+          ) : (
+            <>
+              <div className="shrink-0 border-b border-border px-3 py-2.5">
+                <p className="font-medium">참여자 {count}명</p>
+                {/* 두 무리의 비율. 우리 팀만 색을 주고 나머지는 회색이다 — 이 화면에서 궁금한
+                    건 "이 판에 우리가 몇 명인가"다. 색만으로 가르지 않고 아래에 수치를 적는다 */}
+                <Meter
+                  className="mt-2"
+                  segments={[
+                    {
+                      value: inCount,
+                      label: `임직원 ${inCount}명`,
+                      className: "bg-primary",
+                    },
+                    {
+                      value: outCount,
+                      label: `외부 ${outCount}명`,
+                      className: "bg-muted-foreground/40",
+                    },
+                  ]}
+                />
+                <p className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                  <span>임직원 {inCount}명</span>
+                  <span>외부 {outCount}명</span>
+                </p>
+                {/* 수와 목록이 어긋나는 게 정상이라 그 사실을 적는다 — 실측 90명 중 36명 */}
+                {known > 0 && known < count && (
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    이름을 아는 사람은 {known}명이에요.
+                  </p>
+                )}
+              </div>
 
-            {/* 원판 색이 위 막대와 짝이다 — 우리 팀은 파랑, 외부는 회색 */}
-            <Names
-              title="임직원"
-              people={staff}
-              tone="bg-primary/10 text-primary"
-            />
-            <Names title="외부" people={outside} />
-          </>
-        )}
+              {/* 원판 색이 위 막대와 짝이다 — 우리 팀은 파랑, 외부는 회색 */}
+              <Names
+                title="임직원"
+                people={staff}
+                tone="bg-primary/10 text-primary"
+              />
+              <Names title="외부" people={outside} />
+            </>
+          )}
+        </div>
       </aside>
       {post.modal}
     </div>
@@ -215,12 +224,22 @@ function Posts({
                 <span className="min-w-0 truncate" title={p.title}>
                   {p.title}
                 </span>
+                {/* 말풍선 + 숫자. `나를 부른 사람들` 표와 같은 표현이다 (`mention-table`) —
+                    제목 뒤에 붙고 면은 두지 않는다. 오른쪽 `글 · 등록자 · 날짜` 무리에
+                    있을 때는 `댓글 3`이 종류·이름·날짜와 같은 무게로 읽혔는데, 이건
+                    그 글에 말이 오갔다는 표시라 제목에 붙는 쪽이 맞다 */}
+                {p.comments > 0 && (
+                  <span className="tabular inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-muted-foreground">
+                    <IconLastComment size={11} />
+                    <span className="sr-only">댓글 </span>
+                    {p.comments}
+                  </span>
+                )}
               </span>
               <span className="tabular flex shrink-0 gap-x-3 text-xs text-muted-foreground">
                 <span>{p.kind}</span>
                 {p.author && <span>{p.author}</span>}
                 {p.date && <span>{fmtDate(p.date)}</span>}
-                {p.comments > 0 && <span>댓글 {p.comments}</span>}
               </span>
             </button>
           </li>
@@ -251,12 +270,17 @@ function Names({
 }) {
   if (!people.length) return null;
   return (
-    <div className="border-b border-border last:border-b-0">
-      <p className="bg-secondary/40 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+    // `flex-1`은 `basis: auto`라 제 내용 높이에서 출발해 남는 자리를 무리끼리 똑같이 나눈다 —
+    // 12명과 18명이 각자 제 몫을 갖고, 모자라면 각자 스크롤한다. `min-h-0`이 없으면 flex
+    // 항목의 최소 크기가 내용 높이라 줄지 않고 칸 밖으로 샌다
+    <div className="flex min-h-0 flex-1 flex-col border-b border-border last:border-b-0">
+      <p className="shrink-0 bg-secondary/40 px-3 py-1.5 text-xs font-medium text-muted-foreground">
         {title} {people.length}명
       </p>
-      {/* 외부가 실측 최대 42명이다. 왼쪽 표가 12줄에서 스크롤하는 것과 같이 맞춘다 */}
-      <ul className="max-h-52 overflow-y-auto overscroll-contain px-3 py-2">
+      {/* 외부가 실측 최대 42명이다. 좁은 화면에서는 칸 높이가 내용 높이라 나눌 자리가 없어서
+          예전처럼 208px에서 끊고(왼쪽 표가 12줄에서 스크롤하는 것과 같다), 넓은 화면에서는
+          그 뚜껑을 걷어 칸 높이를 꽉 채운다 */}
+      <ul className="max-h-52 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2 lg:max-h-none">
         {people.map((p) => (
           <li key={p.userId} className="flex items-center gap-2 py-0.5">
             {/* 사진이 없는 사람이 있다 (실측 13명 중 4명) — 그때는 이름 첫 글자 원판이다 */}
