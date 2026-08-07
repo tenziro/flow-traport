@@ -5,11 +5,11 @@
 > - `(추정)` = 문서에 정의가 없어 다른 근거(실제 응답 관측, 유사 API 패턴, 네이밍 규칙)로 추론한 내용. **구현 시 반드시 런타임 검증 필요.**
 > - `(관측)` = 공식 문서에는 없지만 인증된 실제 flow 워크스페이스 응답에서 직접 확인한 값. 문서보다 실제에 가깝지만 표본이 적음.
 >
-> **v4.0.0 (2026-08-04)**: 이 문서가 **유일한 데이터 계약**이 됐다. flow MCP를 전부 걷어냈다
+> **v1.3.0 (2026-08-04)**: 이 문서가 **유일한 데이터 계약**이 됐다. flow MCP를 전부 걷어냈다
 > (PRD §5.1). 본문에 남은 MCP 언급은 그때 대조군으로 쓴 **기록**이다 — 지금 부르는 경로가
 > 아니다. 실제 호출 순서는 §12를 본다.
 >
-> **v4.1.0 (2026-08-04)**: 화면이 §6.1 응답에서 실제로 꺼내 쓰는 컬럼을 표로 박았다
+> **v1.3.0 (2026-08-04)**: 화면이 §6.1 응답에서 실제로 꺼내 쓰는 컬럼을 표로 박았다
 > (§6.1 "앱이 꺼내 쓰는 값"). 우선순위(`PRIORITY`)가 그 응답에 있는데 안 읽고 모달이 따로
 > 받아 오던 것을 이번에 걷었다 — 업무 한 건당 REST 1회가 줄었다.
 
@@ -542,7 +542,7 @@ https://api.flow.team
 > 프로젝트에도 이 컬럼은 있었다 — 업무를 만든 사람은 늘 있기 때문이다. `customColumnData`는
 > 실명이 아니라 로그인 ID다 (6~13자).
 >
-> **이제 모든 화면이 이 응답 하나로 선다** `(2026-08-04, v4.0.0)`. 오늘·팀·리스크가 쓰던 MCP
+> **이제 모든 화면이 이 응답 하나로 선다** `(2026-08-04, v1.3.0)`. 오늘·팀·리스크가 쓰던 MCP
 > 워크리스트를 걷어내고 넷 다 §6.1로 옮겼으므로, 등록자·등록일은 어느 화면에서나 추가 호출
 > 없이 있다. 그래도 열을 켠 건 `/tasks` 내 업무뿐인데 그건 자리 문제다 — 다른 세 화면은 표가
 > 좁아서 업무명이 먼저 잘린다.
@@ -555,7 +555,7 @@ https://api.flow.team
 > | 부서·직급 | §9.3 `GET /user/search/employees`에만 있고 그건 **우리 이용기관 13명**이다. 내 업무 686건의 등록자 중 그 명단에 있는 건 **5건**(0.7%) — 나머지는 타사 사용자다. `?projectId=`로 좁혀도 응답은 그대로 13명이고(파라미터 무시), §5.4 참여자 조회는 `inttId`·`userId`·`name`뿐이다 |
 > | 회사·부서 (타사 포함) | §13.1 **댓글**에는 `registerCorpName`·`registerDivisionName`이 온다. 업무 등록자에게는 그런 필드가 없다 — §6.3 게시글 상세도 `registerId`·`registerName`까지다 |
 
-> **앱이 이 응답 하나에서 꺼내 쓰는 값** `(v4.1.0)`. 전부 `columns[]`에 이미 들어 있어서
+> **앱이 이 응답 하나에서 꺼내 쓰는 값** `(v1.3.0)`. 전부 `columns[]`에 이미 들어 있어서
 > **추가 호출이 0회**다 — 화면에 값 하나를 더 그리려고 REST를 다시 부르는 자리가 없다.
 >
 > | `defaultColumnType` | 어디에 쓰나 |
@@ -567,7 +567,7 @@ https://api.flow.team
 > | `RGSR_ID` | 등록자 칸 (내 업무) · 모달 딱지 |
 > | `RGSN_DTTM` | 등록일 칸 (내 업무) |
 > | `EDTR_DTTM` | **방치 판정**(30일 무활동) · 방치된 업무 표의 `마지막 수정` 칸 |
-> | `PRIORITY` | 업무명 앞 표식(`높음`·`긴급`만) · 모달 우선순위 줄. **v4.1.0 전에는 안 읽었다** — 모달이 열릴 때마다 같은 값을 `getTaskFields`로 따로 받아 업무 한 건에 REST 1회를 더 썼다 |
+> | `PRIORITY` | 업무명 앞 표식(`높음`·`긴급`만) · 모달 우선순위 줄. **v1.3.0 전에는 안 읽었다** — 모달이 열릴 때마다 같은 값을 `getTaskFields`로 따로 받아 업무 한 건에 REST 1회를 더 썼다 |
 >
 > 안 읽는 기본 컬럼은 `PROGRESS`·`TASK_NUM`·`START_DT`·`SECTION`이다. 진행률은 상태 배지와
 > 같은 말을 두 번 하고, 나머지 셋은 화면에 자리가 없다.
@@ -930,7 +930,7 @@ Body: `title`*(1~200), `todoList[]`*(1~50개) `{ contents*(1~60), endDate(YYYYMM
 | `content` | 실제 본문. 화면에 낼 한 줄은 **`content` 가 먼저고 `message` 가 대타**다 (v0.17) — 이름은 작성자 줄에 이미 있어서 템플릿을 앞세우면 카드가 정보 없이 찬다 |
 | 이름 조회 | 프로젝트명은 §5.x `listProjects`, 업무명은 §6.3 `title`. 둘 다 별도 호출이다 |
 
-> **딥링크는 이 응답만으로 만들어진다** (v0.16.0): `https://flow.team/main.act?projectId={projectId}&postId={postId}`. `flow_search` 가 결과마다 `url` 로 돌려주는 형식 그대로다 — 우리가 추측한 규칙이 아니다. 워크리스트의 `link`(`https://flow.team/l/QBJyf`)는 flow 가 만든 단축 URL이라 여전히 못 만든다. 둘을 혼동해서 "알림으로는 링크를 못 만든다"고 적었던 게 [BUG-022](bug-report.md#bug-022).
+> **딥링크는 이 응답만으로 만들어진다** (v1.0.0): `https://flow.team/main.act?projectId={projectId}&postId={postId}`. `flow_search` 가 결과마다 `url` 로 돌려주는 형식 그대로다 — 우리가 추측한 규칙이 아니다. 워크리스트의 `link`(`https://flow.team/l/QBJyf`)는 flow 가 만든 단축 URL이라 여전히 못 만든다. 둘을 혼동해서 "알림으로는 링크를 못 만든다"고 적었던 게 [BUG-022](bug-report.md#bug-022).
 
 ### 7.2 `PATCH /user/alarms/read` — 알림 단건 읽음
 
@@ -999,7 +999,7 @@ Query: `searchWord`* (1~100), `cursor`(기본 `0`), `pageSize`(기본 `50`)
 
 Path: `eventSrno` (숫자). Query: `eventStartDateTime`, `eventFinishDateTime` (반복 인스턴스 지정용, 14자리)
 
-> **사용처**: 나의 일정 서랍·시트에서 **줄을 펼칠 때만** 부른다 (`getEvent` → `loadEvent` → `EventRow`, v4.5.0). 일정 한 건에 호출 한 번이라 미리 안 받는다.
+> **사용처**: 나의 일정 서랍·시트에서 **줄을 펼칠 때만** 부른다 (`getEvent` → `loadEvent` → `EventRow`, v1.4.0). 일정 한 건에 호출 한 번이라 미리 안 받는다.
 
 응답 `data.event` = 8.2의 필드 + `location`, `locationCoordinates`, `locationUrl`, `calendarOwner`, `calendarType`, `userPermission`, `vcSrno`, `contentModifiability`, `rgsrId`, `rgsrNm`, `rgsnDateTime`, `prflPhtg`, `originSrno`, 그리고 아래 배열들:
 
@@ -1033,7 +1033,7 @@ Path: `eventSrno` (숫자). Query: `eventStartDateTime`, `eventFinishDateTime` (
 ## 9. Search API
 
 > 9.1·9.2는 **검색 팔레트(⌘K)가 실제로 쓰는 두 호출**이다 (PRD §6.4, v0.19).
-> 9.3은 **구성원 화면이 쓴다** (PRD §6.6, v1.5.0). 9.4는 참고용이다.
+> 9.3은 **구성원 화면이 쓴다** (PRD §6.6, v1.1.0). 9.4는 참고용이다.
 
 ### 9.1 `GET /user/search/posts` — 게시글 검색 ⭐
 
@@ -1147,9 +1147,9 @@ Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSi
 
 ---
 
-## 12. 오늘 화면의 실제 호출 순서 `(관측 2026-08-04, v4.0.0)`
+## 12. 오늘 화면의 실제 호출 순서 `(관측 2026-08-04, v1.3.0)`
 
-> 이 절은 원래 "REST로 갈 경우"라는 폴백 설계였다. v4.0.0에서 MCP를 전부 걷어내고 이 순서가
+> 이 절은 원래 "REST로 갈 경우"라는 폴백 설계였다. v1.3.0에서 MCP를 전부 걷어내고 이 순서가
 > **실제 경로**가 됐다 (PRD §5.1). 아래 숫자는 59개 프로젝트 계정의 실측이다.
 
 ```
@@ -1304,18 +1304,18 @@ Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSi
 > flow는 자기 자신 멘션에 알림을 안 만든다 — 남의 알림함은 관측할 수 없다. 저장 형태가
 > flow UI 멘션과 같으니 알림도 같이 갈 것으로 본다 `(추정)`.
 
-> **답글은 못 쓴다** `(v4.0.0 · 재확인 2026-08-06)`. 부모 댓글을 가리키는 필드가 Body에 아예
+> **답글은 못 쓴다** `(v1.3.0 · 재확인 2026-08-06)`. 부모 댓글을 가리키는 필드가 Body에 아예
 > 없고, 답글 전용 `POST /user/comments/{postId}/replies/{commentId}` 도 `404 NOT_FOUND_ERROR` 다
 > (읽기는 같은 경로로 `200` — §13.3). 그래서 답하기는 **`@[이름](id) 본문` 꼴의 최상위 댓글**로
-> 나간다 (`createComment`) — 위 실측 덕에 v4.14.0부터 글자가 아니라 진짜 멘션이다.
+> 나간다 (`createComment`) — 위 실측 덕에 v1.7.0부터 글자가 아니라 진짜 멘션이다.
 >
 > 2026-08-06 재확인에서 문 세 개를 다시 밀어 봤다: `POST …/replies/{commentId}` `404` ·
 > `POST …/reply/{commentId}` `404` · `POST /user/comments/{postId}` Body에 `replyToRemarkId`를
 > 실으면 `400 VALIDATION_ERROR` `unrecognized_keys`. Body가 받는 건 `contents` 하나뿐이다.
 >
-> 읽기가 열린 v4.2.0부터는 **남긴 답이 목록에 한 층 위로 뜬다** — 남이 flow에서 단 답글은
+> 읽기가 열린 v1.3.0부터는 **남긴 답이 목록에 한 층 위로 뜬다** — 남이 flow에서 단 답글은
 > 부모 아래 들여쓰여 오는데, 앱이 올린 것은 최상위 댓글이라 맨 아래 붙는다. 대화 자체는
-> 안 사라지므로 그대로 둔다. v4.15.1부터는 **답글 쓰는 칸 위에 그 사실을 적는다** — 스레드로
+> 안 사라지므로 그대로 둔다. v1.7.0부터는 **답글 쓰는 칸 위에 그 사실을 적는다** — 스레드로
 > 붙는다는 기대를 안 만드는 게 사용자가 아는 유일한 방법이다.
 >
 > 댓글 **수정·삭제**는 REST에 없다. `DELETE /user/comments/{postId}/{commentId}` ·

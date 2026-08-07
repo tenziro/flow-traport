@@ -20,7 +20,7 @@ function Card({
         // `rounded-xl`(--radius + 4px)이던 것을 `rounded-lg`(--radius)로 내렸다. 카드가
         // 버튼·배지보다 더 둥글면 같은 화면에서 두 개의 모서리 곡률이 경쟁한다.
         //
-        // 안쪽 여백은 16/12 → 20/16(v1.7.0). 본문 패딩 32, 카드 패딩 16, 섹션 간격 24가
+        // 안쪽 여백은 16/12 → 20/16(v1.1.0). 본문 패딩 32, 카드 패딩 16, 섹션 간격 24가
         // 사실상 한 급이라 화면 전체가 같은 밀도로 촘촘했다 — 답답하게 읽히던 원인이다.
         // 세 급이 20 → 32 → 40으로 벌어져야 "카드 안 / 카드 사이 / 구획 사이"가 구분된다.
         "group/card flex flex-col gap-(--card-spacing) rounded-lg bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(5)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-lg *:[img:last-child]:rounded-b-lg",
