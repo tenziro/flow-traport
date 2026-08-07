@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/empty-state';
 import {
   IconCalendar,
   IconImminent,
+  IconInfo,
   IconRisk,
   IconStale,
   IconTeam,
@@ -145,9 +146,15 @@ export default async function TeamPage({
         ))}
       </div>
 
-      <p className="mt-6 text-xs text-muted-foreground">
-        &lsquo;어제 끝낸 일&rsquo;은 아직 없어요. 지금 막힌 것과 곧 마감할 것만
-        모았어요.
+      {/* 아래 `CollectNotice`와 같은 모양이다 — 나란히 선 두 줄이 서로 다르게 생기면
+        하나는 안내고 하나는 경고인 것처럼 읽힌다. `[&+div]:mt-2` — 그 `CollectNotice`도
+        자기 위에 24px을 두는데, 같은 안내끼리 그만큼 벌어지면 딴 이야기로 읽힌다.
+        묶음 안의 줄 간격(8px)에 맞춰 붙인다 */}
+      <p className="mt-6 flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground [&+div]:mt-2">
+        <IconInfo size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+        <span>
+          &lsquo;어제 끝낸 일&rsquo;은 아직 없어요. 지금 막힌 것과 곧 마감할 것만 모았어요.
+        </span>
       </p>
 
       {/* 부서 전체를 훑는 화면이라 분당 상한에 제일 잘 걸린다 — 못 가져온 건 밝힌다 */}

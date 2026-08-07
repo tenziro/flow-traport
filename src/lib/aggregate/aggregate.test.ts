@@ -175,6 +175,37 @@ describe('classifyTasks', () => {
     );
     assert.deepEqual(r.overdueActive.map((c) => c.overdueDays), [24, 10, 3]);
   });
+
+  it('피드백·보류는 무게가 낮다 — 분류는 그대로 밀림이다', () => {
+    const r = classifyTasks(
+      [
+        task({ id: 'fb', due: day(-3), lastActivityAt: at(-1), status: '피드백' }),
+        task({ id: 'hold', due: day(-3), lastActivityAt: at(-1), status: '보류' }),
+        task({ id: 'go', due: day(-3), lastActivityAt: at(-1), status: '진행' }),
+      ],
+      NOW,
+    );
+    // 건수에서 빼지 않는다 — 마감이 지난 건 사실이다
+    assert.equal(r.counts.overdueActive, 3);
+    assert.deepEqual(
+      r.overdueActive.map((c) => [c.task.id, c.weight]),
+      [['go', 1], ['fb', 0.4], ['hold', 0.2]],
+    );
+  });
+
+  it('밀림 정렬은 무게를 곱한 지연 순 — 오래 밀린 피드백은 여전히 위다', () => {
+    const r = classifyTasks(
+      [
+        task({ id: 'fb5', due: day(-5), lastActivityAt: at(-1), status: '피드백' }),
+        task({ id: 'go3', due: day(-3), lastActivityAt: at(-1), status: '진행' }),
+        task({ id: 'fb40', due: day(-40), lastActivityAt: at(-1), status: '피드백' }),
+      ],
+      NOW,
+    );
+    // 40×0.4=16 > 3×1=3 > 5×0.4=2. D+N 표시는 그대로 실제 지연이다.
+    assert.deepEqual(r.overdueActive.map((c) => c.task.id), ['fb40', 'go3', 'fb5']);
+    assert.deepEqual(r.overdueActive.map((c) => c.overdueDays), [40, 3, 5]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -381,6 +412,32 @@ describe('scoreFocus', () => {
     assert.ok(item.breakdown.heat > 0);
   });
 
+  it('같은 마감이면 진행 > 피드백 > 보류 — 마감 점수만 깎는다', () => {
+    const ranked = scoreFocus(
+      [
+        task({ id: 'fb', due: day(-3), lastActivityAt: at(-1), status: '피드백' }),
+        task({ id: 'hold', due: day(-3), lastActivityAt: at(-1), status: '보류' }),
+        task({ id: 'go', due: day(-3), lastActivityAt: at(-1), status: '진행' }),
+      ],
+      {},
+      NOW,
+    );
+    assert.deepEqual(ranked.map((f) => f.task.id), ['go', 'fb', 'hold']);
+    // 깎이는 건 마감뿐이다 — 나머지 신호는 상태와 무관하다
+    const [go, fb, hold] = ranked;
+    assert.equal(go.breakdown.deadline, FOCUS_WEIGHTS.deadline);
+    assert.equal(fb.breakdown.deadline, FOCUS_WEIGHTS.deadline * 0.4);
+    assert.equal(hold.breakdown.deadline, FOCUS_WEIGHTS.deadline * 0.2);
+    assert.equal(fb.breakdown.priority, go.breakdown.priority);
+    assert.ok(fb.reasons.includes('피드백 상태 — 마감을 40%만 센다'));
+  });
+
+  it('마감이 없으면 무게를 곱할 것도 없다 — 이유도 안 붙는다', () => {
+    const [item] = scoreFocus([task({ id: 'x', status: '보류' })], { x: 3 }, NOW);
+    assert.equal(item.breakdown.deadline, 0);
+    assert.ok(!item.reasons.some((r) => r.includes('만 센다')));
+  });
+
   it('마감 지난 업무가 먼 미래 업무보다 위', () => {
     const ranked = scoreFocus(
       [
@@ -502,6 +559,24 @@ describe('scoreProjectRisk', () => {
     });
     assert.equal(scoreProjectRisk([mk(1)], NOW)[0].grade, 'warning');
     assert.equal(scoreProjectRisk([mk(3)], NOW)[0].grade, 'danger');
+  });
+
+  it('피드백·보류만 밀린 프로젝트는 등급이 낮다', () => {
+    const mk = (id: string, status?: string): Project => ({
+      id,
+      name: id,
+      tasks: Array.from({ length: 3 }, (_, i) =>
+        task({ id: `${id}-${i}`, due: day(-6), lastActivityAt: at(-1), status }),
+      ),
+    });
+    // 진행 3건 = 30점 → 위험. 피드백 3건 = 1.2건분 12점 + 지연 → 주의. 보류 3건 = 0.6건분 → 정상
+    assert.equal(scoreProjectRisk([mk('go', '진행')], NOW)[0].grade, 'danger');
+    assert.equal(scoreProjectRisk([mk('fb', '피드백')], NOW)[0].grade, 'warning');
+    assert.equal(scoreProjectRisk([mk('hold', '보류')], NOW)[0].grade, 'normal');
+    // 건수와 최장 지연은 표시용이라 무게를 안 곱한다
+    const [fb] = scoreProjectRisk([mk('fb', '피드백')], NOW);
+    assert.equal(fb.overdueActive, 3);
+    assert.equal(fb.maxDelayDays, 6);
   });
 
   it('밀림 건수가 임박 건수보다 무겁다', () => {

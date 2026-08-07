@@ -40,7 +40,7 @@ const PRIORITY_SCORE: Record<TaskPriority, number> = {
 export type FocusSignals = Record<string, number> | Map<string, number>;
 
 export interface FocusOptions extends ClassifyOptions {
-  /** 상위 N개. 기본 5 (PRD §6.1 "상위 5건"). */
+  /** 상위 N개. 기본 5 — 실제 화면은 `FOCUS_CHECK`를 넘겨 쓴다 (PRD §6.1). */
   limit?: number;
 }
 
@@ -68,6 +68,11 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
  *  - 완료된 업무
  *  - 방치(overdueStale) — 30일간 아무도 안 건드린 업무를 오늘의 포커스에 올리면
  *    액션 리스트가 죽은 업무로 오염된다. 방치 목록은 별도 접힌 블록에서 다룬다 (PRD §6.1).
+ *
+ * `피드백`·`보류`는 **빼지 않고 마감 점수만 깎는다** (`STATUS_WEIGHT`). 빼면 마감이 한참 지난
+ * 피드백 업무가 아무 화면에도 안 나온다. 순위만 내리면 오늘 할 일이 위에 서고 그것들은 아래에
+ * 남는다. 피드백 중에서도 **마지막 댓글이 내 것인 업무**는 여기서가 아니라 호출부에서
+ * 내려간다 — 댓글 조회가 필요해서다 (`queries.ts` `pickFocus`).
  */
 export function scoreFocus(
   tasks: readonly Task[],
@@ -100,6 +105,13 @@ export function scoreFocus(
         deadline = Math.max(0, 1 - daysUntilDue / (horizon + 1));
         if (daysUntilDue === 0) reasons.push('오늘 마감');
         else if (deadline > 0) reasons.push(`마감 ${daysUntilDue}일 남음`);
+      }
+
+      // 피드백·보류는 마감을 덜 세게 본다 — 마감이 지난 게 내가 늦어서가 아니다. 깎는 건
+      // 마감 하나뿐이다: 열기(사람이 묻고 있다)와 우선순위는 상태와 무관하게 그대로 유효하다.
+      if (c.weight < 1 && deadline > 0) {
+        deadline *= c.weight;
+        reasons.push(`${task.status} 상태 — 마감을 ${Math.round(c.weight * 100)}%만 센다`);
       }
 
       // 2. 열기 — 나를 기다리는 사람 수

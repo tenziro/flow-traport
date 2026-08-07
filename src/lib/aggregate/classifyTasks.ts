@@ -26,9 +26,41 @@ export const CLASSIFY_DEFAULTS: Required<ClassifyOptions> = {
   doneStatuses: ['완료', '종료', '취소', 'done', 'closed', 'complete', 'completed'],
 };
 
+/**
+ * 밀림·임박 1건을 몇 건으로 셀지. 여기 있는 상태는 "마감이 지났지만 **지금 내가 밀고 있는
+ * 일**"이 아니라서, 그대로 세면 위험도가 부풀려진다.
+ *
+ * - `피드백` — 마무리 직전이고 상대 답을 기다리는 중이다. 내 몫은 이미 했다.
+ * - `보류` — 누군가 일부러 세워 둔 것이다. 마감이 지난 건 세워 뒀기 때문인데, 그걸 리스크로
+ *   세면 세워 두는 결정마다 등급이 올라간다. 피드백보다 더 깎는다 — 피드백은 곧 돌아올
+ *   답을 기다리지만 보류는 돌아올 날짜 자체가 없다.
+ *
+ * **0으로 두지 않는다.** 세워 둔 채 잊히는 일은 실제로 일어난다. 30일간 아무도 안 건드리면
+ * 어차피 방치(`overdueStale`)로 넘어가 점수에서 빠지므로, 그 전까지는 작게라도 센다.
+ *
+ * **건수와 목록에서 빼지도 않는다.** 마감이 지난 건 사실이라 KPI의 밀림 건수와 밀리는 업무
+ * 표에는 그대로 남는다 — 무게는 순위와 점수에만 쓴다. 안 보이게 하는 쪽으로 틀리면 일을
+ * 놓친다.
+ *
+ * 라벨 문자열로 맞춘다. flow는 프로젝트마다 상태 이름을 바꿀 수 있어서(커스텀 상태) 코드가
+ * 아니라 문자열로 오고, 우리가 아는 라벨은 `STTS_LABEL`의 다섯 개다 (rest.ts).
+ */
+export const STATUS_WEIGHT: Record<string, number> = {
+  피드백: 0.4,
+  보류: 0.2,
+};
+
+/** 이 업무를 셀 때의 무게. `STATUS_WEIGHT`에 없는 상태는 1 — 그대로 센다. */
+export function taskWeight(task: Task): number {
+  const status = task.status?.trim();
+  return (status ? STATUS_WEIGHT[status] : undefined) ?? 1;
+}
+
 export interface ClassifiedTask {
   task: Task;
   category: TaskCategory;
+  /** 셀 때의 무게. 상태가 `피드백`·`보류`면 1보다 작다 (`STATUS_WEIGHT`). */
+  weight: number;
   /** 완료 판정 결과. `normal`에 섞여 있어도 이 플래그로 걸러낼 수 있다. */
   done: boolean;
   /** 마감 순간(epoch ms). 날짜만 있으면 그날 끝. 없으면 null. */
@@ -71,6 +103,8 @@ export function isTaskDone(task: Task, doneStatuses = CLASSIFY_DEFAULTS.doneStat
  *
  * 날짜만 있는 마감(`YYYYMMDD`)은 그날 23:59:59.999 KST까지 유효하다. 오늘 마감은 지연이 아니라 임박.
  * 경계는 모두 포함(<=): 정확히 30일 전 활동은 active, 정확히 7일 뒤 마감은 imminent.
+ *
+ * 상태 `피드백`·`보류`는 분류를 바꾸지 않고 `weight`만 낮게 받는다 (`STATUS_WEIGHT`).
  */
 export function classifyTasks(
   tasks: readonly Task[],
@@ -114,6 +148,7 @@ export function classifyTasks(
     const entry: ClassifiedTask = {
       task,
       category,
+      weight: taskWeight(task),
       done,
       deadlineMs,
       overdueDays: overdue ? nowDay - dueDay! : 0,
@@ -125,7 +160,14 @@ export function classifyTasks(
   }
 
   // 밀림/방치는 지연이 큰 순, 임박은 마감이 급한 순 (PRD §6.1 "지연 일수 내림차순").
-  result.overdueActive.sort((a, b) => b.overdueDays - a.overdueDays);
+  //
+  // 밀림만 무게를 곱한다 — 피드백·보류가 지연 일수만으로 맨 위를 차지하면 정작 지금 밀고 있는
+  // 업무가 아래로 내려간다. 곱셈이라 오래 밀린 피드백은 여전히 갓 밀린 진행보다 위에 선다.
+  // 표에 나오는 `D+N`은 그대로 실제 지연이다 — 무게는 순서만 정한다.
+  const byWeightedDelay = (c: ClassifiedTask) => c.overdueDays * c.weight;
+  result.overdueActive.sort(
+    (a, b) => byWeightedDelay(b) - byWeightedDelay(a) || b.overdueDays - a.overdueDays,
+  );
   result.overdueStale.sort((a, b) => b.overdueDays - a.overdueDays);
   result.imminent.sort((a, b) => (a.daysUntilDue ?? 0) - (b.daysUntilDue ?? 0));
 

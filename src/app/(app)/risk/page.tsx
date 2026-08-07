@@ -248,14 +248,18 @@ function RollupCard({
           {/* 셰브론은 감싸는 행 밖에 둔다 — 안에 넣으면 flex-wrap이 접힐 때 같이 밀려 내려간다 */}
           <summary className="flex cursor-pointer list-none items-start gap-3">
             <span className="min-w-0 flex-1">
-              <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              {/* 베이스라인이 아니라 가운데로 맞춘다. 등급 라벨(12px)과 프로젝트명(16px)을
+                같은 베이스라인에 세우면 크기 차이만큼 작은 쪽이 위로 뜬다 — 두 글자의
+                한가운데끼리 만나야 한 덩어리로 읽힌다. 줄바꿈되는 폭에서는 각 줄 안에서
+                가운데라 좁은 화면도 그대로 맞는다 */}
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span className={cn('text-xs font-semibold', grade.text)}>
-                  {/* 점은 등급 글자 **안에** 둔다. 형제로 두고 `self-center`를 주면
-                    줄 전체의 한가운데인데, 그 줄 높이는 옆의 프로젝트명(16px)이 정해서
-                    12px짜리 등급 글자보다 1.6px 위에 섰다. 글자 안에서는 기본
-                    정렬(베이스라인)이 곧 글자 한가운데다 — 8px 점의 아래가 베이스라인에
-                    닿으면 점 중심이 「위험」 글자 중심과 0.4px 안에서 만난다
-                    (`align-middle`은 라틴 x-height 기준이라 오히려 1.6px 내려간다). */}
+                  {/* 점은 등급 글자 **안에** 둔다. 형제로 빼면 줄 전체를 기준으로 서서
+                    옆의 프로젝트명(16px)이 정한 줄 높이를 따라가고, 12px짜리 등급 글자와는
+                    어긋난다. 글자 안에서는 기본 정렬(베이스라인)이 곧 글자 한가운데다 —
+                    8px 점의 아래가 베이스라인에 닿으면 점 중심이 「위험」 글자 중심과
+                    0.4px 안에서 만난다 (`align-middle`은 라틴 x-height 기준이라 오히려
+                    1.6px 내려간다). */}
                   <span
                     className={cn(
                       'mr-3 inline-block size-2 rounded-full',
@@ -267,7 +271,7 @@ function RollupCard({
                 {/* 카드의 제목이라 본문(14px)보다 한 급 크다 — `내 업무`의 프로젝트 카드
                   제목과 같은 크기다. 한 줄에서 자르는 건 그대로다: 긴 이름이 두세 줄로
                   흘러 등급 점과 오른쪽 건수 사이가 벌어졌다 */}
-                <span className="min-w-0 flex-1 basis-full truncate text-base font-medium sm:basis-auto">
+                <span className="min-w-0 flex-1 basis-full truncate text-base font-bold sm:basis-auto">
                   {rollup.name}
                 </span>
                 {/* 팀 화면 멤버 카드와 같은 줄이다 — 힌트 문구도 같이 맞춘다 */}

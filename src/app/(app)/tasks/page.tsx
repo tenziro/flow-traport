@@ -289,7 +289,7 @@ function ProjectCard({ project, i }: { project: MyTasksProject; i: number }) {
               {/* 카드 머리는 본문(14px)보다 한 급 크다 — 이 줄이 카드의 제목이고,
                   38장이 늘어선 화면에서 눈이 먼저 잡는 자리다. 앞의 아이콘은 접힌 줄에서
                   "여기부터 새 카드"를 표시한다 */}
-              <span className="flex min-w-0 items-center gap-2 text-base font-medium">
+              <span className="flex min-w-0 items-center gap-2 text-base font-bold">
                 <IconFeed size={17} className="shrink-0 text-muted-foreground" />
                 <span className="truncate">{project.name}</span>
               </span>

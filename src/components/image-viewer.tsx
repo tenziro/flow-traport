@@ -1,13 +1,29 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
-import { IconChevronLeft, IconChevronRight, IconClose, IconOpen } from "@/components/icons";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconClose,
+  IconOpen,
+  IconZoomIn,
+  IconZoomOut,
+} from "@/components/icons";
 import type { PostFile } from "@/lib/flow/rest";
 
-/** 둥근 단추 하나. 세 개가 같은 모양이라 클래스를 한 곳에 둔다 (44px — 손가락 최소 크기). */
+/** 둥근 단추 하나. 다섯 개가 같은 모양이라 클래스를 한 곳에 둔다 (44px — 손가락 최소 크기). */
 const BTN =
   "absolute grid size-11 place-items-center rounded-full bg-card/85 text-foreground shadow-sm backdrop-blur-sm transition-colors outline-none hover:bg-card focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-40";
+
+/**
+ * 배율 칸. 자유 배율(× 1.5씩) 대신 칸으로 둔 건 **읽히는 숫자**를 쓰기 위해서다 —
+ * 곱하기로 가면 100 → 150 → 225 → 338%가 되고, 그 숫자는 아무 뜻이 없다.
+ *
+ * 4배에서 멈춘다. 원본이 화면 폭보다 크면 4배로 이미 원본 픽셀을 넘고, 더 당기면
+ * 뭉개진 그림을 크게 볼 뿐이다. 그 위는 `원본 열기`가 낫다.
+ */
+const ZOOMS = [1, 1.5, 2, 3, 4];
 
 /**
  * 첨부 이미지 뷰어. 썸네일을 누르면 그 자리에서 원본을 크게 본다.
@@ -34,13 +50,39 @@ export function ImageViewer({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [i, setI] = useState(at);
+  /** 지금 배율의 `ZOOMS` 자리. 0이 화면에 맞춘 상태다. */
+  const [z, setZ] = useState(0);
   const last = files.length - 1;
+  const lastZ = ZOOMS.length - 1;
   const file = files[i];
+  const zoom = ZOOMS[z] ?? 1;
+
+  /**
+   * 앞뒤로 넘기기. **배율도 같이 되돌린다** — 앞 장에서 4배로 당겨 둔 채 다음 장이 열리면
+   * 화면에 그 사진의 한 귀퉁이만 있어서 무엇이 왔는지 모른다. 넘기기는 "다음 걸 보자"지
+   * "같은 데를 보자"가 아니다. 끝에서는 아무것도 안 한다 — 배율만 초기화되면 안 된다.
+   */
+  const step = useCallback(
+    (d: number) => {
+      const next = Math.max(0, Math.min(last, i + d));
+      if (next === i) return;
+      setI(next);
+      setZ(0);
+    },
+    [i, last],
+  );
 
   useEffect(() => {
-    const dialog = ref.current;
-    dialog?.showModal();
-    return () => dialog?.close();
+    /**
+     * **정리에서 `close()`를 부르면 안 된다** (BUG-049). `close()`는 `close` 이벤트를 쏘고
+     * 그게 `onClose` → 부모의 `setViewing(null)`로 이어져 뷰어가 스스로 언마운트한다.
+     * dev의 StrictMode는 붙일 때 이펙트를 한 번 접었다 펴는데, 그 한 번의 정리에 뷰어가
+     * 열렸다 바로 사라졌다 — 눌러도 안 열리는 것처럼 보인다.
+     *
+     * 떼는 건 브라우저 몫이다: 모달 `<dialog>`를 문서에서 지우면 top layer에서 같이 내려가고
+     * `close` 이벤트는 안 난다. 이미 열려 있으면 `showModal()`은 그냥 돌아온다(spec).
+     */
+    ref.current?.showModal();
   }, []);
 
   useEffect(() => {
@@ -60,14 +102,21 @@ export function ImageViewer({
       } else if (event.key === "Tab") {
         event.stopPropagation();
       } else if (event.key === "ArrowLeft") {
-        setI((n) => Math.max(0, n - 1));
+        step(-1);
       } else if (event.key === "ArrowRight") {
-        setI((n) => Math.min(last, n + 1));
+        step(1);
+      } else if (event.key === "+" || event.key === "=") {
+        // `=`도 받는다 — 숫자열의 `+`는 Shift를 눌러야 나오는 자리다
+        setZ((n) => Math.min(lastZ, n + 1));
+      } else if (event.key === "-") {
+        setZ((n) => Math.max(0, n - 1));
+      } else if (event.key === "0") {
+        setZ(0);
       }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [last]);
+  }, [step, lastZ]);
 
   if (!file) return null;
 
@@ -89,7 +138,14 @@ export function ImageViewer({
          * 줄어든다 — flex 항목의 기본 최소 높이는 내용 크기라 세로로 긴 사진이 칸을
          * 밀어내고 캡션을 화면 밖으로 보낸다.
          */}
-        <div onClick={dismiss} className="flex min-h-0 flex-1 items-center justify-center">
+        {/*
+         * 당긴 사진은 **여기서 굴려서** 본다 — 끌어서 옮기는 코드를 안 쓴다. 스크롤은
+         * 브라우저 몫이라 휠·트랙패드·터치·키보드가 전부 그냥 되고, 손으로 만든 드래그는
+         * 그중 하나만 된다. 가운데 맞추기는 `items-center`가 아니라 사진의 `m-auto`다 —
+         * flex 정렬은 내용이 칸보다 클 때 위·왼쪽을 잘라 먹어서 당긴 사진의 그쪽 끝에
+         * 영영 못 닿는다.
+         */}
+        <div onClick={dismiss} className="flex min-h-0 flex-1 overflow-auto">
           {/* 자리는 `WIDTH`·`HEIGHT`로 미리 잡는다 — 도착할 때 화면이 안 튄다.
               장을 넘기면 `key`로 갈아 끼워서 앞 장이 남아 보이지 않는다 */}
           <Image
@@ -98,8 +154,15 @@ export function ImageViewer({
             alt={file.name}
             width={file.w || 1600}
             height={file.h || 1200}
-            sizes="90vw"
-            className="h-auto max-h-full w-auto max-w-full rounded-md object-contain"
+            /* 배율만큼 큰 그림을 받는다 — 같은 그림을 늘리면 당길수록 뭉개진다.
+               `next/image`가 이 값으로 srcset에서 고른다 (100vw를 넘겨도 된다) */
+            sizes={`${Math.round(90 * zoom)}vw`}
+            /* 배율은 `transform: scale`이 아니라 CSS `zoom`이다 — scale은 자리를 안 넓혀서
+               위 칸이 굴러갈 곳이 안 생긴다 */
+            style={zoom > 1 ? { zoom } : undefined}
+            /* 두 번 누르면 당겼다 놓는다. 뷰어를 처음 여는 사람도 아는 손짓이다 */
+            onDoubleClick={() => setZ((n) => (n > 0 ? 0 : 2))}
+            className="m-auto h-auto max-h-full w-auto max-w-full rounded-md object-contain"
           />
         </div>
 
@@ -109,6 +172,13 @@ export function ImageViewer({
           {files.length > 1 && (
             <span className="tabular shrink-0">
               {i + 1}/{files.length}
+            </span>
+          )}
+          {/* 화면에 맞춘 상태(100%)에서는 안 적는다 — 늘 있는 숫자는 아무 말도 안 한다.
+              `aria-live` — 단추를 눌렀을 때 지금 배율이 소리로도 나가야 한다 */}
+          {zoom > 1 && (
+            <span aria-live="polite" className="tabular shrink-0 text-foreground">
+              {zoom * 100}%
             </span>
           )}
           <a
@@ -133,6 +203,27 @@ export function ImageViewer({
         <IconClose size={18} aria-hidden />
       </button>
 
+      {/* 배율 단추. 닫기와 마주 보는 왼쪽 위다 — 앞뒤로 넘기는 단추(가운데 양옆)와 자리가
+          안 겹치고, 사진을 가리는 면적이 위아래 어느 쪽으로도 안 는다 */}
+      <button
+        type="button"
+        aria-label="축소"
+        disabled={z === 0}
+        onClick={() => setZ((n) => Math.max(0, n - 1))}
+        className={`${BTN} top-3 left-3`}
+      >
+        <IconZoomOut size={18} aria-hidden />
+      </button>
+      <button
+        type="button"
+        aria-label="확대"
+        disabled={z === lastZ}
+        onClick={() => setZ((n) => Math.min(lastZ, n + 1))}
+        className={`${BTN} top-3 left-16`}
+      >
+        <IconZoomIn size={18} aria-hidden />
+      </button>
+
       {/* 한 장뿐이면 넘길 곳이 없다 */}
       {files.length > 1 && (
         <>
@@ -140,7 +231,7 @@ export function ImageViewer({
             type="button"
             aria-label="이전 이미지"
             disabled={i === 0}
-            onClick={() => setI((n) => Math.max(0, n - 1))}
+            onClick={() => step(-1)}
             className={`${BTN} top-1/2 left-3 -translate-y-1/2`}
           >
             <IconChevronLeft size={20} aria-hidden />
@@ -149,7 +240,7 @@ export function ImageViewer({
             type="button"
             aria-label="다음 이미지"
             disabled={i === last}
-            onClick={() => setI((n) => Math.min(last, n + 1))}
+            onClick={() => step(1)}
             className={`${BTN} top-1/2 right-3 -translate-y-1/2`}
           >
             <IconChevronRight size={20} aria-hidden />

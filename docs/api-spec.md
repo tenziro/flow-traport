@@ -717,6 +717,19 @@ https://api.flow.team
 > `PHTG_USE_YN` · `PIN_USE_YN` · `PIN_YN` · `PRFL_PHTG` · `REMARK_ATCH_REC` · `REMARK_CNTN` ·
 > `REMARK_IMG_ATCH_REC` · `REPLY_CNT` · `RGSN_DTTM` · `RGSR_ID` · `RGSR_JBCL_NM` · `RGSR_NM` ·
 > `SELF_YN` · `SYSTEM_REMARK_YN` · `SYS_CODE`. **부모를 가리키는 필드는 없다.**
+>
+> **`remarks` 만 아는 게 하나 더 있다 `(실측 2026-08-06)`: 댓글 첨부.**
+> `REMARK_ATCH_REC`(일반) · `REMARK_IMG_ATCH_REC`(이미지)에 파일이 실린다 — 아이템 스키마는
+> 게시글 첨부(`attachments` · `imageAttachments`)와 같다. **댓글 전량을 주는 §13.1 에는 파일
+> 칸이 아예 없어서**, 댓글에 붙은 파일을 아는 자리는 여기뿐이다
+> ([BUG-050](bug-report.md#bug-050)). 게시글 82624764 → 댓글 194461322 의
+> `REMARK_IMG_ATCH_REC[0]` = `image.png` (`THUM_IMG_PATH` · `ATCH_URL` 둘 다
+> `flow.team/flowImg/**`, 로그인 없이 200).
+>
+> **2건 상한이 여기에도 그대로 걸린다.** 더 받는 손잡이는 없다 — `?pageSize=` · `?remarkSrno=` ·
+> `?remarkCount=` · `?size=` · `?replyYn=` · `?remarkYn=` · `?allRemarkYn=` 전부
+> `400 VALIDATION_ERROR / unrecognized_keys` 다 `(실측 2026-08-06)`. 그래서 이 화면은
+> **최근 두 댓글의 첨부만** 그린다.
 
 > **`title` 이 업무명의 유일한 출처다 `(실측 2026-07-29)`.** 알림(§7.1)은 이름을 하나도 주지
 > 않아서 헤더 소식 카드의 업무명이 여기서 나온다 (`getPostBrief`, PRD §6.1.5). 게시글 82010144
@@ -1230,6 +1243,12 @@ Query: `searchWord`*(2~100), `startDateTime`*, `endDateTime`*, `cursor`, `pageSi
 | `objectContentsName` / `repeatDateTime` / `repeatId` / `language` | `null` | |
 | `replies` | `Reply[]` | **`replyYn=Y` 일 때만.** 최대 10건, `replyId` 오름차순 (위 블록) |
 | `replyHasNext` | `false` | **`replyYn=Y` 일 때만.** 답글이 10건을 넘으면 참 → §13.3 |
+
+> **⚠️ 이 표에 파일 칸이 없다 `(실측 2026-08-06)`.** 댓글에 첨부가 달려 있어도 이 엔드포인트는
+> 그 사실조차 안 준다 — `replyYn=Y` 를 붙여도 `Reply` 쪽에도 없다. 댓글 첨부를 아는 자리는
+> §6.3 `remarks[].REMARK_ATCH_REC` · `REMARK_IMG_ATCH_REC` 뿐이고, 거기는 **최신 2건 상한**이
+> 걸려 있다 ([BUG-050](bug-report.md#bug-050)). 즉 **댓글 전량과 댓글 첨부를 동시에 받는 길이
+> 없다** — 앱은 전량은 여기서, 첨부는 §6.3 에서 받아 댓글 번호로 붙인다.
 
 > **`systemCode` 를 안 거르면 "마지막 댓글"이 사람 말이 아니다.** 실측 14건 중 **10건이 시스템
 > 댓글**(담당자·마감일·우선순위 변경 로그)이고 사람 댓글은 4건뿐이었다.

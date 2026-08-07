@@ -52,6 +52,8 @@
 | [BUG-046](#bug-046) | 상태 고르기에 지금 값(`대기`)이 없었다 — 한 상태를 두 이름으로 불렀다 | 해결 (v4.15.1) |
 | [BUG-047](#bug-047) | 답할 상대를 자동완성으로 고르면 멘션이 두 번 저장됐다 | 해결 (v4.15.1) |
 | [BUG-048](#bug-048) | 업무인 알림 줄이 `업무가 아닌 글`로 열리거나 flow로 나갔다 | 해결 (v4.16.1) |
+| [BUG-049](#bug-049) | 첨부 이미지를 눌러도 뷰어가 안 떴다 — 이펙트 정리가 `close()`를 불렀다 | 해결 (v4.16.6) |
+| [BUG-050](#bug-050) | 댓글에 붙은 파일이 아예 안 보였다 (+ 첨부 모양이 자리마다 달랐다) | 해결 (v4.16.6) |
 
 ---
 
@@ -1668,6 +1670,67 @@ if (!result?.fields) setAsked(false);
 ([rest.ts](../src/lib/flow/rest.ts), [actions.ts](../src/app/(app)/actions.ts))
 
 **상태**: 해결 (v4.16.1)
+
+---
+
+## BUG-049
+
+**증상**: 업무 상세 모달에서 첨부 이미지 썸네일을 눌러도 **아무 일도 안 일어났다**. 오류도
+안 났다.
+
+**원인**: `ImageViewer`가 붙을 때 `showModal()`을 부르고 **정리에서 `close()`를 불렀다**.
+`close()`는 `close` 이벤트를 쏘고, `<dialog onClose>`가 부모의 `onClose`를 타고
+`setViewing(null)`로 이어져 뷰어가 스스로 언마운트한다. dev의 StrictMode는 붙일 때 이펙트를
+한 번 접었다 펴는데, 그 한 번의 정리에 뷰어가 열렸다 바로 사라졌다.
+
+증상만 보면 "클릭이 안 먹는다"라 클릭 핸들러부터 의심하기 쉬웠다. 실제로는 열렸다 닫힌
+것이라 `MutationObserver`를 걸어서야 갈렸다 — 관측 결과가 `["added open=true", "removed"]`
+였고, 여기서 실패 지점이 클릭이 아니라 **스스로 닫는 길**로 좁혀졌다.
+
+**처리**: 정리를 지웠다. 떼는 건 브라우저 몫이다 — 모달 `<dialog>`를 문서에서 지우면 top
+layer에서 같이 내려가고 `close` 이벤트는 안 난다. 이미 열려 있으면 `showModal()`은 그냥
+돌아온다(spec). ([image-viewer.tsx](../src/components/image-viewer.tsx))
+
+**남는 것**: 이펙트를 두 번 부르는 건 dev(StrictMode)뿐이라 운영 빌드에서는 안 났을
+경로다. 그래도 고친 건 dev가 개발 내내 쓰는 화면이고, 정리에서 `close()`를 부르는 것 자체가
+"닫힘"을 두 곳에서 말하는 구조라서다.
+
+**상태**: 해결 (v4.16.6)
+
+---
+
+## BUG-050
+
+**증상**: 댓글에 이미지를 첨부해도 이 화면의 댓글 줄에는 **아무것도 안 나왔다**. 같이 드러난
+것이 하나 더 있다 — 펼친 상위·하위 업무의 미리보기에서는 이미지가 썸네일이 아니라 **파일
+이름 한 줄**로 나왔다.
+
+**원인**: 두 겹이다.
+
+| 겹 | 내용 |
+|---|---|
+| 데이터 | 댓글 전량을 주는 `/user/comments/{postId}`에 **파일 칸이 아예 없다**. 그리는 쪽이 아니라 받는 쪽이 비어 있었다. |
+| 그리기 | 첨부를 그리는 코드가 자리마다 따로 있었다. 본문 첨부에만 썸네일 격자가 있었고, 미리보기는 `FileRow`(이름 한 줄)만 돌렸다. |
+
+파일이 실리는 자리는 게시글 상세(`GET /user/posts/{postId}`)의 `remarks[]`뿐이다 —
+`REMARK_ATCH_REC`·`REMARK_IMG_ATCH_REC`. 본문 첨부를 받느라 이미 부르고 있던 응답이라
+**호출은 안 늘었다**.
+
+**처리**: `getPostBrief`가 `remarks[]`에서 `댓글 번호 → 파일`을 뽑아 `commentFiles`로
+돌려주고, `toThread`가 그걸 `ThreadComment.files`에 얹는다. 그리는 쪽은
+`Attachments` 하나로 합쳤다 — 본문·댓글·미리보기가 같은 컴포넌트를 쓰니 같은 파일이
+자리마다 같은 모양으로 나온다.
+([rest.ts](../src/lib/flow/rest.ts), [actions.ts](../src/app/(app)/actions.ts),
+[attachments.tsx](../src/components/attachments.tsx),
+[thread-view.tsx](../src/components/thread-view.tsx),
+[task-thread.tsx](../src/components/task-thread.tsx))
+
+**남는 것**: `remarks[]`는 **최신 2건**만 준다 ([BUG-012](#bug-012)와 같은 한계다). 더 받는
+손잡이도 없다 — `pageSize`·`remarkSrno`·`remarkCount`·`size` 따위를 붙이면 이 엔드포인트는
+쿼리 자체를 거절한다(400 `VALIDATION_ERROR`, 실측 2026-08-06). 그래서 **최근 두 댓글의
+첨부만 보인다**. 첨부를 달자마자 확인하는 게 대부분이라 실사용에서 걸리는 자리는 여기다.
+
+**상태**: 해결 (v4.16.6)
 
 ---
 

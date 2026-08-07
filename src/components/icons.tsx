@@ -80,6 +80,10 @@ export {
   Moon as IconDark,
   Monitor as IconSystem,
   SidebarLeft as IconSidebar,
+  /* 이미지 뷰어의 배율 단추. 돋보기에 +/−가 붙은 그림이라 "이 화면이 커진다"로 읽힌다 —
+     맨 +/−는 무엇이 늘어나는지 안 말한다 (`image-viewer.tsx`). */
+  SearchPlus as IconZoomIn,
+  SearchMinus as IconZoomOut,
 } from "reicon-react";
 
 export type { IconProps } from "reicon-react";

@@ -42,21 +42,21 @@ export default function Loading() {
       <KpiRowSkeleton count={4} share />
 
       <div className="space-y-4">
-        {/* 포커스 — 상위 5건, 상태 칩 있음 */}
+        {/* 포커스 — 상위 10건, 상태 칩 있음 */}
         <PanelSkeleton>
-          <TaskRowsSkeleton count={5} chips />
+          <TaskRowsSkeleton count={10} chips />
         </PanelSkeleton>
         {/* 밀리는 업무 — 제목 아래 지연 분포 막대가 있는 유일한 카드다 */}
         <PanelSkeleton meter>
           <TaskRowsSkeleton count={4} chips />
         </PanelSkeleton>
-        {/* 나를 부른 사람들 — 칸은 넷인데(업무명·프로젝트·부른 사람·시각) 상태 칩이 없다 */}
-        <PanelSkeleton>
-          <TaskRowsSkeleton count={3} />
-        </PanelSkeleton>
         {/* 방치된 업무 — 이 표만 `마지막 수정` 칸이 더 붙어 다섯이다 */}
         <PanelSkeleton>
           <TaskRowsSkeleton count={3} cols={5} chips />
+        </PanelSkeleton>
+        {/* 나를 부른 사람들 — 칸은 넷인데(업무명·프로젝트·부른 사람·시각) 상태 칩이 없다 */}
+        <PanelSkeleton>
+          <TaskRowsSkeleton count={3} />
         </PanelSkeleton>
       </div>
     </div>

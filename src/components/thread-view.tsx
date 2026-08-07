@@ -2,6 +2,7 @@
 
 import { type ReactNode, useState } from "react";
 import { type ThreadComment } from "@/app/(app)/actions";
+import { Attachments } from "@/components/attachments";
 import { IconHistory, IconLastComment, IconSubTask } from "@/components/icons";
 import { LinkedText } from "@/components/linked-text";
 import { Button } from "@/components/motion/button/base";
@@ -193,6 +194,13 @@ export function CommentRows({
                   본문보다 댓글로 더 자주 온다 */}
               <LinkedText text={comment.body} />
             </p>
+            {/* 댓글에 붙은 파일. 본문 첨부와 같은 모양이다 — 같은 파일이 자리마다 다르게
+                생기면 알아보는 데 시간이 든다 (BUG-050) */}
+            {comment.files && (
+              <div className="mt-1.5 space-y-1.5">
+                <Attachments files={comment.files} />
+              </div>
+            )}
             {/* 답글 입력칸. 댓글 본문과 같은 열에 서서 이 말에 붙은 것으로 읽힌다 */}
             {replyForm && replyingTo === comment.id && <div className="mt-2">{replyForm}</div>}
           </div>

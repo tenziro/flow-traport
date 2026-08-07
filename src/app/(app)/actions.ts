@@ -323,6 +323,11 @@ export interface ThreadComment {
    * 업무 상세 모달이 같이 쓴다. 스무 줄짜리 스레드에서 내가 할 말이 있는 자리는 여기다.
    */
   called?: boolean;
+  /**
+   * 이 댓글에 붙은 파일. **최신 댓글 두 개까지만 온다** — 파일이 실리는 자리가 게시글 상세의
+   * `remarks[]`뿐이고 그게 두 건만 준다 (`getPostBrief`의 `commentFiles`).
+   */
+  files?: PostFile[];
 }
 
 /**
@@ -356,7 +361,12 @@ async function fillReplies(postId: string, comments: FlowComment[]): Promise<Flo
  * 마크업**이다 — 알림으로 맞추면 알림 창(최근 7일·12건)을 벗어난 옛 멘션이 강조에서 빠지고,
  * flow가 남의 이름으로 보내는 엉뚱한 알림까지 따라 들어온다 (api-spec §7.1).
  */
-function toThread(comments: FlowComment[], me?: string): ThreadComment[] {
+function toThread(
+  comments: FlowComment[],
+  me?: string,
+  /** 댓글 번호 → 첨부. 게시글 상세가 준 최신 두 건뿐이다 (`getPostBrief`). */
+  files: Record<string, PostFile[]> = {},
+): ThreadComment[] {
   const line = (
     c: {
       contents: string;
@@ -384,6 +394,8 @@ function toThread(comments: FlowComment[], me?: string): ThreadComment[] {
       ...(reply && { reply: true }),
       // 변경 로그는 제외한다 — 담당자로 내 이름이 박힌 기록까지 "나를 부름"이 된다.
       ...(!log && !!me && mentionsMe(c.contents, me) && { called: true }),
+      // 답글에는 안 붙는다 — `remarks[]`가 주는 번호는 최상위 댓글 것뿐이다.
+      ...(!reply && files[id]?.length && { files: files[id] }),
     };
   };
 
@@ -447,7 +459,7 @@ export async function loadTaskPost(input: {
       getSession(),
     ]);
 
-    const rows = toThread(comments, session?.userId);
+    const rows = toThread(comments, session?.userId, post?.commentFiles);
     // 세는 건 **사람이 남긴 말**만이다. 실측 14건 중 10건이 변경 로그라, 전부 세면 "댓글
     // 14개"를 보고 열었는데 사람 말은 4개인 화면이 된다.
     const said = rows.filter((r) => !r.system).length;

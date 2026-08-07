@@ -25,8 +25,8 @@ export const metadata = { title: '오늘 · flow Cockpit' };
  *
  * 1. 오늘 일정 띠 — **오늘 잡힌 게 있을 때만** 선다.
  * 2. KPI 4칸 — 건수 + 전체 점유율 막대. 숫자만 있으면 크고 작음이 안 읽힌다.
- * 3. 표 네 개를 한 단으로 쌓는다 — 급한 순서다: 포커스 → 밀리는 업무 → 나를 부른
- *    사람들 → 방치된 업무.
+ * 3. 표 네 개를 한 단으로 쌓는다 — 급한 순서다: 포커스 → 밀리는 업무 → 방치된 업무 →
+ *    나를 부른 사람들.
  *
  * 한때 4단이 더 있었다. "알고만 있으면 되는 것들" 자리로 업무 소식과 오늘 일정을 뒀는데,
  * 소식은 헤더 종으로(news-bell.tsx), 일정은 계정 팝오버의 서랍으로 올라갔다
@@ -236,28 +236,12 @@ export default async function TodayPage() {
           </CardContent>
         </Card>
 
-        <Card className="rise" style={{ '--i': 7 } as React.CSSProperties}>
-          <CardHeader>
-            <CardTitle className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <TitleMark Icon={IconMention} tone="primary" />
-              나를 부른 사람들
-              <span className="tabular ml-auto text-xs font-normal text-muted-foreground">
-                업무 {mentions.length}건 · 알림 {counts.mentions}개
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {/* 이 표만 열이 다르다 — 알아야 하는 게 "누가 뭐라고 불렀나"다 */}
-            <MentionTable rows={mentions} path="/" />
-          </CardContent>
-        </Card>
-
         {/*
          * 방치는 마감이 지난 뒤 30일 넘게 손 안 댄 업무다. 업무마다 오는 마지막 수정
          * 시각으로 우리가 직접 가르기 때문에 (classifyTasks) 건수와 목록이 항상 맞는다 —
          * 위 카운트에서 뺀 나머지가 아니다.
          */}
-        <Card className="rise" style={{ '--i': 8 } as React.CSSProperties}>
+        <Card className="rise" style={{ '--i': 7 } as React.CSSProperties}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TitleMark Icon={IconStale} tone="neutral" />
@@ -283,6 +267,22 @@ export default async function TodayPage() {
                 emptyState="방치된 업무가 없어요"
               />
             )}
+          </CardContent>
+        </Card>
+
+        <Card className="rise" style={{ '--i': 8 } as React.CSSProperties}>
+          <CardHeader>
+            <CardTitle className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <TitleMark Icon={IconMention} tone="primary" />
+              나를 부른 사람들
+              <span className="tabular ml-auto text-xs font-normal text-muted-foreground">
+                업무 {mentions.length}건 · 알림 {counts.mentions}개
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {/* 이 표만 열이 다르다 — 알아야 하는 게 "누가 뭐라고 불렀나"다 */}
+            <MentionTable rows={mentions} path="/" />
           </CardContent>
         </Card>
       </div>

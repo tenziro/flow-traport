@@ -130,6 +130,118 @@ flow Cockpit의 개발 기록이다. 아래 두 부분으로 나뉜다.
 
 ## 변경 이력
 
+### 2026-08-07 — 뷰어에서 사진을 당겨 본다 (v4.17.0)
+
+`기능` **첨부 이미지 뷰어에 배율을 넣었다.** 100 / 150 / 200 / 300 / 400% 다섯 칸이다 —
+자유 배율(× 1.5씩)로 두면 100 → 150 → 225 → 338%가 되고 그 숫자는 읽히지 않는다. 4배에서
+멈추는 건 원본이 화면 폭보다 크면 거기서 이미 원본 픽셀을 넘기 때문이다. 그 위는 `원본 열기`가
+낫다. 손잡이는 왼쪽 위 두 단추(닫기와 마주 본다), `+`/`=`·`-`·`0` 키, 사진 두 번 누르기.
+
+구현에서 고른 것 셋:
+
+- **CSS `zoom`이지 `transform: scale`이 아니다.** `scale`은 자리를 안 넓혀서 위 칸에 굴러갈
+  곳이 안 생긴다. `zoom`은 레이아웃에 반영돼 `overflow-auto`가 그대로 스크롤을 만든다 —
+  끌어서 옮기는 코드를 한 줄도 안 쓰고 휠·트랙패드·터치·키보드가 전부 된다.
+- **가운데 맞추기는 `m-auto`지 `items-center`가 아니다.** flex 정렬은 내용이 칸보다 클 때
+  위·왼쪽을 잘라 먹어서 당긴 사진의 그쪽 끝에 영영 못 닿는다.
+- **`sizes`를 배율에 묶었다** (`${90 * zoom}vw`). 같은 그림을 늘리기만 하면 당길수록
+  뭉개진다. `next/image`가 이 값으로 srcset에서 더 큰 후보를 고른다 (100vw를 넘겨도 된다).
+
+장을 넘기면 배율도 100%로 돌아간다 — 앞 장에서 4배로 당겨 둔 채 다음 장이 열리면 화면에 그
+사진의 한 귀퉁이만 있어서 무엇이 왔는지 모른다. 이 되돌리기를 `useEffect(… , [i])`로 두면
+ESLint가 막는다(effect 안의 동기 setState는 연쇄 렌더를 만든다). 그래서 `step(d)` 한 곳에
+넣고 양 끝에서는 일찍 빠져나온다 — 끝에서 배율만 초기화되는 일도 같이 없앴다.
+
+같은 배포에 화면 손질 셋:
+
+- 내 업무·리스크의 **프로젝트 이름을 `medium` → `bold`로.** 카드에서 제일 먼저 읽혀야 하는
+  줄인데 옆의 라벨과 무게가 같았다.
+- 리스크 카드 머리를 `items-baseline` → `items-center`로. 등급 라벨(12px)과 프로젝트명(16px)을
+  같은 베이스라인에 세우면 크기 차이만큼 작은 쪽이 위로 뜬다.
+- 팀·수집 안내 문구 앞에 `IconInfo`를 붙이고 아이콘–글 간격을 8px → 6px, 나란히 서는 두 안내
+  줄 사이를 24px → 8px로 좁혔다. 둘 다 `mt-6`을 들고 있어서 한 묶음이 아닌 것처럼 벌어졌다.
+
+관련 파일: `src/components/image-viewer.tsx` · `src/components/icons.tsx` ·
+`src/components/collect-notice.tsx` · `src/app/(app)/tasks/page.tsx` ·
+`src/app/(app)/risk/page.tsx` · `src/app/(app)/team/page.tsx`
+
+### 2026-08-07 — 첨부 이미지 뷰어가 안 열리고, 댓글 첨부가 안 보였다 (v4.16.6)
+
+`수정` **오류 두 건을 고쳤다 — 첨부 이미지를 눌러도 뷰어가 안 뜨던 것
+([BUG-049](bug-report.md#bug-049))과, 댓글에 붙인 파일이 아예 안 나오던 것
+([BUG-050](bug-report.md#bug-050)).**
+
+뷰어는 클릭이 안 먹은 게 아니라 **열렸다 바로 닫혔다**. `ImageViewer`의 마운트 이펙트가
+정리에서 `dialog.close()`를 불렀는데, 그게 `close` 이벤트 → `onClose` → 부모의
+`setViewing(null)` → 언마운트로 이어진다. dev의 StrictMode는 붙일 때 이펙트를 한 번 접었다
+펴므로 첫 마운트에서 바로 터졌다. `MutationObserver`를 걸어 `["added open=true", "removed"]`를
+보고서야 실패 지점이 갈렸다. 고침은 그 한 줄을 지우는 것이다 — 모달 `<dialog>`를 문서에서
+지우면 브라우저가 top layer에서 같이 내리고 `close` 이벤트는 안 난다.
+
+댓글 첨부는 **그리는 쪽이 아니라 받는 쪽이 비어 있었다.** 댓글 전량을 주는
+`/user/comments/{postId}`에는 파일 칸이 아예 없다. 파일이 실리는 자리는 게시글 상세의
+`remarks[]`(`REMARK_ATCH_REC`·`REMARK_IMG_ATCH_REC`)뿐인데, 본문 첨부를 받느라 이미 부르던
+응답이라 **REST 호출은 안 늘었다**. `getPostBrief`가 `댓글 번호 → 파일` 지도를 얹어 주고
+`toThread`가 그걸 `ThreadComment.files`로 붙인다. `remarks[]`가 **최신 2건**만 주고 페이징
+파라미터를 전부 거절하는 한계는 코드 주석과 api-spec §6.3·§13.1에 적었다.
+
+그리는 쪽은 같이 정리했다. 첨부 그리기가 자리마다 따로 있어서 본문에만 썸네일 격자가 있고
+펼친 상위·하위 업무 미리보기에서는 같은 이미지가 **파일 이름 한 줄**로 나왔다. `Attachments`
+하나로 합쳐 본문·댓글·미리보기가 같은 모양이 됐다.
+
+실측 확인: 게시글 82624764의 최신 댓글 첨부(`image.png`)가 댓글 줄에 썸네일로 서고, 눌러서
+뷰어까지 열리는 것을 브라우저에서 확인했다.
+
+관련 파일: `src/components/image-viewer.tsx` · `src/components/attachments.tsx`(신규) ·
+`src/components/task-thread.tsx` · `src/components/thread-view.tsx` · `src/lib/flow/rest.ts` ·
+`src/app/(app)/actions.ts` · `docs/bug-report.md` · `docs/api-spec.md`
+
+### 2026-08-06 — `피드백`·`보류`는 덜 센다 (v4.16.5)
+
+`개선` **상태가 `피드백`·`보류`인 업무는 밀림·임박을 셀 때 무게를 낮게 받는다.** `피드백`은
+0.4, `보류`는 0.2다 (`STATUS_WEIGHT`). `피드백`은 마무리 직전에 상대 답을 기다리는 것이고,
+`보류`는 누군가 일부러 세워 둔 것이라 마감이 지난 게 곧 위험은 아니다. `보류`를 더 깎는 건
+피드백은 곧 돌아올 답을 기다리지만 보류는 돌아올 날짜 자체가 없어서다.
+
+**0으로 두지 않는다** — 세워 둔 채 잊히는 일은 실제로 일어난다. 30일간 아무도 안 건드리면
+어차피 `overdueStale`로 넘어가 점수에서 빠지므로 그 전까지는 작게라도 센다. **건수와 목록에서
+빼지도 않는다** — 마감이 지난 건 사실이라 KPI의 밀림 건수와 표에는 그대로 남고, 무게는
+순위와 점수에만 쓴다.
+
+닿는 자리는 셋이다. `classifyTasks`가 `ClassifiedTask.weight`를 얹고 `overdueActive` 정렬을
+가중 지연으로 세운다. `scoreFocus`는 **마감 신호에만** 무게를 곱한다 — 나를 부른 댓글이나
+내 담당이라는 사실은 상태와 무관해서다. `scoreProjectRisk`는 밀림·임박 건수와 최대 지연일에
+무게를 태워 점수를 내되, **화면에 적는 지연일은 실제 값 그대로** 둔다. 상태 라벨은 프로젝트마다
+바꿀 수 있어서(커스텀 상태) 코드가 아니라 문자열로 맞춘다.
+
+관련 파일: `src/lib/aggregate/classifyTasks.ts` · `src/lib/aggregate/scoreFocus.ts` ·
+`src/lib/aggregate/scoreProjectRisk.ts` · `src/lib/aggregate/aggregate.test.ts` · `docs/PRD.md`
+
+### 2026-08-06 — 포커스를 10줄로, 뒤 두 장을 맞바꿈 (v4.16.4)
+
+`개선` **오늘의 포커스를 5줄 → 10줄로 늘리고, 오늘 화면 카드 순서에서 `방치된 업무`와
+`나를 부른 사람들`을 맞바꿨다.**
+
+줄 수는 상수 둘이다 (`queries.ts`). `FOCUS_LIMIT` 5 → 10이 화면에 서는 줄 수고,
+`FOCUS_CHECK` 8 → 16이 그 10줄을 채우려고 댓글을 확인해 보는 픽 수다. 후자가 실제 비용이다
+— 픽마다 `listComments` REST 1회고 상한이 분당 120회다. 1.6배(5:8이던 비율 그대로)로 둔 건
+아래에서 `피드백` 픽이 떨어져 나가기 때문이다: 여유가 없으면 10줄이 안 찬다. 응답은
+`FOCUS_COMMENT_TTL`(5분) 캐시에 남아서 같은 화면을 다시 열 때는 안 나간다. 후보는 넉넉하다
+(`overdueActive + imminent + normal-not-done`)이라 10줄은 늘 찬다.
+
+순서는 `포커스 → 밀리는 업무 → 방치된 업무 → 나를 부른 사람들`이다. 앞 세 장이 다 "내가
+손대야 하는 업무"고 부른 사람들만 "남이 나를 기다리는 것"이라, 성격이 같은 것끼리 붙였다.
+포커스가 10줄로 길어져 아래쪽이 멀어진 것도 있다. `--i` 시차 값(7 → 8)은 DOM 순서 그대로
+뒀다 — 등장 애니메이션이 위에서 아래로 흘러야 한다. 골격(`loading.tsx`)도 같은 순서로
+바꾸고 포커스 골격을 10줄로 올렸다. 안 그러면 실제 화면이 도착할 때 배치가 한 번 튄다.
+
+`scoreFocus`의 `limit` 기본값 5는 그대로다 — 화면이 `FOCUS_CHECK`를 넘겨 쓰기 때문에 기본값을
+따라 쓰는 자리가 없고, 테스트가 명시적으로 넘기는 값에 의존한다.
+
+관련 파일: `src/lib/flow/queries.ts` · `src/app/(app)/(today)/page.tsx` ·
+`src/app/(app)/(today)/loading.tsx` · `src/lib/aggregate/scoreFocus.ts` · `docs/PRD.md` ·
+`docs/progress.md` · `src/lib/changelog.ts`
+
 ### 2026-08-06 — `templateType` 실측 7종을 적는다
 
 `문서` **글 종류를 내려주는 값(`templateType`)의 실제 범위를 다시 쟀다.** 프로젝트 59개 /

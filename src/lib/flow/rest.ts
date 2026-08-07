@@ -758,6 +758,16 @@ interface RawAttachment {
 }
 
 /**
+ * api-spec §6.3 `remarks[]` — **댓글 첨부가 있는 유일한 자리다** (실측 2026-08-06).
+ * 전량을 주는 `/user/comments/{postId}`(§13.1)에는 파일 칸이 아예 없다.
+ */
+interface RawRemark {
+  COLABO_REMARK_SRNO?: string;
+  REMARK_ATCH_REC?: RawAttachment[];
+  REMARK_IMG_ATCH_REC?: RawAttachment[];
+}
+
+/**
  * 업무의 상태 라벨. 프로젝트가 커스텀 상태(`STATUS`, api-spec §2.1)를 쓰면 라벨이 그대로
  * 오고, 안 쓰면 base 상태(`STTS`) 코드만 온다 — 그때만 대응표를 쓴다.
  *
@@ -806,6 +816,7 @@ export async function getPostBrief(postId: string, ttl?: number) {
     subTasks?: RawSubTask[];
     attachments?: RawAttachment[];
     imageAttachments?: RawAttachment[];
+    remarks?: RawRemark[];
   }>(`/user/posts/${postId}`, "게시글 조회", undefined, ttl);
   const up = d.upLinkTasks?.[0];
   const task = d.tasks?.[0];
@@ -859,16 +870,41 @@ export async function getPostBrief(postId: string, ttl?: number) {
       // 빈 문자열이 오는 경우가 있어 `Number("")`(=0)와 갈라 준다
       progress: s.PROGRESS ? Number(s.PROGRESS) : null,
     })),
-    files: [
-      ...(d.attachments ?? []).map(toFile),
-      ...(d.imageAttachments ?? []).map((a) => ({
-        ...toFile(a),
-        thumb: tidy(a.THUM_IMG_PATH),
-        w: Number(a.WIDTH) || 0,
-        h: Number(a.HEIGHT) || 0,
-      })),
-    ].filter((f) => f.name && f.url),
+    files: toFiles(d.attachments, d.imageAttachments),
+    /**
+     * 댓글 번호 → 그 댓글에 붙은 파일. 첨부가 있는 댓글만 담는다.
+     *
+     * **댓글 전량(`listComments`)에는 파일 칸이 없다** — 파일은 여기 `remarks[]`에만 온다.
+     * 그런데 `remarks`는 **최신 2건**뿐이다 (실측: 댓글 7건 중 2건, `nextYn: "N"`). 더 받는
+     * 손잡이도 없다: `pageSize`·`remarkSrno`·`remarkCount` 따위를 붙이면 이 엔드포인트는
+     * 쿼리 자체를 거절한다 (실측 2026-08-06).
+     *
+     * ponytail: 그래서 **최근 두 댓글의 첨부만 보인다**. 그 위의 댓글에 붙은 파일은 flow에서
+     * 봐야 한다 — 첨부를 달자마자 확인하는 게 대부분이라 실사용에서 걸리는 자리는 여기다.
+     * flow가 댓글 API에 파일 칸을 열어 주면 그때 `listComments`에서 바로 받으면 된다.
+     */
+    commentFiles: Object.fromEntries(
+      (d.remarks ?? [])
+        .map((r) => [
+          r.COLABO_REMARK_SRNO?.trim() ?? "",
+          toFiles(r.REMARK_ATCH_REC, r.REMARK_IMG_ATCH_REC),
+        ] as const)
+        .filter(([id, files]) => id && files.length),
+    ),
   };
+}
+
+/** 일반 첨부 + 이미지 첨부를 한 목록으로. 이미지 쪽만 썸네일·원본 크기가 붙는다. */
+function toFiles(plain?: RawAttachment[], images?: RawAttachment[]): PostFile[] {
+  return [
+    ...(plain ?? []).map(toFile),
+    ...(images ?? []).map((a) => ({
+      ...toFile(a),
+      thumb: tidy(a.THUM_IMG_PATH),
+      w: Number(a.WIDTH) || 0,
+      h: Number(a.HEIGHT) || 0,
+    })),
+  ].filter((f) => f.name && f.url);
 }
 
 /** 상위·하위 업무가 가리키는 **그쪽 글**의 딥링크. 둘 다 프로젝트·글 번호를 같이 준다. */
