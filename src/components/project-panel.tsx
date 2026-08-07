@@ -10,10 +10,16 @@ import type { ProjectBrief, ProjectPost } from "@/lib/flow/rest";
 import { fmtDate } from "@/lib/utils";
 
 /**
- * 내 업무 카드를 펼쳤을 때 업무 표 오른쪽에 서는 **참여자** 칸 (PRD §6.5).
+ * 내 업무 카드를 펼쳤을 때 붙는 **참여자 칸 + 업무 아닌 글**, 그리고 둘과 업무 표의 배치
+ * (PRD §6.5).
  *
  * 설명·공개 여부·개설 정보는 여기가 아니라 접힌 카드의 요약 줄이 낸다 (`tasks/page.tsx`) —
  * 카드 하나가 같은 말을 두 번 하지 않는다. 펼친 카드에서 궁금한 건 "누구와 하는 일인가"다.
+ *
+ * **업무 표를 `children`으로 받아 배치까지 여기서 한다.** 두 곁가지가 한 번의 조회에서
+ * 같이 오는데(`loadProjectPanel`) 놓일 자리는 서로 반대편이다 — 참여자는 오른쪽, 글은 표
+ * 바로 아래다. 배치를 부모가 쥐면 그 데이터를 부모까지 끌어올려야 하고, 그러려면 카드
+ * 전체가 클라이언트 컴포넌트가 된다. 표를 여기로 넘기는 편이 싸다.
  *
  * 겉모습은 **옆 업무 표와 한 벌**이다 — 같은 `border border-border`에 같은 `text-sm`이고,
  * 안쪽은 표의 줄처럼 경계선으로 나뉜다. 크기가 다르면 한 카드 안에서 두 개의 표처럼 읽히고,
@@ -31,11 +37,14 @@ export function ProjectPanel({
   projectId,
   project,
   brief,
+  children,
 }: {
   projectId: string;
   /** 프로젝트명. 글 모달의 머리가 쓴다. */
   project: string;
   brief?: ProjectBrief;
+  /** 업무 표. 서버에서 그려진 채로 온다 — 여기서는 자리만 잡는다. */
+  children: React.ReactNode;
 }) {
   const ref = useRef<HTMLElement>(null);
   const [got, setGot] = useState<ProjectPanelResult | null>(null);
@@ -67,68 +76,83 @@ export function ProjectPanel({
   const inCount = count - outCount;
 
   return (
-    <aside
-      ref={ref}
-      aria-label="참여자와 글"
-      className="shrink-0 overflow-hidden rounded-lg border border-border text-sm lg:w-64"
-    >
-      {!got ? (
-        <div className="space-y-2 p-3">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-2/3" />
-        </div>
-      ) : !got.ok ? (
-        <p className="p-3 text-muted-foreground">{got.message}</p>
-      ) : (
-        <>
-          <div className="border-b border-border px-3 py-2.5">
-            <p className="font-medium">참여자 {count}명</p>
-            {/* 두 무리의 비율. 우리 팀만 색을 주고 나머지는 회색이다 — 이 화면에서 궁금한
-                건 "이 판에 우리가 몇 명인가"다. 색만으로 가르지 않고 아래에 수치를 적는다 */}
-            <Meter
-              className="mt-2"
-              segments={[
-                { value: inCount, label: `임직원 ${inCount}명`, className: "bg-primary" },
-                {
-                  value: outCount,
-                  label: `외부 ${outCount}명`,
-                  className: "bg-muted-foreground/40",
-                },
-              ]}
-            />
-            <p className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-              <span>임직원 {inCount}명</span>
-              <span>외부 {outCount}명</span>
-            </p>
-            {/* 수와 목록이 어긋나는 게 정상이라 그 사실을 적는다 — 실측 90명 중 36명 */}
-            {known > 0 && known < count && (
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                이름을 아는 사람은 {known}명이에요.
-              </p>
-            )}
+    // 업무 표 왼쪽, 참여자 오른쪽. 좁은 화면에서는 표 아래로 내려간다 — 참여자 목록은
+    // 업무를 볼 때 곁눈으로 보는 것이라 표를 밀어내면 안 된다
+    <div className="mt-3 flex flex-col gap-4 lg:flex-row">
+      <div className="min-w-0 flex-1">
+        {children}
+        <Posts
+          posts={got?.ok ? (got.posts ?? []) : []}
+          onOpen={(p) =>
+            post.open({
+              projectId,
+              postId: p.postId,
+              title: p.title,
+              project,
+              url: p.url,
+              isPost: true,
+            })
+          }
+        />
+      </div>
+      <aside
+        ref={ref}
+        aria-label="참여자"
+        className="shrink-0 overflow-hidden rounded-lg border border-border text-sm lg:w-64"
+      >
+        {!got ? (
+          <div className="space-y-2 p-3">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-2/3" />
           </div>
+        ) : !got.ok ? (
+          <p className="p-3 text-muted-foreground">{got.message}</p>
+        ) : (
+          <>
+            <div className="border-b border-border px-3 py-2.5">
+              <p className="font-medium">참여자 {count}명</p>
+              {/* 두 무리의 비율. 우리 팀만 색을 주고 나머지는 회색이다 — 이 화면에서 궁금한
+                  건 "이 판에 우리가 몇 명인가"다. 색만으로 가르지 않고 아래에 수치를 적는다 */}
+              <Meter
+                className="mt-2"
+                segments={[
+                  {
+                    value: inCount,
+                    label: `임직원 ${inCount}명`,
+                    className: "bg-primary",
+                  },
+                  {
+                    value: outCount,
+                    label: `외부 ${outCount}명`,
+                    className: "bg-muted-foreground/40",
+                  },
+                ]}
+              />
+              <p className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                <span>임직원 {inCount}명</span>
+                <span>외부 {outCount}명</span>
+              </p>
+              {/* 수와 목록이 어긋나는 게 정상이라 그 사실을 적는다 — 실측 90명 중 36명 */}
+              {known > 0 && known < count && (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  이름을 아는 사람은 {known}명이에요.
+                </p>
+              )}
+            </div>
 
-          {/* 원판 색이 위 막대와 짝이다 — 우리 팀은 파랑, 외부는 회색 */}
-          <Names title="임직원" people={staff} tone="bg-primary/10 text-primary" />
-          <Names title="외부" people={outside} />
-          <Posts
-            posts={got.posts ?? []}
-            onOpen={(p) =>
-              post.open({
-                projectId,
-                postId: p.postId,
-                title: p.title,
-                project,
-                url: p.url,
-                isPost: true,
-              })
-            }
-          />
-          {post.modal}
-        </>
-      )}
-    </aside>
+            {/* 원판 색이 위 막대와 짝이다 — 우리 팀은 파랑, 외부는 회색 */}
+            <Names
+              title="임직원"
+              people={staff}
+              tone="bg-primary/10 text-primary"
+            />
+            <Names title="외부" people={outside} />
+          </>
+        )}
+      </aside>
+      {post.modal}
+    </div>
   );
 }
 
@@ -138,8 +162,13 @@ export function ProjectPanel({
  * 왼쪽 표는 업무만 세운다. 그런데 프로젝트에는 업무 밖의 글이 같이 쌓이고(실측 25개
  * 프로젝트에 337건), 일정이나 공지가 거기 있다는 걸 이 화면에서는 알 방법이 없었다.
  *
+ * **업무 표 바로 아래다.** 참여자 칸 세 번째 자리에 있을 때는 임직원·외부 두 목록(각
+ * 최대 208px)에 밀려 화면 밖으로 나갔다 — 92명짜리 프로젝트에서는 스크롤을 두 번 해야
+ * 닿았다. 표와 같은 열에 두면 업무를 다 읽은 눈이 그대로 만난다. 옆 칸(사람)이 아니라
+ * 표(글)와 같은 종류라 자리도 그쪽이 맞다.
+ *
  * 목록 조회가 **최상위 글만** 준다 — 업무 밑에 달린 하위 업무는 안 온다. 그래서 이 칸은
- * 늘 짧고, 참여자 아래에 붙여도 칸을 밀지 않는다.
+ * 늘 짧고, 표 아래에 붙여도 카드가 길어지지 않는다.
  *
  * 제목을 누르면 **이 화면에서 글 모달**이 열린다 (v4.16.0) — 알림에서 여는 것과 같은 모달이라
  * 본문·첨부·댓글을 읽고 댓글도 남긴다. 업무가 아닌 게 이미 확실한 줄이라 서버에서 업무를
@@ -159,30 +188,35 @@ function Posts({
 }) {
   if (!posts.length) return null;
   return (
-    <div className="border-b border-border last:border-b-0">
+    // 업무 표와 같은 테두리·같은 글자 크기다 — 한 열에 위아래로 서니 다르게 생기면
+    // 표가 두 개인 것처럼 읽힌다
+    <div className="mt-3 overflow-hidden rounded-lg border border-border text-sm">
       <p className="bg-secondary/40 px-3 py-1.5 text-xs font-medium text-muted-foreground">
         업무 아닌 글 {posts.length}개
       </p>
-      <ul className="max-h-52 overflow-y-auto overscroll-contain px-3 py-2">
+      {/* 위 업무 표가 12줄에서 스크롤하는 것과 같이 맞춘다 */}
+      <ul className="max-h-52 divide-y divide-border overflow-y-auto overscroll-contain">
         {posts.map((p) => (
-          <li key={p.postId} className="py-0.5">
+          <li key={p.postId}>
+            {/* 폭이 넓어져서 제목과 딸린 정보가 한 줄에 들어간다 — 좁은 칸에 있을 때는
+                두 줄이었다. 제목만 줄어들고(`min-w-0`) 오른쪽 정보는 안 잘린다 */}
             <button
               type="button"
               onClick={() => onOpen(p)}
-              className="block w-full cursor-pointer rounded-md text-left outline-none hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="flex w-full cursor-pointer items-center gap-3 px-3 py-2 text-left outline-none transition-colors hover:bg-secondary/40 hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset"
             >
-              <span className="flex min-w-0 items-center gap-1.5">
+              <span className="flex min-w-0 flex-1 items-center gap-1.5">
                 {/* 안 읽은 글. 점만으로 말하지 않는다 — 읽어 주는 글자가 같이 있다 */}
                 {p.unread && (
                   <span className="size-1.5 shrink-0 rounded-full bg-primary">
                     <span className="sr-only">안 읽음</span>
                   </span>
                 )}
-                <span className="min-w-0 truncate text-xs" title={p.title}>
+                <span className="min-w-0 truncate" title={p.title}>
                   {p.title}
                 </span>
               </span>
-              <span className="tabular mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-muted-foreground">
+              <span className="tabular flex shrink-0 gap-x-3 text-xs text-muted-foreground">
                 <span>{p.kind}</span>
                 {p.author && <span>{p.author}</span>}
                 {p.date && <span>{fmtDate(p.date)}</span>}

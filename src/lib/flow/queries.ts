@@ -24,6 +24,7 @@ import type { Task } from "@/lib/aggregate/types";
 import { DAY_MS, kstYmd } from "@/lib/aggregate/date";
 import { getSession } from "@/lib/auth";
 import {
+  FlowRestError,
   getPostBrief,
   isChangeLog,
   lastHumanComment,
@@ -172,7 +173,16 @@ export async function collectTasks(
       // `next++`는 쪼개지지 않는다 — 읽고 더하는 사이에 `await`가 없다.
       for (let i = next++; i < projects.length; i = next++) {
         const p = projects[i];
-        const got = await listWorkerTasks(p.projectId, userIds).catch(() => null);
+        const got = await listWorkerTasks(p.projectId, userIds).catch((err: unknown) => {
+          // 실패 사유를 남긴다. 이걸 삼키면 화면에 "조회 실패"만 뜨고 왜인지는 아무 데도
+          // 안 남아서, 상한(429)에 걸린 것과 권한이 없는 것을 못 가른다. **프로젝트명은
+          // 안 쓴다** — 고객사명이 그대로 들어 있다 (PRD §8.1).
+          console.error(
+            `[collectTasks] 업무 조회 실패 projectId=${p.projectId}`,
+            err instanceof FlowRestError ? `${err.status} ${err.reason}` : err,
+          );
+          return null;
+        });
         if (!got) {
           flag[i] = "failed";
           continue;

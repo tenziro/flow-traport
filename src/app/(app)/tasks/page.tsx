@@ -1,7 +1,13 @@
 import { CollectNotice } from "@/components/collect-notice";
 import { EmptyState } from "@/components/empty-state";
 import { FlowLink } from "@/components/flow-link";
-import { IconChevronDown, IconFeed, IconMyTasks, IconNormal, IconRisk } from "@/components/icons";
+import {
+  IconChevronDown,
+  IconFeed,
+  IconMyTasks,
+  IconNormal,
+  IconRisk,
+} from "@/components/icons";
 import { Kpi } from "@/components/kpi";
 import { Meter } from "@/components/meter";
 import {
@@ -16,7 +22,11 @@ import { StatHint } from "@/components/stat-hint";
 import { TaskTable } from "@/components/task-table";
 import { WhenOpen } from "@/components/when-open";
 import { Card, CardContent } from "@/components/ui/card";
-import { loadMyTasks, type MyTasksData, type MyTasksProject } from "@/lib/flow/my-tasks";
+import {
+  loadMyTasks,
+  type MyTasksData,
+  type MyTasksProject,
+} from "@/lib/flow/my-tasks";
 import type { WorklistTask } from "@/lib/flow/queries";
 import { fmtDate } from "@/lib/utils";
 
@@ -33,7 +43,8 @@ const PATH = "/tasks";
  * 펼치면 아무것도 못 찾는다. 기본은 다 접혀 있고, 접힌 줄에 안 끝난 건수와 진행 막대만 낸다.
  */
 export default async function TasksPage() {
-  const { total, open, projects, quiet, truncated, failed } = await loadMyTasks();
+  const { total, open, projects, quiet, truncated, failed } =
+    await loadMyTasks();
   const done = total - open;
 
   // 빈 무리는 탭에서 뺀다 — 누르면 아무것도 없는 칸을 남겨 두지 않는다
@@ -42,13 +53,17 @@ export default async function TasksPage() {
       value: "open",
       label: "할 일 있어요",
       count: projects.filter((p) => p.open.length > 0).length,
-      pane: <ProjectList projects={projects.filter((p) => p.open.length > 0)} />,
+      pane: (
+        <ProjectList projects={projects.filter((p) => p.open.length > 0)} />
+      ),
     },
     {
       value: "done",
       label: "다 끝냈어요",
       count: projects.filter((p) => p.open.length === 0).length,
-      pane: <ProjectList projects={projects.filter((p) => p.open.length === 0)} />,
+      pane: (
+        <ProjectList projects={projects.filter((p) => p.open.length === 0)} />
+      ),
     },
     {
       value: "quiet",
@@ -63,11 +78,15 @@ export default async function TasksPage() {
       <header className="rise mb-8">
         <h1 className="text-xl font-semibold tracking-tight">내 업무</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          내가 담당인 업무를 프로젝트별로 모았어요. 오늘 화면에 안 나오는 것까지 전부예요.
+          내가 담당인 업무를 프로젝트별로 모았어요. 오늘 화면에 안 나오는 것까지
+          전부예요.
         </p>
       </header>
 
-      <section aria-label="요약" className="mb-10 grid grid-cols-2 gap-4 sm:grid-cols-3">
+      <section
+        aria-label="요약"
+        className="mb-10 grid grid-cols-2 gap-4 sm:grid-cols-3"
+      >
         <Kpi
           i={1}
           label="내 업무"
@@ -125,7 +144,10 @@ export default async function TasksPage() {
               label: `${label} ${count}`,
             }))}
           />
-          <TabsList aria-label="프로젝트 보기" className="flex-wrap bg-secondary max-sm:hidden">
+          <TabsList
+            aria-label="프로젝트 보기"
+            className="flex-wrap bg-secondary max-sm:hidden"
+          >
             {tabs.map(({ value, label, count }) => (
               <TabsTrigger key={value} value={value} className="min-h-8">
                 {label}
@@ -207,7 +229,10 @@ function ProjectSummary({ brief }: { brief?: MyTasksProject["brief"] }) {
     <span className="mt-1 block group-open:hidden">
       {/* 설명은 실측 59개 중 7개만 채워져 있다 (24~72자). 없으면 이 줄을 안 그린다 */}
       {brief.desc && (
-        <span className="block truncate text-sm text-muted-foreground" title={brief.desc}>
+        <span
+          className="block truncate text-sm text-muted-foreground"
+          title={brief.desc}
+        >
           {brief.desc}
         </span>
       )}
@@ -263,7 +288,11 @@ function Rows({
     // 만드느라 메인 스레드가 잠겼다
     <WhenOpen>
       <TaskTable
-        rows={tasks.map((task) => ({ ...task, depth: task.depth ?? 0, projectId }))}
+        rows={tasks.map((task) => ({
+          ...task,
+          depth: task.depth ?? 0,
+          projectId,
+        }))}
         path={PATH}
         showProject={false}
         showAuthor
@@ -290,7 +319,10 @@ function ProjectCard({ project, i }: { project: MyTasksProject; i: number }) {
                   38장이 늘어선 화면에서 눈이 먼저 잡는 자리다. 앞의 아이콘은 접힌 줄에서
                   "여기부터 새 카드"를 표시한다 */}
               <span className="flex min-w-0 items-center gap-2 text-base font-bold">
-                <IconFeed size={17} className="shrink-0 text-muted-foreground" />
+                <IconFeed
+                  size={17}
+                  className="shrink-0 text-muted-foreground"
+                />
                 <span className="truncate">{project.name}</span>
               </span>
               {/* 접혔을 때만 나오는 프로젝트 요약. 펼치면 아래 업무 쪽이 카드의 내용이고
@@ -303,10 +335,15 @@ function ProjectCard({ project, i }: { project: MyTasksProject; i: number }) {
             />
           </summary>
 
-          {/* 업무 표 왼쪽, 참여자 오른쪽. 좁은 화면에서는 표 아래로 내려간다 —
-              참여자 목록은 업무를 볼 때 곁눈으로 보는 것이라 표를 밀어내면 안 된다 */}
-          <div className="mt-3 flex flex-col gap-4 lg:flex-row">
-            <div className="min-w-0 flex-1">
+          {/* 업무 표를 넘겨서 배치를 맡긴다 — 참여자는 오른쪽, 업무 아닌 글은 표 바로
+              아래다. 두 곁가지가 같은 조회에서 오는데 자리가 반대편이라, 배치를 여기서
+              쥐면 그 데이터를 이 서버 컴포넌트까지 끌어와야 한다 (`project-panel.tsx`) */}
+          <ProjectPanel
+            projectId={project.projectId}
+            project={project.name}
+            brief={project.brief}
+          >
+            <>
               {/* 건수와 막대는 상태 칩 바로 위다 — 아래 표가 세는 것과 같은 숫자라
                   붙여 두면 `전체 300건 → 대기 10 · 진행 5 …`가 한 줄기로 읽힌다 */}
               <p className="tabular mb-1.5 flex items-center gap-3 text-xs text-muted-foreground">
@@ -349,13 +386,8 @@ function ProjectCard({ project, i }: { project: MyTasksProject; i: number }) {
                 // 안 끝난 게 없으면 끝낸 업무가 곧 이 카드의 본문이다 — 접어 둘 게 없다
                 <Rows tasks={project.done} projectId={project.projectId} />
               )}
-            </div>
-            <ProjectPanel
-              projectId={project.projectId}
-              project={project.name}
-              brief={project.brief}
-            />
-          </div>
+            </>
+          </ProjectPanel>
 
           {/* 안 끝난 게 있을 때만 접는다. 818건이 완료라 기본 시야에서 빼되, 펼치면
               위 표와 같은 표다 — 한 카드 안에서 두 목록이 다르게 보이면 안 된다 */}
